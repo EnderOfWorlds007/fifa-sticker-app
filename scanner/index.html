@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>FIFA Sticker Scanner</title>
+  <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <h1>FIFA Sticker Scanner</h1>
+        <p id="systemStatus">Starting scanner...</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/apps">Apps</a>
+        <a href="/fifa-sticker-app/inventory">Inventory</a>
+        <a href="/fifa-sticker-app/collection">Collection</a>
+        <a href="/fifa-sticker-app/trade-lookup">Lookup</a>
+      </nav>
+      <div class="metrics" aria-live="polite">
+        <span><strong id="sessionCount">0</strong> sessions</span>
+        <span><strong id="inventoryCardCount">0</strong> cards</span>
+        <span><strong id="inventoryCodeCount">0</strong> codes</span>
+        <span><strong id="captureCount">0</strong> photos</span>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <aside class="panel">
+        <div id="cameraControls" class="controlGroup">
+          <div class="buttonRow">
+            <button id="startCamera" type="button">Start camera</button>
+            <button id="stopCamera" type="button">Stop</button>
+          </div>
+          <div class="buttonRow">
+            <button id="captureOverview" type="button" disabled>Capture pair: no flash → flash</button>
+          </div>
+          <input id="overviewPhotoInput" class="hidden" type="file" accept="image/*" capture="environment">
+          <button id="toggleTorch" type="button" disabled hidden>Torch</button>
+          <p class="hint" id="cameraHint"></p>
+          <p class="hint" id="captureHint">Each overview is saved permanently with its matches. Keep the cards still while the app captures no flash, then flash. On iPhone, Safari requires one native-camera confirmation for each photo.</p>
+        </div>
+
+        <div class="connectionBox">
+          <h2>Phone access</h2>
+          <p id="connectionSummary">Checking server URLs...</p>
+          <ul id="accessUrls"></ul>
+        </div>
+
+        <div class="stateList">
+          <h2>Cards</h2>
+          <ol id="trackList"></ol>
+        </div>
+
+        <div class="stateList">
+          <h2>Trade inventory</h2>
+          <p class="hint" id="inventorySummary">Loading saved scans…</p>
+          <p><a class="tradeLookupLink" href="/fifa-sticker-app/apps">Open app launcher</a></p>
+          <p><a class="tradeLookupLink" href="/fifa-sticker-app/inventory">Open saved inventory</a></p>
+          <p><a class="tradeLookupLink" href="/fifa-sticker-app/collection">Open collection tracker</a></p>
+          <p><a class="tradeLookupLink" href="/fifa-sticker-app/trade-lookup">Open trade lookup and CSV export</a></p>
+          <ol id="inventoryList"></ol>
+        </div>
+
+        <div class="reviewList">
+          <h2>Scan review</h2>
+          <section>
+            <h3>Recognized</h3>
+            <ol id="recognizedList"></ol>
+          </section>
+          <section>
+            <h3>Needs review</h3>
+            <ol id="reviewList"></ol>
+          </section>
+          <section>
+            <h3>Unrecognized</h3>
+            <ol id="unrecognizedList"></ol>
+          </section>
+        </div>
+      </aside>
+
+      <section class="stageWrap">
+        <div class="stage" id="stage">
+          <video id="video" muted playsinline controls></video>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div class="statusLine" id="statusLine">Idle</div>
+      </section>
+
+      <section class="overviewPanel">
+        <div class="overviewHeader">
+          <h2>Surface map</h2>
+          <div class="overviewActions">
+            <span id="overviewStatus">No overview</span>
+            <button id="zoomOverviewOut" type="button" disabled aria-label="Zoom out">-</button>
+            <button id="zoomOverviewIn" type="button" disabled aria-label="Zoom in">+</button>
+            <button id="resetOverviewView" type="button" disabled>Reset</button>
+            <button id="backToCamera" type="button" hidden>Camera</button>
+          </div>
+        </div>
+        <div class="sampleTools">
+          <select id="overviewSampleSelect" aria-label="Sample overview photo"></select>
+          <button id="loadOverviewSample" type="button" disabled>Load sample</button>
+        </div>
+        <div class="reviewTools" aria-label="Overview correction tools">
+          <button id="reviewInspectTool" class="active" type="button" data-review-tool="inspect">Inspect</button>
+          <button id="reviewPhantomTool" type="button" data-review-tool="phantom">Phantom</button>
+          <button id="reviewAddCardTool" type="button" data-review-tool="add-card">Add card</button>
+          <button id="reviewAddPillTool" type="button" data-review-tool="add-pill">Add pill</button>
+          <button id="saveCorrections" type="button" disabled>Save</button>
+          <button id="exportCorrections" type="button" disabled>Export</button>
+        </div>
+        <div class="overviewStage">
+          <img id="overviewImage" alt="">
+          <canvas id="overviewOverlay"></canvas>
+          <div id="overviewQuickActions" class="overviewQuickActions" hidden></div>
+          <div id="overviewComputing" class="overviewComputing" hidden>Computing...</div>
+        </div>
+        <div id="overviewInspector" class="overviewInspector" hidden></div>
+        <div class="overviewHelp">
+          <h3>Needs help</h3>
+          <div id="overviewHelpList"></div>
+          <datalist id="cardCodeOptions"></datalist>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/fifa-sticker-app/assets/app.js" type="module"></script>
+  <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
+</body>
+</html>

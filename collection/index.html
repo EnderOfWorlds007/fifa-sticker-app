@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>FIFA Collection Tracker</title>
+  <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css">
+</head>
+<body class="collectionBody">
+  <main class="collectionShell">
+    <header class="collectionTop">
+      <div>
+        <h1>Collection Tracker</h1>
+        <p>Track the cards you are still chasing and mark them off as you find them.</p>
+      </div>
+      <nav class="collectionNav" aria-label="Collection navigation">
+        <a href="/fifa-sticker-app/apps">Apps</a>
+        <a href="/fifa-sticker-app/inventory">Inventory</a>
+        <a href="/fifa-sticker-app/trade-lookup">Trade lookup</a>
+        <a href="/fifa-sticker-app/scanner">Scanner</a>
+      </nav>
+    </header>
+
+    <section class="collectionDashboard" aria-label="Collection summary">
+      <div class="collectionStat">
+        <span>Missing</span>
+        <strong id="missingCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Collected</span>
+        <strong id="collectedCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Teams</span>
+        <strong id="teamCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Progress</span>
+        <strong id="progressCount">0%</strong>
+      </div>
+    </section>
+
+    <section class="collectionTools" aria-label="Collection tools">
+      <label class="collectionSearch">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Team or code, e.g. ENG 13">
+      </label>
+      <div class="collectionSegmented" role="group" aria-label="Filter cards">
+        <button id="showMissing" type="button" data-filter="missing">Missing</button>
+        <button id="showAll" type="button" data-filter="all">All</button>
+        <button id="showCollected" type="button" data-filter="collected">Collected</button>
+      </div>
+      <div class="collectionActions">
+        <button id="copyMissingButton" type="button">Copy missing list</button>
+        <button id="resetButton" class="secondaryButton" type="button">Reset</button>
+      </div>
+    </section>
+
+    <p id="collectionStatus" class="collectionStatus" aria-live="polite"></p>
+
+    <section class="collectionListWrap" aria-label="Cards by team">
+      <div id="teamList" class="collectionTeamList"></div>
+      <div id="emptyState" class="collectionEmpty" hidden>No cards match this view.</div>
+    </section>
+  </main>
+
+  <script src="/fifa-sticker-app/assets/collection_tracker.js" type="module"></script>
+  <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
+</body>
+</html>

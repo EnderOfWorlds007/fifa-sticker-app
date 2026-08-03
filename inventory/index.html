@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>FIFA Inventory</title>
+  <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css">
+</head>
+<body class="inventoryBody">
+  <main class="inventoryShell">
+    <header class="inventoryTop">
+      <div>
+        <h1>Inventory</h1>
+        <p>Cards already saved from scanner sessions.</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/apps">Apps</a>
+        <a href="/fifa-sticker-app/scanner">Scanner</a>
+        <a href="/fifa-sticker-app/collection">Collection</a>
+        <a href="/fifa-sticker-app/trade-lookup">Lookup</a>
+      </nav>
+    </header>
+
+    <section class="inventoryStats" aria-label="Inventory summary">
+      <div class="collectionStat">
+        <span>Total cards</span>
+        <strong id="inventoryTotalCards">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Codes</span>
+        <strong id="inventoryUniqueCodes">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Photos</span>
+        <strong id="inventoryPhotoCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Sessions</span>
+        <strong id="inventorySessionCount">0</strong>
+      </div>
+    </section>
+
+    <section class="inventoryTools" aria-label="Inventory tools">
+      <label class="collectionSearch">
+        <span>Search</span>
+        <input id="inventorySearch" type="search" placeholder="Code, team, or name">
+      </label>
+      <div class="collectionActions">
+        <a class="buttonLike" href="/fifa-sticker-app/api/trade-inventory.csv" download>Download CSV</a>
+        <a class="buttonLike secondary" href="/fifa-sticker-app/trade-lookup">Trade lookup</a>
+      </div>
+    </section>
+
+    <p id="inventoryStatus" class="collectionStatus" aria-live="polite">Loading inventory...</p>
+    <ol id="inventoryCards" class="inventoryCards"></ol>
+  </main>
+
+  <script src="/fifa-sticker-app/assets/inventory.js" type="module"></script>
+  <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
+</body>
+</html>

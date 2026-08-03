@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>FIFA Trade Lookup</title>
+  <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css">
+</head>
+<body class="tradeLookupBody">
+  <main class="tradeLookupShell">
+    <header class="tradeLookupTop">
+      <div>
+        <h1>FIFA Trade Lookup</h1>
+        <p>Paste any card list. We recognize <code>ENG7</code>, <code>ENG 7</code>, <code>ENG-7</code>, and grouped lists like <code>MEX: 7, 12</code>.</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/apps">Apps</a>
+        <a href="/fifa-sticker-app/scanner">Scanner</a>
+        <a href="/fifa-sticker-app/inventory">Inventory</a>
+        <a href="/fifa-sticker-app/collection">Collection</a>
+      </nav>
+    </header>
+
+    <section class="tradeLookupCard">
+      <label for="lookupText">Cards to check</label>
+      <textarea id="lookupText" rows="7" autofocus placeholder="Example: I need ENG7, POR-11 and COL 5."></textarea>
+      <div class="tradeLookupActions">
+        <button id="lookupButton" type="button">Check my inventory</button>
+        <button id="clearLookupButton" class="secondaryButton" type="button">Clear</button>
+        <a href="/fifa-sticker-app/api/trade-inventory.csv" download>Download CSV</a>
+      </div>
+      <p id="lookupSummary" class="hint">Paste a list, then check it against your saved cards.</p>
+      <ol id="lookupResults" class="tradeLookupResults"></ol>
+      <section id="copyReply" class="tradeCopyReply" hidden>
+        <label for="replyText">Copyable reply</label>
+        <textarea id="replyText" rows="3" readonly></textarea>
+        <button id="copyReplyButton" type="button">Copy reply</button>
+      </section>
+    </section>
+  </main>
+  <script src="/fifa-sticker-app/assets/trade_lookup.js" type="module"></script>
+  <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
+</body>
+</html>

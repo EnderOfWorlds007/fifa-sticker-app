@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>FIFA Card Apps</title>
+  <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css">
+</head>
+<body class="appsBody">
+  <main class="appsShell">
+    <header class="appsHero">
+      <div>
+        <p class="appsEyebrow">FIFA card tools</p>
+        <h1>Card command center</h1>
+        <p>Open the scanner, review saved inventory, or track the cards still missing from the collection.</p>
+        <p class="localFirstNote" data-pwa-status>Phone-first, local-first.</p>
+      </div>
+    </header>
+
+    <section class="appLauncher" aria-label="Available apps">
+      <a id="scannerAppLink" class="appTile scanner" href="/fifa-sticker-app/scanner">
+        <span class="appTileIcon">Scan</span>
+        <strong>Scanner</strong>
+        <span>Capture cards and save recognized scans.</span>
+      </a>
+      <a class="appTile inventory" href="/fifa-sticker-app/inventory">
+        <span class="appTileIcon">Inv</span>
+        <strong>Inventory</strong>
+        <span>See cards already saved from scans.</span>
+      </a>
+      <a class="appTile collection" href="/fifa-sticker-app/collection">
+        <span class="appTileIcon">Need</span>
+        <strong>My Collection</strong>
+        <span>Mark missing cards as collected.</span>
+      </a>
+      <a class="appTile lookup" href="/fifa-sticker-app/trade-lookup">
+        <span class="appTileIcon">Find</span>
+        <strong>Trade Lookup</strong>
+        <span>Paste someone else's list and check what you have.</span>
+      </a>
+    </section>
+  </main>
+  <script src="/fifa-sticker-app/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/assets/apps.js" type="module"></script>
+  <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
+</body>
+</html>
