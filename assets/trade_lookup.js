@@ -6,6 +6,7 @@ const results = document.querySelector("#lookupResults");
 const copyReply = document.querySelector("#copyReply");
 const replyText = document.querySelector("#replyText");
 const copyReplyButton = document.querySelector("#copyReplyButton");
+const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 const INVENTORY_SOURCES = [
   { url: "/fifa-sticker-app/api/trade-inventory", label: "local scanner server" },
   { url: "/fifa-sticker-app/data/trade_inventory.json", label: "static snapshot" },
@@ -77,7 +78,7 @@ async function loadInventory() {
 
 function lookupText(value, inventory) {
   const occurrences = extractCodeOccurrences(value);
-  const cards = inventory.cards ?? {};
+  const cards = adjustedInventoryCards(inventory.cards ?? {});
   const results = [...occurrences.entries()].sort(([a], [b]) => sortCode(a, b)).map(([code, occurrences]) => {
     const card = cards[code];
     const result = {
@@ -103,6 +104,46 @@ function lookupText(value, inventory) {
       ? `We have: ${available.map((item) => `${item.code} ×${item.count} (${item.card_colour_counts || item.card_colour})`).join(", ")}.`
       : "We do not have any of those cards.",
   };
+}
+
+function adjustedInventoryCards(cards) {
+  const tradedAway = loadTradedAwayCounts();
+  if (!Object.keys(tradedAway).length) return cards;
+  const adjusted = {};
+  for (const [code, card] of Object.entries(cards)) {
+    const removed = Math.max(0, Number(tradedAway[code] || 0));
+    const originalCount = Number(card?.count || 0);
+    const nextCount = Math.max(0, originalCount - removed);
+    if (!nextCount) continue;
+    adjusted[code] = {
+      ...card,
+      count: nextCount,
+      back_insignia_counts: adjustColourCounts(card?.back_insignia_counts, removed),
+    };
+  }
+  return adjusted;
+}
+
+function adjustColourCounts(counts, removed) {
+  if (!counts || typeof counts !== "object" || removed <= 0) return counts;
+  const adjusted = { ...counts };
+  for (const key of ["standard_fifa_licensed", "united_edition", "no_clue"]) {
+    const value = Math.max(0, Number(adjusted[key] || 0));
+    const take = Math.min(value, removed);
+    adjusted[key] = value - take;
+    removed -= take;
+    if (!removed) break;
+  }
+  return adjusted;
+}
+
+function loadTradedAwayCounts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TRADED_AWAY_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function extractCodeOccurrences(value) {

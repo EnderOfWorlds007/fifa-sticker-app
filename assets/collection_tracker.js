@@ -47,15 +47,19 @@ const STARTING_MISSING = {
 };
 
 const STORAGE_KEY = "panini.collectionTracker.v1";
+const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 const teamList = document.querySelector("#teamList");
 const emptyState = document.querySelector("#emptyState");
 const searchInput = document.querySelector("#searchInput");
+const updateText = document.querySelector("#collectionUpdateText");
 const status = document.querySelector("#collectionStatus");
 const missingCount = document.querySelector("#missingCount");
 const collectedCount = document.querySelector("#collectedCount");
 const teamCount = document.querySelector("#teamCount");
 const progressCount = document.querySelector("#progressCount");
 const copyMissingButton = document.querySelector("#copyMissingButton");
+const gotCardsButton = document.querySelector("#gotCardsButton");
+const tradedAwayButton = document.querySelector("#tradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
 const filterButtons = [...document.querySelectorAll("[data-filter]")];
 
@@ -97,6 +101,96 @@ function setCardCollected(code, isCollected) {
   state.collected = [...next].sort(sortCode);
   saveState();
   render();
+}
+
+function trackedCodeSet() {
+  return new Set(cards.map((card) => card.code));
+}
+
+function extractCodeOccurrences(value) {
+  const upper = value.toUpperCase();
+  const occurrences = new Map();
+  const inlineSpans = [];
+  const add = (team, number) => {
+    const code = `${team}${Number(number)}`;
+    occurrences.set(code, (occurrences.get(code) || 0) + 1);
+  };
+  const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*(\d{1,2})(?![A-Z0-9])/g;
+  for (const match of upper.matchAll(inlinePattern)) {
+    add(match[1], match[2]);
+    inlineSpans.push([match.index, match.index + match[0].length]);
+  }
+  const groupedPattern = /^\s*([A-Z]{2,3})\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
+  for (const match of upper.matchAll(groupedPattern)) {
+    const start = match.index;
+    if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
+    for (const number of match[2].match(/\d{1,2}/g) || []) add(match[1], number);
+  }
+  return occurrences;
+}
+
+function parsedUpdateCodes() {
+  const value = updateText.value.trim();
+  if (!value) {
+    status.textContent = "Paste some card text first.";
+    return null;
+  }
+  const occurrences = extractCodeOccurrences(value);
+  if (!occurrences.size) {
+    status.textContent = "No card codes found in that text.";
+    return null;
+  }
+  return occurrences;
+}
+
+function markGotCards() {
+  const occurrences = parsedUpdateCodes();
+  if (!occurrences) return;
+  const tracked = trackedCodeSet();
+  const found = collectedSet();
+  const changed = [];
+  const ignored = [];
+  for (const code of occurrences.keys()) {
+    if (!tracked.has(code)) {
+      ignored.push(code);
+      continue;
+    }
+    if (!found.has(code)) changed.push(code);
+    found.add(code);
+  }
+  state.collected = [...found].sort(sortCode);
+  saveState();
+  render();
+  const ignoredText = ignored.length ? ` · ignored ${ignored.length} untracked` : "";
+  status.textContent = changed.length
+    ? `Marked ${changed.length} card${changed.length === 1 ? "" : "s"} as collected${ignoredText}.`
+    : `Those tracked cards were already marked collected${ignoredText}.`;
+}
+
+function loadTradedAwayCounts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TRADED_AWAY_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTradedAwayCounts(counts) {
+  localStorage.setItem(TRADED_AWAY_KEY, JSON.stringify(counts));
+}
+
+function markTradedAway() {
+  const occurrences = parsedUpdateCodes();
+  if (!occurrences) return;
+  const counts = loadTradedAwayCounts();
+  let total = 0;
+  for (const [code, count] of occurrences.entries()) {
+    counts[code] = Math.max(0, Number(counts[code] || 0)) + count;
+    total += count;
+  }
+  saveTradedAwayCounts(counts);
+  status.textContent = `Removed ${total} traded-away card${total === 1 ? "" : "s"} from Cards I Can Give on this phone.`;
 }
 
 function sortCode(a, b) {
@@ -223,6 +317,11 @@ filterButtons.forEach((button) => {
 
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
+gotCardsButton.addEventListener("click", markGotCards);
+tradedAwayButton.addEventListener("click", markTradedAway);
+updateText.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") markGotCards();
+});
 resetButton.addEventListener("click", () => {
   if (!window.confirm("Reset all collected marks for this tracker?")) return;
   state = { filter: "missing", collected: [] };

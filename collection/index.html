@@ -60,6 +60,16 @@
       </div>
     </section>
 
+    <section class="collectionUpdateCard" aria-label="Update collection from pasted text">
+      <label for="collectionUpdateText">Update from pasted text</label>
+      <textarea id="collectionUpdateText" rows="5" placeholder="Paste any message or list, e.g. I got MEX7 and CZE 5, traded away ENG13."></textarea>
+      <div class="collectionUpdateActions">
+        <button id="gotCardsButton" type="button">I got these cards</button>
+        <button id="tradedAwayButton" class="secondaryButton" type="button">I traded them away</button>
+      </div>
+      <p class="hint">We parse card codes from the text. Cards you traded away are removed from Cards I Can Give on this phone.</p>
+    </section>
+
     <p id="collectionStatus" class="collectionStatus" aria-live="polite"></p>
 
     <section class="collectionListWrap" aria-label="Cards by team">

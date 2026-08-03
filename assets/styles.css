@@ -297,6 +297,42 @@
   background: #15191c;
 }
 
+.collectionUpdateCard {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #181d20;
+}
+
+.collectionUpdateCard label {
+  font-weight: 800;
+}
+
+.collectionUpdateCard textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+}
+
+.collectionUpdateActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.collectionUpdateActions .secondaryButton {
+  background: transparent;
+}
+
 .collectionSearch {
   display: grid;
   gap: 6px;
@@ -1406,6 +1442,10 @@ body[data-overview-review="true"] .overviewPanel {
   .collectionActions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .collectionUpdateActions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .collectionTeam {
