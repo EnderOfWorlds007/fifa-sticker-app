@@ -1,10 +1,11 @@
-const CACHE_NAME = "fifa-card-apps-v1";
+const CACHE_NAME = "fifa-card-apps-v2";
 const APP_SHELL = [
-  "/fifa-sticker-app/apps",
-  "/fifa-sticker-app/scanner",
-  "/fifa-sticker-app/inventory",
-  "/fifa-sticker-app/collection",
-  "/fifa-sticker-app/trade-lookup",
+  "/fifa-sticker-app/",
+  "/fifa-sticker-app/apps/",
+  "/fifa-sticker-app/scanner/",
+  "/fifa-sticker-app/inventory/",
+  "/fifa-sticker-app/collection/",
+  "/fifa-sticker-app/trade-lookup/",
   "/fifa-sticker-app/assets/styles.css",
   "/fifa-sticker-app/assets/app.js",
   "/fifa-sticker-app/assets/inventory.js",
@@ -46,7 +47,7 @@ async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  if (response.ok) {
+  if (response.ok && !response.redirected && response.type === "basic") {
     const cache = await caches.open(CACHE_NAME);
     cache.put(request, response.clone());
   }
