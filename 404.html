@@ -16,31 +16,36 @@
       <div>
         <p class="appsEyebrow">FIFA card tools</p>
         <h1>Card command center</h1>
-        <p>Open the scanner, review saved inventory, or track the cards still missing from the collection.</p>
+        <p>Check trades, open the scanner, review saved inventory, or track the cards still missing from the collection.</p>
         <p class="localFirstNote" data-pwa-status>Phone-first, local-first.</p>
       </div>
     </header>
 
     <section class="appLauncher" aria-label="Available apps">
-      <a id="scannerAppLink" class="appTile scanner" href="/fifa-sticker-app/scanner">
+      <a class="appTile lookup" href="/fifa-sticker-app/trade-lookup/">
+        <span class="appTileIcon">Give</span>
+        <strong>Cards I Can Give</strong>
+        <span>Paste someone else's wants and see which cards you can offer.</span>
+      </a>
+      <a class="appTile needLookup" href="/fifa-sticker-app/need-lookup/">
+        <span class="appTileIcon">Need</span>
+        <strong>Cards I Need From Them</strong>
+        <span>Paste their available cards and see which ones are still on your list.</span>
+      </a>
+      <a id="scannerAppLink" class="appTile scanner" href="/fifa-sticker-app/scanner/">
         <span class="appTileIcon">Scan</span>
         <strong>Scanner</strong>
         <span>Capture cards and save recognized scans.</span>
       </a>
-      <a class="appTile inventory" href="/fifa-sticker-app/inventory">
+      <a class="appTile inventory" href="/fifa-sticker-app/inventory/">
         <span class="appTileIcon">Inv</span>
         <strong>Inventory</strong>
         <span>See cards already saved from scans.</span>
       </a>
-      <a class="appTile collection" href="/fifa-sticker-app/collection">
+      <a class="appTile collection" href="/fifa-sticker-app/collection/">
         <span class="appTileIcon">Need</span>
         <strong>My Collection</strong>
         <span>Mark missing cards as collected.</span>
-      </a>
-      <a class="appTile lookup" href="/fifa-sticker-app/trade-lookup">
-        <span class="appTileIcon">Find</span>
-        <strong>Trade Lookup</strong>
-        <span>Paste someone else's list and check what you have.</span>
       </a>
     </section>
   </main>

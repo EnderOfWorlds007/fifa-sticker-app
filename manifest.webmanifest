@@ -1,8 +1,8 @@
 {
   "name": "FIFA Card Apps",
   "short_name": "Card Apps",
-  "description": "Phone-first local tools for scanning cards, reviewing inventory, and tracking the collection.",
-  "start_url": "/fifa-sticker-app/apps",
+  "description": "Phone-first local tools for checking trades, scanning cards, reviewing inventory, and tracking the collection.",
+  "start_url": "/fifa-sticker-app/apps/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0f1315",
@@ -11,19 +11,29 @@
   "categories": ["utilities", "productivity"],
   "shortcuts": [
     {
+      "name": "Cards I Can Give",
+      "short_name": "Give",
+      "url": "/fifa-sticker-app/trade-lookup/"
+    },
+    {
+      "name": "Cards I Need From Them",
+      "short_name": "Need",
+      "url": "/fifa-sticker-app/need-lookup/"
+    },
+    {
       "name": "Scanner",
       "short_name": "Scanner",
-      "url": "/fifa-sticker-app/scanner"
+      "url": "/fifa-sticker-app/scanner/"
     },
     {
       "name": "Inventory",
       "short_name": "Inventory",
-      "url": "/fifa-sticker-app/inventory"
+      "url": "/fifa-sticker-app/inventory/"
     },
     {
       "name": "My Collection",
       "short_name": "Collection",
-      "url": "/fifa-sticker-app/collection"
+      "url": "/fifa-sticker-app/collection/"
     }
   ]
 }

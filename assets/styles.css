@@ -79,7 +79,7 @@
 
 .appLauncher {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   padding: 18px 0;
 }
@@ -101,6 +101,7 @@
 .appTile.inventory { border-top: 4px solid #6ea8fe; }
 .appTile.collection { border-top: 4px solid #f3b35b; }
 .appTile.lookup { border-top: 4px solid #d47de2; }
+.appTile.needLookup { border-top: 4px solid #66d27f; }
 
 .appTileIcon {
   width: 58px;

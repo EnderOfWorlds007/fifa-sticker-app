@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>Cards I Need From Them</title>
+  <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css">
+</head>
+<body class="tradeLookupBody">
+  <main class="tradeLookupShell">
+    <header class="tradeLookupTop">
+      <div>
+        <h1>Cards I Need From Them</h1>
+        <p>Paste someone else's available cards. We will compare them with the cards still missing from your collection tracker.</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/apps/">Apps</a>
+        <a href="/fifa-sticker-app/trade-lookup/">Can give</a>
+        <a href="/fifa-sticker-app/collection/">Collection</a>
+        <a href="/fifa-sticker-app/inventory/">Inventory</a>
+      </nav>
+    </header>
+
+    <section class="tradeLookupCard">
+      <label for="needLookupText">Their available cards</label>
+      <textarea id="needLookupText" rows="7" autofocus placeholder="Example: I have MEX7, CZE 5 and FRA-19."></textarea>
+      <div class="tradeLookupActions">
+        <button id="needLookupButton" type="button">Check what I need</button>
+        <button id="clearNeedLookupButton" class="secondaryButton" type="button">Clear</button>
+      </div>
+      <p id="needLookupSummary" class="hint">Paste their available cards, then check them against your missing list.</p>
+      <ol id="needLookupResults" class="tradeLookupResults"></ol>
+      <section id="needCopyReply" class="tradeCopyReply" hidden>
+        <label for="needReplyText">Copyable reply</label>
+        <textarea id="needReplyText" rows="3" readonly></textarea>
+        <button id="copyNeedReplyButton" type="button">Copy reply</button>
+      </section>
+    </section>
+  </main>
+  <script src="/fifa-sticker-app/assets/need_lookup.js" type="module"></script>
+  <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
+</body>
+</html>
