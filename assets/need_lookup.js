@@ -1,5 +1,5 @@
-import { extractCodeOccurrences as parseCodeOccurrences, formatCodeInput } from "./card_parser.js";
-import { attachVoiceInput } from "./voice_input.js";
+import { extractCodeOccurrences as parseCodeOccurrences, formatCodeInput } from "./card_parser.js?v=voice-4";
+import { attachVoiceInput } from "./voice_input.js?v=voice-4";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const COLLECTION_SOURCES = [

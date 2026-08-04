@@ -4,12 +4,24 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let listening = false;
+  let stopTimer = null;
+
+  function setButtonState(label, active = false) {
+    listening = active;
+    button.classList.toggle("listening", active);
+    button.textContent = label;
+    button.setAttribute("aria-pressed", String(active));
+  }
 
   function setListening(value) {
     listening = value;
-    button.classList.toggle("listening", listening);
-    button.textContent = listening ? "Listening..." : "Use Voice";
-    button.setAttribute("aria-pressed", String(listening));
+    setButtonState(listening ? "Listening..." : "Use Voice", listening);
+  }
+
+  function clearStopTimer() {
+    if (!stopTimer) return;
+    window.clearTimeout(stopTimer);
+    stopTimer = null;
   }
 
   function appendTranscript(transcript) {
@@ -28,7 +40,8 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
   if (!SpeechRecognition) {
     button.addEventListener("click", () => {
       textarea.focus();
-      setMessage?.("Voice recognition is not available in this browser. Use the keyboard microphone to dictate card names.");
+      setButtonState("Use Voice");
+      setMessage?.("Voice recognition is not available here. Tap the text box and use the keyboard microphone.");
     });
     return;
   }
@@ -39,6 +52,7 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
       return;
     }
 
+    setButtonState("Starting...", true);
     recognition = new SpeechRecognition();
     recognition.lang = navigator.language || "en-US";
     recognition.continuous = false;
@@ -51,9 +65,13 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
     recognition.addEventListener("start", () => {
       setListening(true);
       setMessage?.("Listening...");
+      clearStopTimer();
+      stopTimer = window.setTimeout(() => recognition?.stop(), 12000);
     });
 
     recognition.addEventListener("result", (event) => {
+      clearStopTimer();
+      stopTimer = window.setTimeout(() => recognition?.stop(), 2500);
       const parts = [];
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
@@ -65,11 +83,15 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
       if (parts.length) setMessage?.("Listening...");
     });
 
-    recognition.addEventListener("error", () => {
-      setMessage?.("Voice input could not start. You can still use the keyboard microphone.");
+    recognition.addEventListener("error", (event) => {
+      clearStopTimer();
+      setListening(false);
+      const reason = event.error === "not-allowed" ? "Microphone permission was blocked." : "Voice input could not start.";
+      setMessage?.(`${reason} Tap the text box and use the keyboard microphone.`);
     });
 
     recognition.addEventListener("end", () => {
+      clearStopTimer();
       setListening(false);
       const transcript = finalTranscript.trim() || latestTranscript.trim();
       if (transcript) appendTranscript(transcript);
@@ -79,8 +101,9 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
     try {
       recognition.start();
     } catch {
-      setListening(false);
-      setMessage?.("Voice input is already starting.");
+      clearStopTimer();
+      setButtonState("Use Voice");
+      setMessage?.("Voice input could not start. Tap the text box and use the keyboard microphone.");
     }
   });
 }
