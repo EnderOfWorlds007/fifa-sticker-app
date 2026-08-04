@@ -9,6 +9,7 @@ const copyReply = document.querySelector("#copyReply");
 const replyText = document.querySelector("#replyText");
 const copyReplyButton = document.querySelector("#copyReplyButton");
 const photoInput = document.querySelector("#lookupPhotoInput");
+const photoStatus = document.querySelector("#lookupPhotoStatus");
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 const INVENTORY_SOURCES = [
   { url: "/fifa-sticker-app/api/trade-inventory", label: "local scanner server" },
@@ -35,9 +36,10 @@ async function fillFromPhotos(files) {
   if (!selected.length) return;
   button.disabled = true;
   const recognized = [];
+  photoStatus.hidden = false;
   try {
     for (let index = 0; index < selected.length; index += 1) {
-      summary.textContent = `Scanning... ${index + 1}/${selected.length}`;
+      photoStatus.lastChild.textContent = `Scanning... ${index + 1}/${selected.length}`;
       const payload = await scanPhoto(selected[index]);
       if (payload.grouped_text) recognized.push(payload.grouped_text);
     }
@@ -52,6 +54,8 @@ async function fillFromPhotos(files) {
     summary.textContent = "Could not read those photos. Make sure the scanner backend tunnel is running.";
   } finally {
     button.disabled = false;
+    photoStatus.hidden = true;
+    photoStatus.lastChild.textContent = "Scanning...";
     photoInput.value = "";
   }
 }

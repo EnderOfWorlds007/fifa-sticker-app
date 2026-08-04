@@ -596,12 +596,48 @@
   clip-path: inset(50%);
 }
 
+.photoScanStatus {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 12px;
+  background: #101416;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.photoScanStatus[hidden] {
+  display: none;
+}
+
+.photoScanStatus span {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #00c2a8;
+  border-radius: 999px;
+  animation: photoScanSpin 0.8s linear infinite;
+}
+
+@keyframes photoScanSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .tradeLookupActions a {
   color: var(--text);
 }
 
 .tradeLookupActions .secondaryButton {
   background: transparent;
+}
+
+.collectionUpdateActions .photoScanStatus {
+  justify-content: center;
 }
 
 .tradeLookupResults {

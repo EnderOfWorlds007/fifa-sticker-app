@@ -19,6 +19,7 @@ const progressCount = document.querySelector("#progressCount");
 const neededPlainList = document.querySelector("#neededPlainList");
 const copyMissingButton = document.querySelector("#copyMissingButton");
 const photoInput = document.querySelector("#collectionPhotoInput");
+const photoStatus = document.querySelector("#collectionPhotoStatus");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
@@ -50,9 +51,10 @@ async function fillFromPhotos(files) {
   gotCardsButton.disabled = true;
   tradedAwayButton.disabled = true;
   const recognized = [];
+  photoStatus.hidden = false;
   try {
     for (let index = 0; index < selected.length; index += 1) {
-      status.textContent = `Scanning... ${index + 1}/${selected.length}`;
+      photoStatus.lastChild.textContent = `Scanning... ${index + 1}/${selected.length}`;
       const payload = await scanPhoto(selected[index]);
       if (payload.grouped_text) recognized.push(payload.grouped_text);
     }
@@ -68,6 +70,8 @@ async function fillFromPhotos(files) {
   } finally {
     gotCardsButton.disabled = false;
     tradedAwayButton.disabled = false;
+    photoStatus.hidden = true;
+    photoStatus.lastChild.textContent = "Scanning...";
     photoInput.value = "";
   }
 }
