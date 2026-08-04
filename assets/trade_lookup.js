@@ -20,27 +20,36 @@ function recognitionUrl(path) {
   return `${base}${path}`;
 }
 
-async function fillFromPhoto(file) {
-  if (!file) return;
+async function scanPhoto(file) {
+  const response = await fetch(recognitionUrl("/api/photo-codes"), {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) throw new Error("photo OCR unavailable");
+  return response.json();
+}
+
+async function fillFromPhotos(files) {
+  const selected = [...(files || [])];
+  if (!selected.length) return;
   button.disabled = true;
-  summary.textContent = "Scanning...";
+  const recognized = [];
   try {
-    const response = await fetch(recognitionUrl("/api/photo-codes"), {
-      method: "POST",
-      headers: { "Content-Type": file.type || "application/octet-stream" },
-      body: file,
-    });
-    if (!response.ok) throw new Error("photo OCR unavailable");
-    const payload = await response.json();
-    if (!payload.grouped_text) {
-      summary.textContent = "No card numbers were found in that photo.";
+    for (let index = 0; index < selected.length; index += 1) {
+      summary.textContent = `Scanning... ${index + 1}/${selected.length}`;
+      const payload = await scanPhoto(selected[index]);
+      if (payload.grouped_text) recognized.push(payload.grouped_text);
+    }
+    if (!recognized.length) {
+      summary.textContent = "No card numbers were found in those photos.";
       return;
     }
-    text.value = payload.grouped_text;
-    summary.textContent = `Filled ${payload.unique_code_count || payload.code_count || 0} card code${(payload.unique_code_count || payload.code_count) === 1 ? "" : "s"} from photo.`;
+    text.value = [text.value.trim(), ...recognized].filter(Boolean).join("\n");
+    summary.textContent = `Filled card codes from ${recognized.length}/${selected.length} photo${selected.length === 1 ? "" : "s"}.`;
     text.focus();
   } catch {
-    summary.textContent = "Could not read that photo. Make sure the scanner backend tunnel is running.";
+    summary.textContent = "Could not read those photos. Make sure the scanner backend tunnel is running.";
   } finally {
     button.disabled = false;
     photoInput.value = "";
@@ -244,7 +253,7 @@ copyReplyButton.addEventListener("click", async () => {
 
 button.addEventListener("click", lookup);
 clearButton.addEventListener("click", clearLookup);
-photoInput.addEventListener("change", () => fillFromPhoto(photoInput.files?.[0]));
+photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 text.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") lookup();
 });
