@@ -1,3 +1,5 @@
+import { extractCodeOccurrences as parseCodeOccurrences } from "./card_parser.js";
+
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const COLLECTION_SOURCES = [
   { url: "/fifa-sticker-app/api/collection-inventory", label: "local scanner server" },
@@ -60,7 +62,7 @@ async function lookupNeeds() {
   summary.textContent = "Checking the collection...";
   try {
     if (!collectionCards.length) await loadCollection();
-    const occurrences = extractCodeOccurrences(value);
+    const occurrences = parseCodeOccurrences(value);
     const owned = ownedCodeSet();
     const tracked = new Set(collectionCards.map((card) => card.code));
     const parsed = [...occurrences.entries()].sort(([a], [b]) => sortCode(a, b));

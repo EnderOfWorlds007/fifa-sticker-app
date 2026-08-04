@@ -1,3 +1,5 @@
+import { extractCodeOccurrences as parseCodeOccurrences } from "./card_parser.js";
+
 const text = document.querySelector("#lookupText");
 const button = document.querySelector("#lookupButton");
 const clearButton = document.querySelector("#clearLookupButton");
@@ -77,7 +79,7 @@ async function loadInventory() {
 }
 
 function lookupText(value, inventory) {
-  const occurrences = extractCodeOccurrences(value);
+  const occurrences = parseCodeOccurrences(value);
   const cards = adjustedInventoryCards(inventory.cards ?? {});
   const results = [...occurrences.entries()].sort(([a], [b]) => sortCode(a, b)).map(([code, occurrences]) => {
     const card = cards[code];

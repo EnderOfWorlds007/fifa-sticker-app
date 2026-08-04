@@ -1,3 +1,5 @@
+import { extractCodeOccurrences as parseCodeOccurrences } from "./card_parser.js";
+
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 const COLLECTION_SOURCES = [
@@ -143,7 +145,7 @@ function parsedUpdateCodes() {
     status.textContent = "Paste some card text first.";
     return null;
   }
-  const occurrences = extractCodeOccurrences(value);
+  const occurrences = parseCodeOccurrences(value);
   if (!occurrences.size) {
     status.textContent = "No card codes found in that text.";
     return null;
