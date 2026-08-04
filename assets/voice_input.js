@@ -46,6 +46,7 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
     recognition.maxAlternatives = 1;
 
     let finalTranscript = "";
+    let latestTranscript = "";
 
     recognition.addEventListener("start", () => {
       setListening(true);
@@ -56,9 +57,11 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
       const parts = [];
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
-        if (result.isFinal) finalTranscript += ` ${result[0].transcript}`;
-        else parts.push(result[0].transcript);
+        const transcript = result[0].transcript;
+        parts.push(transcript);
+        if (result.isFinal) finalTranscript += ` ${transcript}`;
       }
+      latestTranscript = parts.join(" ").trim() || latestTranscript;
       if (parts.length) setMessage?.("Listening...");
     });
 
@@ -68,7 +71,8 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
 
     recognition.addEventListener("end", () => {
       setListening(false);
-      if (finalTranscript.trim()) appendTranscript(finalTranscript);
+      const transcript = finalTranscript.trim() || latestTranscript.trim();
+      if (transcript) appendTranscript(transcript);
       else setMessage?.("No voice text captured.");
     });
 
