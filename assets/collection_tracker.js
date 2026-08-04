@@ -1,25 +1,10 @@
-const STARTING_MISSING = {
-  FWC: [3],
-  MEX: [12],
-  RSA: [13],
-  BIH: [15, 18],
-  BRA: [4],
-  PAR: [5],
-  TUR: [7],
-  GER: [9],
-  ECU: [8],
-  URU: [6],
-  ALG: [5],
-  AUT: [6],
-  POR: [7],
-  COD: [5, 8],
-  CRO: [18, 19],
-  GHA: [12],
-  CC: [1, 2, 3, 8, 9, 11, 13, 14],
-};
-
-const STORAGE_KEY = "panini.collectionTracker.v1";
+const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
+const COLLECTION_SOURCES = [
+  { url: "/fifa-sticker-app/api/collection-inventory", label: "local scanner server" },
+  { url: "/fifa-sticker-app/data/collection_inventory.json", label: "static snapshot" },
+];
+
 const teamList = document.querySelector("#teamList");
 const emptyState = document.querySelector("#emptyState");
 const searchInput = document.querySelector("#searchInput");
@@ -29,30 +14,24 @@ const missingCount = document.querySelector("#missingCount");
 const collectedCount = document.querySelector("#collectedCount");
 const teamCount = document.querySelector("#teamCount");
 const progressCount = document.querySelector("#progressCount");
+const neededPlainList = document.querySelector("#neededPlainList");
 const copyMissingButton = document.querySelector("#copyMissingButton");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
 const filterButtons = [...document.querySelectorAll("[data-filter]")];
 
-const cards = Object.entries(STARTING_MISSING).flatMap(([team, numbers]) =>
-  numbers.map((number) => ({
-    team,
-    number,
-    code: `${team}${number}`,
-    label: `${team} ${number}`,
-  })),
-);
-
 let state = loadState();
+let cards = [];
+let stats = {};
+let collectionSourceLabel = "static snapshot";
 
 function loadState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    const tracked = new Set(cards.map((card) => card.code));
     return {
       filter: ["missing", "all", "collected"].includes(parsed.filter) ? parsed.filter : "missing",
-      collected: Array.isArray(parsed.collected) ? parsed.collected.filter((code) => tracked.has(code)) : [],
+      collected: Array.isArray(parsed.collected) ? parsed.collected.map(normalizeCode).filter(Boolean) : [],
     };
   } catch {
     return { filter: "missing", collected: [] };
@@ -63,17 +42,71 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function collectedSet() {
-  return new Set(state.collected);
+async function loadCollection() {
+  status.textContent = "Loading collection snapshot...";
+  try {
+    const { payload, source } = await loadCollectionPayload();
+    collectionSourceLabel = source.label;
+    stats = payload.stats ?? {};
+    cards = (payload.cards ?? []).map(normalizeCard).filter((card) => card.code).sort((a, b) => sortCode(a.code, b.code));
+    localStorage.setItem("panini.collectionSnapshot.v1", JSON.stringify(payload));
+    render();
+  } catch {
+    try {
+      const cached = JSON.parse(localStorage.getItem("panini.collectionSnapshot.v1") || "{}");
+      collectionSourceLabel = "browser cache";
+      stats = cached.stats ?? {};
+      cards = (cached.cards ?? []).map(normalizeCard).filter((card) => card.code).sort((a, b) => sortCode(a.code, b.code));
+      render();
+    } catch {
+      cards = [];
+      stats = {};
+      render();
+      status.textContent = "Collection snapshot unavailable.";
+    }
+  }
 }
 
-function setCardCollected(code, isCollected) {
-  const next = collectedSet();
-  if (isCollected) next.add(code);
-  else next.delete(code);
-  state.collected = [...next].sort(sortCode);
-  saveState();
-  render();
+async function loadCollectionPayload() {
+  let lastError = null;
+  for (const source of COLLECTION_SOURCES) {
+    try {
+      const response = await fetch(source.url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${source.label} unavailable`);
+      return { payload: await response.json(), source };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("collection unavailable");
+}
+
+function normalizeCard(card) {
+  return {
+    ...card,
+    code: normalizeCode(card.code),
+    team: String(card.team || "Unknown"),
+    name: String(card.name || ""),
+    owned: Boolean(card.owned),
+    tradeable_count: Number(card.tradeable_count || 0),
+  };
+}
+
+function normalizeCode(value) {
+  return String(value || "").trim().replace(/[\s_-]/g, "").toUpperCase();
+}
+
+function localCollectedSet() {
+  return new Set(state.collected.map(normalizeCode));
+}
+
+function isOwned(card) {
+  return Boolean(card.owned) || localCollectedSet().has(card.code);
+}
+
+function cardNumber(code) {
+  const match = normalizeCode(code).match(/(\d+)(S)?$/);
+  return match ? `${match[1]}${match[2] ? "s" : ""}` : normalizeCode(code);
 }
 
 function trackedCodeSet() {
@@ -90,12 +123,12 @@ function extractCodeOccurrences(value) {
     const code = `${team}${normalizedNumber}`;
     occurrences.set(code, (occurrences.get(code) || 0) + 1);
   };
-  const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*(\d{1,2})(?![A-Z0-9])/g;
+  const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,4})\s*[-–—_./]?\s*(\d{1,2})(?![A-Z0-9])/g;
   for (const match of upper.matchAll(inlinePattern)) {
     add(match[1], match[2]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /^\s*([A-Z]{2,3})(?:\s+[^:\d\n]+)?\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
+  const groupedPattern = /^\s*([A-Z]{2,4})(?:\s+[^:\d\n]+)?\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
@@ -122,7 +155,7 @@ function markGotCards() {
   const occurrences = parsedUpdateCodes();
   if (!occurrences) return;
   const tracked = trackedCodeSet();
-  const found = collectedSet();
+  const locallyCollected = localCollectedSet();
   const changed = [];
   const ignored = [];
   for (const code of occurrences.keys()) {
@@ -130,16 +163,17 @@ function markGotCards() {
       ignored.push(code);
       continue;
     }
-    if (!found.has(code)) changed.push(code);
-    found.add(code);
+    const card = cards.find((candidate) => candidate.code === code);
+    if (card && !isOwned(card)) changed.push(code);
+    locallyCollected.add(code);
   }
-  state.collected = [...found].sort(sortCode);
+  state.collected = [...locallyCollected].sort(sortCode);
   saveState();
   render();
   const ignoredText = ignored.length ? ` · ignored ${ignored.length} untracked` : "";
   status.textContent = changed.length
-    ? `Marked ${changed.length} card${changed.length === 1 ? "" : "s"} as collected${ignoredText}.`
-    : `Those tracked cards were already marked collected${ignoredText}.`;
+    ? `Marked ${changed.length} needed card${changed.length === 1 ? "" : "s"} as received${ignoredText}.`
+    : `Those cards were already owned or not in the need list${ignoredText}.`;
 }
 
 function loadTradedAwayCounts() {
@@ -169,24 +203,27 @@ function markTradedAway() {
 }
 
 function sortCode(a, b) {
-  const aMatch = a.match(/^([A-Z]+)(\d+)$/);
-  const bMatch = b.match(/^([A-Z]+)(\d+)$/);
-  if (!aMatch || !bMatch) return a.localeCompare(b);
-  return aMatch[1].localeCompare(bMatch[1]) || Number(aMatch[2]) - Number(bMatch[2]);
+  const aMatch = normalizeCode(a).match(/^([A-Z]+)(\d+)(S)?$/);
+  const bMatch = normalizeCode(b).match(/^([A-Z]+)(\d+)(S)?$/);
+  if (!aMatch || !bMatch) return normalizeCode(a).localeCompare(normalizeCode(b));
+  return (
+    aMatch[1].localeCompare(bMatch[1]) ||
+    Number(aMatch[2]) - Number(bMatch[2]) ||
+    String(aMatch[3] || "").localeCompare(String(bMatch[3] || ""))
+  );
 }
 
 function visibleCards() {
-  const found = collectedSet();
   const query = searchInput.value.trim().toUpperCase().replace(/[-_]/g, " ");
+  const compactQuery = query.replace(/\s+/g, "");
   return cards.filter((card) => {
-    const isCollected = found.has(card.code);
-    if (state.filter === "missing" && isCollected) return false;
-    if (state.filter === "collected" && !isCollected) return false;
+    const owned = isOwned(card);
+    if (state.filter === "missing" && owned) return false;
+    if (state.filter === "collected" && !owned) return false;
     if (!query) return true;
-    const compactQuery = query.replace(/\s+/g, "");
     return (
-      card.team.includes(query) ||
-      card.label.includes(query) ||
+      card.team.toUpperCase().includes(query) ||
+      card.name.toUpperCase().includes(query) ||
       card.code.includes(compactQuery)
     );
   });
@@ -194,24 +231,34 @@ function visibleCards() {
 
 function groupedByTeam(items) {
   return items.reduce((groups, card) => {
-    if (!groups.has(card.team)) groups.set(card.team, []);
-    groups.get(card.team).push(card);
+    const team = card.team || "Unknown";
+    if (!groups.has(team)) groups.set(team, []);
+    groups.get(team).push(card);
     return groups;
   }, new Map());
 }
 
+function currentMissingCards() {
+  return cards.filter((card) => !isOwned(card));
+}
+
+function currentOwnedCount() {
+  return cards.filter(isOwned).length;
+}
+
 function render() {
-  const found = collectedSet();
   const visible = visibleCards();
   const groups = groupedByTeam(visible);
-  const missing = cards.length - found.size;
-  const progress = cards.length ? Math.round((found.size / cards.length) * 100) : 0;
+  const catalogCount = stats.catalog_count ?? cards.length;
+  const owned = currentOwnedCount();
+  const missing = currentMissingCards().length;
+  const progress = catalogCount ? Math.round((owned / catalogCount) * 100) : 0;
 
   missingCount.textContent = String(missing);
-  collectedCount.textContent = String(found.size);
-  teamCount.textContent = String(new Set(cards.map((card) => card.team)).size);
+  collectedCount.textContent = String(owned);
+  teamCount.textContent = String(new Set(cards.map((card) => card.team || "Unknown")).size);
   progressCount.textContent = `${progress}%`;
-  status.textContent = `${visible.length} cards shown from ${cards.length} tracked cards.`;
+  status.textContent = `${visible.length} cards shown from ${catalogCount} catalogue cards · ${stats.tradeable_card_count ?? 0} loose cards available for trading · ${collectionSourceLabel}.`;
 
   filterButtons.forEach((button) => {
     const active = button.dataset.filter === state.filter;
@@ -219,13 +266,32 @@ function render() {
     button.setAttribute("aria-pressed", String(active));
   });
 
+  renderNeededPlainList();
   teamList.replaceChildren(
-    ...[...groups.entries()].map(([team, teamCards]) => teamSection(team, teamCards, found)),
+    ...[...groups.entries()].map(([team, teamCards]) => teamSection(team, teamCards)),
   );
   emptyState.hidden = visible.length > 0;
 }
 
-function teamSection(team, teamCards, found) {
+function renderNeededPlainList() {
+  const groups = groupedByTeam(currentMissingCards());
+  if (!groups.size) {
+    neededPlainList.textContent = "Nothing currently missing.";
+    return;
+  }
+  neededPlainList.replaceChildren(...[...groups.entries()].map(([team, teamCards]) => {
+    const row = document.createElement("div");
+    row.className = "neededGroup";
+    const label = document.createElement("strong");
+    label.textContent = team;
+    const codes = document.createElement("span");
+    codes.textContent = teamCards.map((card) => card.code).join(", ");
+    row.append(label, codes);
+    return row;
+  }));
+}
+
+function teamSection(team, teamCards) {
   const section = document.createElement("section");
   section.className = "collectionTeam";
 
@@ -233,45 +299,50 @@ function teamSection(team, teamCards, found) {
   const title = document.createElement("h2");
   title.textContent = team;
   const meta = document.createElement("span");
-  const collected = teamCards.filter((card) => found.has(card.code)).length;
-  meta.textContent = `${teamCards.length - collected} missing`;
+  const missing = teamCards.filter((card) => !isOwned(card)).length;
+  meta.textContent = `${missing} missing`;
   header.append(title, meta);
 
   const list = document.createElement("div");
   list.className = "collectionCards";
-  list.append(...teamCards.map((card) => cardButton(card, found.has(card.code))));
+  list.append(...teamCards.map(cardButton));
 
   section.append(header, list);
   return section;
 }
 
-function cardButton(card, isCollected) {
+function cardButton(card) {
+  const owned = isOwned(card);
   const button = document.createElement("button");
   button.type = "button";
   button.className = "collectionCard";
-  button.classList.toggle("collected", isCollected);
-  button.setAttribute("aria-pressed", String(isCollected));
-  button.setAttribute("aria-label", `${card.label}, ${isCollected ? "collected" : "missing"}`);
-  button.innerHTML = `<strong>${card.number}</strong><span>${isCollected ? "Have" : "Need"}</span>`;
-  button.addEventListener("click", () => setCardCollected(card.code, !isCollected));
+  button.classList.toggle("collected", owned);
+  button.setAttribute("aria-pressed", String(owned));
+  button.setAttribute("aria-label", `${card.code}, ${card.name}, ${cardLabel(card)}`);
+  button.title = `${card.code} · ${card.name} · ${cardLabel(card)}`;
+  button.innerHTML = `<strong>${cardNumber(card.code)}</strong><span>${cardLabel(card)}</span>`;
   return button;
 }
 
+function cardLabel(card) {
+  if (!isOwned(card)) return "Need";
+  if (!card.owned) return "Got";
+  if (card.source === "album") return "Album";
+  if (card.source === "album_and_trade") return `Album + ${card.tradeable_count} trade`;
+  if (card.tradeable_count > 0) return `${card.tradeable_count} trade`;
+  return "Have";
+}
+
 function missingText() {
-  const found = collectedSet();
-  return Object.entries(STARTING_MISSING)
-    .map(([team, numbers]) => {
-      const remaining = numbers.filter((number) => !found.has(`${team}${number}`));
-      return remaining.length ? `${team}: ${remaining.join(", ")}` : "";
-    })
-    .filter(Boolean)
+  return [...groupedByTeam(currentMissingCards()).entries()]
+    .map(([team, teamCards]) => `${team}: ${teamCards.map((card) => cardNumber(card.code)).join(", ")}`)
     .join("\n");
 }
 
 async function copyMissingList() {
   const text = missingText();
   if (!text) {
-    status.textContent = "Everything in this hunt list is marked collected.";
+    status.textContent = "Everything in the catalogue is marked collected.";
     return;
   }
   try {
@@ -297,12 +368,13 @@ tradedAwayButton.addEventListener("click", markTradedAway);
 updateText.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") markGotCards();
 });
+resetButton.textContent = "Reset local changes";
 resetButton.addEventListener("click", () => {
-  if (!window.confirm("Reset all collected marks for this tracker?")) return;
+  if (!window.confirm("Reset received-card marks made on this phone?")) return;
   state = { filter: "missing", collected: [] };
   saveState();
   searchInput.value = "";
   render();
 });
 
-render();
+loadCollection();

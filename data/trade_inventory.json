@@ -8062,11 +8062,5 @@
     }
   },
   "schema_version": 1,
-  "stats": {
-    "matched_card_count": 781,
-    "photo_count": 26,
-    "session_count": 2,
-    "unique_code_count": 489
-  },
   "updated_at": "2026-08-03T14:09:12.430160+00:00"
 }

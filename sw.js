@@ -1,4 +1,4 @@
-const CACHE_NAME = "fifa-card-apps-v5";
+const CACHE_NAME = "fifa-card-apps-v6";
 const APP_SHELL = [
   "/fifa-sticker-app/",
   "/fifa-sticker-app/apps/",
@@ -16,6 +16,8 @@ const APP_SHELL = [
   "/fifa-sticker-app/assets/site_config.js",
   "/fifa-sticker-app/assets/apps.js",
   "/fifa-sticker-app/assets/pwa.js",
+  "/fifa-sticker-app/data/collection_inventory.json",
+  "/fifa-sticker-app/data/trade_inventory.json",
   "/fifa-sticker-app/manifest.webmanifest",
 ];
 
@@ -68,6 +70,19 @@ function cachedJsonUnavailable(pathname) {
         photo_count: 0,
         unique_code_count: 0,
         matched_card_count: 0,
+        offline: true
+      }
+    });
+  }
+  if (pathname === "/fifa-sticker-app/api/collection-inventory") {
+    return jsonResponse({
+      schema_version: 1,
+      cards: [],
+      stats: {
+        catalog_count: 0,
+        owned_unique_count: 0,
+        missing_count: 0,
+        tradeable_card_count: 0,
         offline: true
       }
     });

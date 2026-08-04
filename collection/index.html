@@ -15,7 +15,7 @@
     <header class="collectionTop">
       <div>
         <h1>Collection Tracker</h1>
-        <p>Track the cards you are still chasing and mark them off as you find them.</p>
+        <p>Static snapshot of owned, missing, and loose tradeable cards.</p>
       </div>
       <nav class="collectionNav" aria-label="Collection navigation">
         <a href="/fifa-sticker-app/apps/">Apps</a>
@@ -44,6 +44,14 @@
       </div>
     </section>
 
+    <section class="neededPlainCard" aria-label="Cards we need">
+      <header>
+        <h2>Cards we need</h2>
+        <span>Grouped for people who just want to browse the list.</span>
+      </header>
+      <div id="neededPlainList" class="neededPlainList">Loading missing cards...</div>
+    </section>
+
     <section class="collectionTools" aria-label="Collection tools">
       <label class="collectionSearch">
         <span>Search</span>
@@ -67,7 +75,7 @@
         <button id="gotCardsButton" type="button">I got these cards</button>
         <button id="tradedAwayButton" class="secondaryButton" type="button">I traded them away</button>
       </div>
-      <p class="hint">We parse card codes from the text. Cards you traded away are removed from Cards I Can Give on this phone.</p>
+      <p class="hint">We parse card codes from the text. Received cards are saved on this phone; cards you traded away are removed from Cards I Can Give on this phone.</p>
     </section>
 
     <p id="collectionStatus" class="collectionStatus" aria-live="polite"></p>
