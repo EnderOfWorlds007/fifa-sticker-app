@@ -57,7 +57,10 @@ const NUMBER_WORDS = new Map(Object.entries({
   OH: 0,
   O: 0,
   ONE: 1,
+  WON: 1,
   TWO: 2,
+  TO: 2,
+  TOO: 2,
   THREE: 3,
   FOUR: 4,
   FOR: 4,
@@ -92,33 +95,41 @@ const ALIAS_PATTERN = new RegExp(
 export function extractCodeOccurrences(value) {
   const upper = normalizeParseText(value);
   const occurrences = new Map();
+  const firstPositions = new Map();
   const inlineSpans = [];
-  const add = (team, number) => {
+  const add = (team, number, position) => {
     const normalizedNumber = normalizeNumber(number);
-    if (normalizedNumber < 1 || normalizedNumber > 20) return;
+    if (normalizedNumber < 1 || normalizedNumber > 20) return false;
     const normalizedTeam = normalizeTeam(team);
-    if (!normalizedTeam) return;
+    if (!normalizedTeam) return false;
     const code = `${normalizedTeam}${normalizedNumber}`;
     occurrences.set(code, (occurrences.get(code) || 0) + 1);
+    firstPositions.set(code, Math.min(firstPositions.get(code) ?? Number.MAX_SAFE_INTEGER, position));
+    return true;
   };
   const inlinePattern = new RegExp(`(?<![A-Z0-9])([A-Z]{2,4})\\s*[-–—_./]?\\s*${NUMBER_CAPTURE}(?![A-Z0-9])`, "g");
   for (const match of upper.matchAll(inlinePattern)) {
-    add(match[1], match[2]);
-    inlineSpans.push([match.index, match.index + match[0].length]);
+    if (add(match[1], match[2], match.index)) inlineSpans.push([match.index, match.index + match[0].length]);
   }
   for (const match of upper.matchAll(ALIAS_PATTERN)) {
     const start = match.index;
     const end = start + match[0].length;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart < end && start < spanEnd)) continue;
-    add(TEAM_ALIASES.get(match[1]), match[2]);
+    add(TEAM_ALIASES.get(match[1]), match[2], start);
   }
   const groupedPattern = new RegExp(`^\\s*(${TEAM_ALIAS_TOKEN})(?:\\s+[^:\\d\\n]+)?\\s*:\\s*([^\\n]+)`, "gm");
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
-    for (const number of match[2].match(NUMBER_VALUE_PATTERN) || []) add(match[1], number);
+    for (const numberMatch of match[2].matchAll(NUMBER_VALUE_PATTERN)) {
+      add(match[1], numberMatch[0], start + match[0].indexOf(match[2]) + numberMatch.index);
+    }
   }
-  return occurrences;
+  return new Map([...occurrences.entries()].sort(([a], [b]) => firstPositions.get(a) - firstPositions.get(b)));
+}
+
+export function formatCodeInput(value) {
+  return [...extractCodeOccurrences(value).keys()].join("\n");
 }
 
 function normalizeTeam(team) {

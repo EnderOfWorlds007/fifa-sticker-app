@@ -1,4 +1,4 @@
-import { extractCodeOccurrences as parseCodeOccurrences } from "./card_parser.js";
+import { extractCodeOccurrences as parseCodeOccurrences, formatCodeInput } from "./card_parser.js";
 import { attachVoiceInput } from "./voice_input.js";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
@@ -254,6 +254,7 @@ photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,
   textarea: text,
+  transformTranscript: formatCodeInput,
   onTranscript: lookupNeeds,
   setMessage: (message) => { summary.textContent = message; },
 });

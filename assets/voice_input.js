@@ -1,4 +1,4 @@
-export function attachVoiceInput({ button, textarea, onTranscript, setMessage }) {
+export function attachVoiceInput({ button, textarea, transformTranscript, onTranscript, setMessage }) {
   if (!button || !textarea) return;
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -15,9 +15,14 @@ export function attachVoiceInput({ button, textarea, onTranscript, setMessage })
   function appendTranscript(transcript) {
     const cleaned = transcript.trim();
     if (!cleaned) return;
-    textarea.value = [textarea.value.trim(), cleaned].filter(Boolean).join("\n");
+    const textToAppend = transformTranscript ? transformTranscript(cleaned).trim() : cleaned;
+    if (!textToAppend) {
+      setMessage?.("No card codes found in voice text.");
+      return;
+    }
+    textarea.value = [textarea.value.trim(), textToAppend].filter(Boolean).join("\n");
     textarea.focus();
-    onTranscript?.(cleaned);
+    onTranscript?.(textToAppend, cleaned);
   }
 
   if (!SpeechRecognition) {
@@ -54,7 +59,7 @@ export function attachVoiceInput({ button, textarea, onTranscript, setMessage })
         if (result.isFinal) finalTranscript += ` ${result[0].transcript}`;
         else parts.push(result[0].transcript);
       }
-      if (parts.length) setMessage?.(`Listening... ${parts.join(" ")}`);
+      if (parts.length) setMessage?.("Listening...");
     });
 
     recognition.addEventListener("error", () => {
