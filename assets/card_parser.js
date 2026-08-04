@@ -19,7 +19,7 @@ const TEAM_ALIASES = aliasMap({
   egy: "EGY", egypt: "EGY", egipto: "EGY", egypte: "EGY", agypten: "EGY", ägypten: "EGY",
   eng: "ENG", england: "ENG", inglaterra: "ENG", angleterre: "ENG",
   esp: "ESP", spain: "ESP", espana: "ESP", españa: "ESP", espagne: "ESP", spanien: "ESP",
-  fra: "FRA", france: "FRA", francia: "FRA", frankreich: "FRA",
+  fra: "FRA", france: "FRA", francia: "FRA", frankreich: "FRA", french: "FRA", friends: "FRA", francis: "FRA",
   fwc: "FWC", worldcup: "FWC", "world cup": "FWC", mundial: "FWC", coupe: "FWC",
   ger: "GER", gr: "GER", germ: "GER", germany: "GER", german: "GER", alemania: "GER", allemagne: "GER", deutschland: "GER",
   gha: "GHA", ghana: "GHA",
@@ -62,6 +62,8 @@ const NUMBER_WORDS = new Map(Object.entries({
   TO: 2,
   TOO: 2,
   THREE: 3,
+  TREE: 3,
+  FREE: 3,
   FOUR: 4,
   FOR: 4,
   FIVE: 5,
@@ -93,11 +95,28 @@ const ALIAS_PATTERN = new RegExp(
 );
 
 export function extractCodeOccurrences(value) {
+  return collectCodeOccurrences(value).occurrences;
+}
+
+export function normalizeCodeInput(value) {
+  const { occurrences, details } = collectCodeOccurrences(value);
+  return {
+    text: [...occurrences.keys()].join("\n"),
+    details: details.map((detail) => `${detail.raw} -> ${detail.code}`),
+  };
+}
+
+export function formatCodeInput(value) {
+  return normalizeCodeInput(value).text;
+}
+
+function collectCodeOccurrences(value) {
   const upper = normalizeParseText(value);
   const occurrences = new Map();
   const firstPositions = new Map();
+  const detailsByCode = new Map();
   const inlineSpans = [];
-  const add = (team, number, position) => {
+  const add = (team, number, position, raw) => {
     const normalizedNumber = normalizeNumber(number);
     if (normalizedNumber < 1 || normalizedNumber > 20) return false;
     const normalizedTeam = normalizeTeam(team);
@@ -105,31 +124,30 @@ export function extractCodeOccurrences(value) {
     const code = `${normalizedTeam}${normalizedNumber}`;
     occurrences.set(code, (occurrences.get(code) || 0) + 1);
     firstPositions.set(code, Math.min(firstPositions.get(code) ?? Number.MAX_SAFE_INTEGER, position));
+    if (!detailsByCode.has(code)) detailsByCode.set(code, { code, raw: raw.trim(), position });
     return true;
   };
   const inlinePattern = new RegExp(`(?<![A-Z0-9])([A-Z]{2,4})\\s*[-–—_./]?\\s*${NUMBER_CAPTURE}(?![A-Z0-9])`, "g");
   for (const match of upper.matchAll(inlinePattern)) {
-    if (add(match[1], match[2], match.index)) inlineSpans.push([match.index, match.index + match[0].length]);
+    if (add(match[1], match[2], match.index, match[0])) inlineSpans.push([match.index, match.index + match[0].length]);
   }
   for (const match of upper.matchAll(ALIAS_PATTERN)) {
     const start = match.index;
     const end = start + match[0].length;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart < end && start < spanEnd)) continue;
-    add(TEAM_ALIASES.get(match[1]), match[2], start);
+    add(TEAM_ALIASES.get(match[1]), match[2], start, match[0]);
   }
   const groupedPattern = new RegExp(`^\\s*(${TEAM_ALIAS_TOKEN})(?:\\s+[^:\\d\\n]+)?\\s*:\\s*([^\\n]+)`, "gm");
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
     for (const numberMatch of match[2].matchAll(NUMBER_VALUE_PATTERN)) {
-      add(match[1], numberMatch[0], start + match[0].indexOf(match[2]) + numberMatch.index);
+      add(match[1], numberMatch[0], start + match[0].indexOf(match[2]) + numberMatch.index, `${match[1]} ${numberMatch[0]}`);
     }
   }
-  return new Map([...occurrences.entries()].sort(([a], [b]) => firstPositions.get(a) - firstPositions.get(b)));
-}
-
-export function formatCodeInput(value) {
-  return [...extractCodeOccurrences(value).keys()].join("\n");
+  const sortedOccurrences = new Map([...occurrences.entries()].sort(([a], [b]) => firstPositions.get(a) - firstPositions.get(b)));
+  const details = [...detailsByCode.values()].sort((a, b) => a.position - b.position);
+  return { occurrences: sortedOccurrences, details };
 }
 
 function normalizeTeam(team) {

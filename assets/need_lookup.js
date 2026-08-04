@@ -1,5 +1,5 @@
-import { extractCodeOccurrences as parseCodeOccurrences, formatCodeInput } from "./card_parser.js?v=voice-4";
-import { attachVoiceInput } from "./voice_input.js?v=voice-4";
+import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-5";
+import { attachVoiceInput } from "./voice_input.js?v=voice-5";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const COLLECTION_SOURCES = [
@@ -254,7 +254,7 @@ photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,
   textarea: text,
-  transformTranscript: formatCodeInput,
+  transformTranscript: normalizeCodeInput,
   onTranscript: lookupNeeds,
   setMessage: (message) => { summary.textContent = message; },
 });

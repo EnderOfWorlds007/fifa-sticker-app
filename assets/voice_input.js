@@ -24,17 +24,22 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
     stopTimer = null;
   }
 
-  function appendTranscript(transcript) {
+  async function appendTranscript(transcript) {
     const cleaned = transcript.trim();
     if (!cleaned) return;
-    const textToAppend = transformTranscript ? transformTranscript(cleaned).trim() : cleaned;
+    setMessage?.("Analyzing...");
+    const transformed = transformTranscript ? transformTranscript(cleaned) : cleaned;
+    const textToAppend = typeof transformed === "string" ? transformed.trim() : String(transformed?.text || "").trim();
+    const details = Array.isArray(transformed?.details) ? transformed.details : [];
     if (!textToAppend) {
-      setMessage?.("No card codes found in voice text.");
+      setMessage?.(`Heard: ${cleaned}. No card codes found.`);
       return;
     }
     textarea.value = [textarea.value.trim(), textToAppend].filter(Boolean).join("\n");
     textarea.focus();
-    onTranscript?.(textToAppend, cleaned);
+    await onTranscript?.(textToAppend, cleaned);
+    const mapping = details.length ? details.join(", ") : textToAppend.split(/\s+/).join(", ");
+    setMessage?.(`Heard: ${cleaned}. Normalized: ${mapping}.`);
   }
 
   if (!SpeechRecognition) {
@@ -80,7 +85,8 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
         if (result.isFinal) finalTranscript += ` ${transcript}`;
       }
       latestTranscript = parts.join(" ").trim() || latestTranscript;
-      if (parts.length) setMessage?.("Listening...");
+      if (latestTranscript) setMessage?.(`Listening: ${latestTranscript}`);
+      else if (parts.length) setMessage?.("Listening...");
     });
 
     recognition.addEventListener("error", (event) => {
@@ -90,11 +96,11 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
       setMessage?.(`${reason} Tap the text box and use the keyboard microphone.`);
     });
 
-    recognition.addEventListener("end", () => {
+    recognition.addEventListener("end", async () => {
       clearStopTimer();
       setListening(false);
       const transcript = finalTranscript.trim() || latestTranscript.trim();
-      if (transcript) appendTranscript(transcript);
+      if (transcript) await appendTranscript(transcript);
       else setMessage?.("No voice text captured.");
     });
 
