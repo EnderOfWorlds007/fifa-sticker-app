@@ -572,7 +572,8 @@
   gap: 12px;
 }
 
-.photoUploadButton {
+.photoUploadButton,
+.voiceInputButton {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -587,7 +588,8 @@
   cursor: pointer;
 }
 
-.photoUploadButton.scanning {
+.photoUploadButton.scanning,
+.voiceInputButton.listening {
   background: #20242a;
   color: var(--text);
   cursor: wait;
@@ -603,21 +605,6 @@
   animation: photoScanSpin 0.8s linear infinite;
 }
 
-.voiceInputButton {
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 10px 14px;
-  background: #e8ecf0;
-  color: #101416;
-  font-weight: 800;
-  cursor: pointer;
-}
-
 .voiceInputButton::before {
   content: "";
   width: 10px;
@@ -625,12 +612,6 @@
   border: 2px solid currentColor;
   border-radius: 999px;
   box-shadow: 0 8px 0 -5px currentColor;
-}
-
-.voiceInputButton.listening {
-  background: #20242a;
-  color: var(--text);
-  cursor: wait;
 }
 
 .voiceInputButton.listening::before {
