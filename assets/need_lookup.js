@@ -15,6 +15,7 @@ const copyReply = document.querySelector("#needCopyReply");
 const replyText = document.querySelector("#needReplyText");
 const copyReplyButton = document.querySelector("#copyNeedReplyButton");
 const photoInput = document.querySelector("#needPhotoInput");
+const photoButton = document.querySelector("label[for='needPhotoInput']");
 const photoStatus = document.querySelector("#needPhotoStatus");
 
 let collectionCards = [];
@@ -35,15 +36,29 @@ async function scanPhoto(file) {
   return response.json();
 }
 
+function setPhotoProgress(scanText) {
+  photoButton.textContent = scanText;
+  photoButton.classList.add("scanning");
+  photoStatus.hidden = false;
+  photoStatus.lastChild.textContent = scanText;
+}
+
+function resetPhotoProgress() {
+  photoButton.classList.remove("scanning");
+  photoButton.textContent = "Use Photos";
+  photoStatus.hidden = true;
+  photoStatus.lastChild.textContent = "Scanning...";
+}
+
 async function fillFromPhotos(files) {
   const selected = [...(files || [])];
   if (!selected.length) return;
   button.disabled = true;
   const recognized = [];
-  photoStatus.hidden = false;
   try {
     for (let index = 0; index < selected.length; index += 1) {
-      photoStatus.lastChild.textContent = `Scanning... ${index + 1}/${selected.length}`;
+      const scanText = `Scanning... ${index + 1}/${selected.length}`;
+      setPhotoProgress(scanText);
       const payload = await scanPhoto(selected[index]);
       if (payload.grouped_text) recognized.push(payload.grouped_text);
     }
@@ -58,8 +73,7 @@ async function fillFromPhotos(files) {
     summary.textContent = "Could not read those photos. Make sure the scanner backend tunnel is running.";
   } finally {
     button.disabled = false;
-    photoStatus.hidden = true;
-    photoStatus.lastChild.textContent = "Scanning...";
+    resetPhotoProgress();
     photoInput.value = "";
   }
 }

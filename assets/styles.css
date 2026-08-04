@@ -577,6 +577,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 10px 14px;
@@ -584,6 +585,22 @@
   color: #061312;
   font-weight: 800;
   cursor: pointer;
+}
+
+.photoUploadButton.scanning {
+  background: #20242a;
+  color: var(--text);
+  cursor: wait;
+}
+
+.photoUploadButton.scanning::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #00c2a8;
+  border-radius: 999px;
+  animation: photoScanSpin 0.8s linear infinite;
 }
 
 .visuallyHiddenInput {

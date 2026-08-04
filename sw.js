@@ -1,4 +1,4 @@
-const CACHE_NAME = "fifa-card-apps-v10";
+const CACHE_NAME = "fifa-card-apps-v11";
 const APP_SHELL = [
   "/fifa-sticker-app/",
   "/fifa-sticker-app/apps/",

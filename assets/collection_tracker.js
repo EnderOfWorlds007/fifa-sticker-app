@@ -19,6 +19,7 @@ const progressCount = document.querySelector("#progressCount");
 const neededPlainList = document.querySelector("#neededPlainList");
 const copyMissingButton = document.querySelector("#copyMissingButton");
 const photoInput = document.querySelector("#collectionPhotoInput");
+const photoButton = document.querySelector("label[for='collectionPhotoInput']");
 const photoStatus = document.querySelector("#collectionPhotoStatus");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
@@ -45,16 +46,30 @@ async function scanPhoto(file) {
   return response.json();
 }
 
+function setPhotoProgress(scanText) {
+  photoButton.textContent = scanText;
+  photoButton.classList.add("scanning");
+  photoStatus.hidden = false;
+  photoStatus.lastChild.textContent = scanText;
+}
+
+function resetPhotoProgress() {
+  photoButton.classList.remove("scanning");
+  photoButton.textContent = "Use Photos";
+  photoStatus.hidden = true;
+  photoStatus.lastChild.textContent = "Scanning...";
+}
+
 async function fillFromPhotos(files) {
   const selected = [...(files || [])];
   if (!selected.length) return;
   gotCardsButton.disabled = true;
   tradedAwayButton.disabled = true;
   const recognized = [];
-  photoStatus.hidden = false;
   try {
     for (let index = 0; index < selected.length; index += 1) {
-      photoStatus.lastChild.textContent = `Scanning... ${index + 1}/${selected.length}`;
+      const scanText = `Scanning... ${index + 1}/${selected.length}`;
+      setPhotoProgress(scanText);
       const payload = await scanPhoto(selected[index]);
       if (payload.grouped_text) recognized.push(payload.grouped_text);
     }
@@ -70,8 +85,7 @@ async function fillFromPhotos(files) {
   } finally {
     gotCardsButton.disabled = false;
     tradedAwayButton.disabled = false;
-    photoStatus.hidden = true;
-    photoStatus.lastChild.textContent = "Scanning...";
+    resetPhotoProgress();
     photoInput.value = "";
   }
 }
