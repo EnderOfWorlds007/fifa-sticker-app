@@ -29,6 +29,8 @@
       <label for="needLookupText">Their available cards</label>
       <textarea id="needLookupText" rows="7" autofocus placeholder="Example: I have MEX7, CZE 5 and FRA-19."></textarea>
       <div class="tradeLookupActions">
+        <label class="photoUploadButton" for="needPhotoInput">Use photo</label>
+        <input id="needPhotoInput" class="visuallyHiddenInput" type="file" accept="image/*">
         <button id="needLookupButton" type="button">Check what I need</button>
         <button id="clearNeedLookupButton" class="secondaryButton" type="button">Clear</button>
       </div>
@@ -41,6 +43,7 @@
       </section>
     </section>
   </main>
+  <script src="/fifa-sticker-app/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/assets/need_lookup.js" type="module"></script>
   <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
 </body>

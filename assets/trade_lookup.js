@@ -8,11 +8,44 @@ const results = document.querySelector("#lookupResults");
 const copyReply = document.querySelector("#copyReply");
 const replyText = document.querySelector("#replyText");
 const copyReplyButton = document.querySelector("#copyReplyButton");
+const photoInput = document.querySelector("#lookupPhotoInput");
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 const INVENTORY_SOURCES = [
   { url: "/fifa-sticker-app/api/trade-inventory", label: "local scanner server" },
   { url: "/fifa-sticker-app/data/trade_inventory.json", label: "static snapshot" },
 ];
+
+function recognitionUrl(path) {
+  const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
+async function fillFromPhoto(file) {
+  if (!file) return;
+  button.disabled = true;
+  summary.textContent = "Reading card numbers from photo...";
+  try {
+    const response = await fetch(recognitionUrl("/api/photo-codes"), {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) throw new Error("photo OCR unavailable");
+    const payload = await response.json();
+    if (!payload.grouped_text) {
+      summary.textContent = "No card numbers were found in that photo.";
+      return;
+    }
+    text.value = payload.grouped_text;
+    summary.textContent = `Filled ${payload.unique_code_count || payload.code_count || 0} card code${(payload.unique_code_count || payload.code_count) === 1 ? "" : "s"} from photo.`;
+    text.focus();
+  } catch {
+    summary.textContent = "Could not read that photo. Make sure the scanner backend tunnel is running.";
+  } finally {
+    button.disabled = false;
+    photoInput.value = "";
+  }
+}
 
 function insigniaLabel(type) {
   if (type === "united_edition") return "Green card";
@@ -211,6 +244,7 @@ copyReplyButton.addEventListener("click", async () => {
 
 button.addEventListener("click", lookup);
 clearButton.addEventListener("click", clearLookup);
+photoInput.addEventListener("change", () => fillFromPhoto(photoInput.files?.[0]));
 text.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") lookup();
 });

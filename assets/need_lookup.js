@@ -14,9 +14,42 @@ const results = document.querySelector("#needLookupResults");
 const copyReply = document.querySelector("#needCopyReply");
 const replyText = document.querySelector("#needReplyText");
 const copyReplyButton = document.querySelector("#copyNeedReplyButton");
+const photoInput = document.querySelector("#needPhotoInput");
 
 let collectionCards = [];
 let collectionSourceLabel = "static snapshot";
+
+function recognitionUrl(path) {
+  const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
+async function fillFromPhoto(file) {
+  if (!file) return;
+  button.disabled = true;
+  summary.textContent = "Reading card numbers from photo...";
+  try {
+    const response = await fetch(recognitionUrl("/api/photo-codes"), {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) throw new Error("photo OCR unavailable");
+    const payload = await response.json();
+    if (!payload.grouped_text) {
+      summary.textContent = "No card numbers were found in that photo.";
+      return;
+    }
+    text.value = payload.grouped_text;
+    summary.textContent = `Filled ${payload.unique_code_count || payload.code_count || 0} card code${(payload.unique_code_count || payload.code_count) === 1 ? "" : "s"} from photo.`;
+    text.focus();
+  } catch {
+    summary.textContent = "Could not read that photo. Make sure the scanner backend tunnel is running.";
+  } finally {
+    button.disabled = false;
+    photoInput.value = "";
+  }
+}
 
 async function loadCollection() {
   const { payload, source } = await loadCollectionPayload();
@@ -188,6 +221,7 @@ copyReplyButton.addEventListener("click", async () => {
 
 button.addEventListener("click", lookupNeeds);
 clearButton.addEventListener("click", clearLookup);
+photoInput.addEventListener("change", () => fillFromPhoto(photoInput.files?.[0]));
 text.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") lookupNeeds();
 });

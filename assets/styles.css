@@ -572,6 +572,30 @@
   gap: 12px;
 }
 
+.photoUploadButton {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px 14px;
+  background: #00c2a8;
+  color: #061312;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.visuallyHiddenInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
 .tradeLookupActions a {
   color: var(--text);
 }
