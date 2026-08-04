@@ -18,6 +18,7 @@ const teamCount = document.querySelector("#teamCount");
 const progressCount = document.querySelector("#progressCount");
 const neededPlainList = document.querySelector("#neededPlainList");
 const copyMissingButton = document.querySelector("#copyMissingButton");
+const photoInput = document.querySelector("#collectionPhotoInput");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
@@ -27,6 +28,40 @@ let state = loadState();
 let cards = [];
 let stats = {};
 let collectionSourceLabel = "static snapshot";
+
+function recognitionUrl(path) {
+  const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
+async function fillFromPhoto(file) {
+  if (!file) return;
+  gotCardsButton.disabled = true;
+  tradedAwayButton.disabled = true;
+  status.textContent = "Scanning...";
+  try {
+    const response = await fetch(recognitionUrl("/api/photo-codes"), {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+    if (!response.ok) throw new Error("photo OCR unavailable");
+    const payload = await response.json();
+    if (!payload.grouped_text) {
+      status.textContent = "No card numbers were found in that photo.";
+      return;
+    }
+    updateText.value = payload.grouped_text;
+    status.textContent = `Filled ${payload.unique_code_count || payload.code_count || 0} card code${(payload.unique_code_count || payload.code_count) === 1 ? "" : "s"} from photo.`;
+    updateText.focus();
+  } catch {
+    status.textContent = "Could not read that photo. Make sure the scanner backend tunnel is running.";
+  } finally {
+    gotCardsButton.disabled = false;
+    tradedAwayButton.disabled = false;
+    photoInput.value = "";
+  }
+}
 
 function loadState() {
   try {
@@ -365,6 +400,7 @@ filterButtons.forEach((button) => {
 
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
+photoInput.addEventListener("change", () => fillFromPhoto(photoInput.files?.[0]));
 gotCardsButton.addEventListener("click", markGotCards);
 tradedAwayButton.addEventListener("click", markTradedAway);
 updateText.addEventListener("keydown", (event) => {

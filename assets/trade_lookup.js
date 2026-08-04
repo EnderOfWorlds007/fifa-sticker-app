@@ -23,7 +23,7 @@ function recognitionUrl(path) {
 async function fillFromPhoto(file) {
   if (!file) return;
   button.disabled = true;
-  summary.textContent = "Reading card numbers from photo...";
+  summary.textContent = "Scanning...";
   try {
     const response = await fetch(recognitionUrl("/api/photo-codes"), {
       method: "POST",

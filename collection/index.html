@@ -72,6 +72,8 @@
       <label for="collectionUpdateText">Update from pasted text</label>
       <textarea id="collectionUpdateText" rows="5" placeholder="Paste any message or list, e.g. I got MEX7 and CZE 5, traded away ENG13."></textarea>
       <div class="collectionUpdateActions">
+        <label class="photoUploadButton" for="collectionPhotoInput">Use photo</label>
+        <input id="collectionPhotoInput" class="visuallyHiddenInput" type="file" accept="image/*">
         <button id="gotCardsButton" type="button">I got these cards</button>
         <button id="tradedAwayButton" class="secondaryButton" type="button">I traded them away</button>
       </div>
@@ -86,6 +88,7 @@
     </section>
   </main>
 
+  <script src="/fifa-sticker-app/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/assets/collection_tracker.js" type="module"></script>
   <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
 </body>
