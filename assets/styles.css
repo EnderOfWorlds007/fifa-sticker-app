@@ -603,6 +603,46 @@
   animation: photoScanSpin 0.8s linear infinite;
 }
 
+.voiceInputButton {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px 14px;
+  background: #e8ecf0;
+  color: #101416;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.voiceInputButton::before {
+  content: "";
+  width: 10px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  box-shadow: 0 8px 0 -5px currentColor;
+}
+
+.voiceInputButton.listening {
+  background: #20242a;
+  color: var(--text);
+  cursor: wait;
+}
+
+.voiceInputButton.listening::before {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #d16666;
+  box-shadow: 0 0 0 0 rgba(209, 102, 102, 0.65);
+  animation: voicePulse 1s ease-out infinite;
+}
+
 .visuallyHiddenInput {
   position: absolute;
   width: 1px;
@@ -642,6 +682,12 @@
 @keyframes photoScanSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes voicePulse {
+  to {
+    box-shadow: 0 0 0 10px rgba(209, 102, 102, 0);
   }
 }
 

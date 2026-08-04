@@ -1,4 +1,5 @@
 import { extractCodeOccurrences as parseCodeOccurrences } from "./card_parser.js";
+import { attachVoiceInput } from "./voice_input.js";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
@@ -21,6 +22,7 @@ const copyMissingButton = document.querySelector("#copyMissingButton");
 const photoInput = document.querySelector("#collectionPhotoInput");
 const photoButton = document.querySelector("label[for='collectionPhotoInput']");
 const photoStatus = document.querySelector("#collectionPhotoStatus");
+const voiceButton = document.querySelector("#collectionVoiceButton");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
@@ -428,6 +430,11 @@ filterButtons.forEach((button) => {
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
+attachVoiceInput({
+  button: voiceButton,
+  textarea: updateText,
+  setMessage: (message) => { status.textContent = message; },
+});
 gotCardsButton.addEventListener("click", markGotCards);
 tradedAwayButton.addEventListener("click", markTradedAway);
 updateText.addEventListener("keydown", (event) => {

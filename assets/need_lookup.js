@@ -1,4 +1,5 @@
 import { extractCodeOccurrences as parseCodeOccurrences } from "./card_parser.js";
+import { attachVoiceInput } from "./voice_input.js";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const COLLECTION_SOURCES = [
@@ -17,6 +18,7 @@ const copyReplyButton = document.querySelector("#copyNeedReplyButton");
 const photoInput = document.querySelector("#needPhotoInput");
 const photoButton = document.querySelector("label[for='needPhotoInput']");
 const photoStatus = document.querySelector("#needPhotoStatus");
+const voiceButton = document.querySelector("#needVoiceButton");
 
 let collectionCards = [];
 let collectionSourceLabel = "static snapshot";
@@ -249,6 +251,12 @@ copyReplyButton.addEventListener("click", async () => {
 button.addEventListener("click", lookupNeeds);
 clearButton.addEventListener("click", clearLookup);
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
+attachVoiceInput({
+  button: voiceButton,
+  textarea: text,
+  onTranscript: lookupNeeds,
+  setMessage: (message) => { summary.textContent = message; },
+});
 text.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") lookupNeeds();
 });
