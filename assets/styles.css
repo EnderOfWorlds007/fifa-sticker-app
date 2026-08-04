@@ -566,15 +566,18 @@
 }
 
 .tradeLookupActions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
 .photoUploadButton,
 .voiceInputButton {
+  appearance: none;
+  box-sizing: border-box;
   min-height: 42px;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -584,7 +587,9 @@
   padding: 10px 14px;
   background: #00c2a8;
   color: #061312;
+  font: inherit;
   font-weight: 800;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -625,6 +630,7 @@
 }
 
 .voiceInputStatus {
+  grid-column: 1 / -1;
   min-height: 42px;
   max-width: min(100%, 520px);
   display: inline-flex;
@@ -653,6 +659,7 @@
 }
 
 .photoScanStatus {
+  grid-column: 1 / -1;
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -691,6 +698,7 @@
 }
 
 .tradeLookupActions a {
+  grid-column: 1 / -1;
   color: var(--text);
 }
 
