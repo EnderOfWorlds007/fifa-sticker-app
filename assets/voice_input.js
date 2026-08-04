@@ -1,4 +1,4 @@
-export function attachVoiceInput({ button, textarea, transformTranscript, onTranscript, setMessage }) {
+export function attachVoiceInput({ button, textarea, statusElement, transformTranscript, onTranscript, setMessage }) {
   if (!button || !textarea) return;
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -24,29 +24,37 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
     stopTimer = null;
   }
 
+  function showMessage(message) {
+    if (statusElement) {
+      statusElement.hidden = false;
+      statusElement.textContent = message;
+    }
+    setMessage?.(message);
+  }
+
   async function appendTranscript(transcript) {
     const cleaned = transcript.trim();
     if (!cleaned) return;
-    setMessage?.("Analyzing...");
+    showMessage("Analyzing...");
     const transformed = transformTranscript ? transformTranscript(cleaned) : cleaned;
     const textToAppend = typeof transformed === "string" ? transformed.trim() : String(transformed?.text || "").trim();
     const details = Array.isArray(transformed?.details) ? transformed.details : [];
     if (!textToAppend) {
-      setMessage?.(`Heard: ${cleaned}. No card codes found.`);
+      showMessage(`Heard: ${cleaned}. No card codes found.`);
       return;
     }
     textarea.value = [textarea.value.trim(), textToAppend].filter(Boolean).join("\n");
     textarea.focus();
     await onTranscript?.(textToAppend, cleaned);
     const mapping = details.length ? details.join(", ") : textToAppend.split(/\s+/).join(", ");
-    setMessage?.(`Heard: ${cleaned}. Normalized: ${mapping}.`);
+    showMessage(`Heard: ${cleaned}. Normalized: ${mapping}.`);
   }
 
   if (!SpeechRecognition) {
     button.addEventListener("click", () => {
       textarea.focus();
       setButtonState("Use Voice");
-      setMessage?.("Voice recognition is not available here. Tap the text box and use the keyboard microphone.");
+      showMessage("Voice recognition is not available here. Tap the text box and use the keyboard microphone.");
     });
     return;
   }
@@ -69,7 +77,7 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
 
     recognition.addEventListener("start", () => {
       setListening(true);
-      setMessage?.("Listening...");
+      showMessage("Listening...");
       clearStopTimer();
       stopTimer = window.setTimeout(() => recognition?.stop(), 12000);
     });
@@ -85,15 +93,15 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
         if (result.isFinal) finalTranscript += ` ${transcript}`;
       }
       latestTranscript = parts.join(" ").trim() || latestTranscript;
-      if (latestTranscript) setMessage?.(`Listening: ${latestTranscript}`);
-      else if (parts.length) setMessage?.("Listening...");
+      if (latestTranscript) showMessage(`Listening: ${latestTranscript}`);
+      else if (parts.length) showMessage("Listening...");
     });
 
     recognition.addEventListener("error", (event) => {
       clearStopTimer();
       setListening(false);
       const reason = event.error === "not-allowed" ? "Microphone permission was blocked." : "Voice input could not start.";
-      setMessage?.(`${reason} Tap the text box and use the keyboard microphone.`);
+      showMessage(`${reason} Tap the text box and use the keyboard microphone.`);
     });
 
     recognition.addEventListener("end", async () => {
@@ -101,7 +109,7 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
       setListening(false);
       const transcript = finalTranscript.trim() || latestTranscript.trim();
       if (transcript) await appendTranscript(transcript);
-      else setMessage?.("No voice text captured.");
+      else showMessage("No voice text captured.");
     });
 
     try {
@@ -109,7 +117,7 @@ export function attachVoiceInput({ button, textarea, transformTranscript, onTran
     } catch {
       clearStopTimer();
       setButtonState("Use Voice");
-      setMessage?.("Voice input could not start. Tap the text box and use the keyboard microphone.");
+      showMessage("Voice input could not start. Tap the text box and use the keyboard microphone.");
     }
   });
 }

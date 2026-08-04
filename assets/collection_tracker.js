@@ -1,5 +1,5 @@
-import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-5";
-import { attachVoiceInput } from "./voice_input.js?v=voice-5";
+import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-6";
+import { attachVoiceInput } from "./voice_input.js?v=voice-6";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
@@ -23,6 +23,7 @@ const photoInput = document.querySelector("#collectionPhotoInput");
 const photoButton = document.querySelector("label[for='collectionPhotoInput']");
 const photoStatus = document.querySelector("#collectionPhotoStatus");
 const voiceButton = document.querySelector("#collectionVoiceButton");
+const voiceStatus = document.querySelector("#collectionVoiceStatus");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
@@ -433,8 +434,8 @@ photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,
   textarea: updateText,
+  statusElement: voiceStatus,
   transformTranscript: normalizeCodeInput,
-  setMessage: (message) => { status.textContent = message; },
 });
 gotCardsButton.addEventListener("click", markGotCards);
 tradedAwayButton.addEventListener("click", markTradedAway);

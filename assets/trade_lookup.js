@@ -1,5 +1,5 @@
-import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-5";
-import { attachVoiceInput } from "./voice_input.js?v=voice-5";
+import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-6";
+import { attachVoiceInput } from "./voice_input.js?v=voice-6";
 
 const text = document.querySelector("#lookupText");
 const button = document.querySelector("#lookupButton");
@@ -13,6 +13,7 @@ const photoInput = document.querySelector("#lookupPhotoInput");
 const photoButton = document.querySelector("label[for='lookupPhotoInput']");
 const photoStatus = document.querySelector("#lookupPhotoStatus");
 const voiceButton = document.querySelector("#lookupVoiceButton");
+const voiceStatus = document.querySelector("#lookupVoiceStatus");
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 const INVENTORY_SOURCES = [
   { url: "/fifa-sticker-app/api/trade-inventory", label: "local scanner server" },
@@ -277,9 +278,9 @@ photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,
   textarea: text,
+  statusElement: voiceStatus,
   transformTranscript: normalizeCodeInput,
   onTranscript: lookup,
-  setMessage: (message) => { summary.textContent = message; },
 });
 text.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") lookup();
