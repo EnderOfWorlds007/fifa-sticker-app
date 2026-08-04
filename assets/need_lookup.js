@@ -1,49 +1,21 @@
 const STARTING_MISSING = {
-  MEX: [7, 12, 15, 17],
-  RSA: [6, 10],
-  CZE: [5, 8, 13],
-  CAN: [4, 16],
-  BIH: [2, 3, 9, 14, 16],
-  SUI: [9, 13],
-  HAI: [3, 4, 7, 17],
-  SCO: [10, 13],
-  MAR: [15],
-  BRA: [10],
-  QAT: [16, 19, 20],
-  USA: [2, 7],
-  CUW: [15],
-  NED: [15],
-  ECU: [5, 7, 8, 15],
-  CIV: [2, 8, 12, 17],
-  GER: [3, 14, 15, 16],
-  AUS: [8, 11, 13, 14, 16, 18],
-  PAR: [2, 6, 18],
-  JPN: [9, 10],
-  SWE: [3, 5],
-  TUN: [3, 8, 9, 10],
-  EGY: [12],
-  IRN: [6],
-  NZL: [10],
-  ESP: [7],
-  CPV: [14],
-  KSA: [7],
-  URU: [19],
-  SEN: [9, 13],
-  NOR: [3, 20],
-  AUT: [2, 18],
-  POR: [3, 8],
-  JOR: [6, 10],
-  ALG: [12, 17],
-  ARG: [8, 10, 15, 16, 17],
-  IRQ: [2, 9, 13, 16],
-  FRA: [1, 17, 19],
-  COD: [1, 2, 10, 15, 16, 20],
-  UZB: [2],
-  GHA: [16, 20],
-  CRO: [13],
-  ENG: [4, 13, 19],
-  FWC: [1, 12],
-  CC: [1, 3],
+  FWC: [3],
+  MEX: [12],
+  RSA: [13],
+  BIH: [15, 18],
+  BRA: [4],
+  PAR: [5],
+  TUR: [7],
+  GER: [9],
+  ECU: [8],
+  URU: [6],
+  ALG: [5],
+  AUT: [6],
+  POR: [7],
+  COD: [5, 8],
+  CRO: [18, 19],
+  GHA: [12],
+  CC: [1, 2, 3, 8, 9, 11, 13, 14],
 };
 
 const STORAGE_KEY = "panini.collectionTracker.v1";
@@ -119,7 +91,9 @@ function extractCodeOccurrences(value) {
   const occurrences = new Map();
   const inlineSpans = [];
   const add = (team, number) => {
-    const code = `${team}${Number(number)}`;
+    const normalizedNumber = Number(number);
+    if (normalizedNumber < 1 || normalizedNumber > 20) return;
+    const code = `${team}${normalizedNumber}`;
     occurrences.set(code, (occurrences.get(code) || 0) + 1);
   };
   const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*(\d{1,2})(?![A-Z0-9])/g;
@@ -127,7 +101,7 @@ function extractCodeOccurrences(value) {
     add(match[1], match[2]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /^\s*([A-Z]{2,3})\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
+  const groupedPattern = /^\s*([A-Z]{2,3})(?:\s+[^:\d\n]+)?\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;

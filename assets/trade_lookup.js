@@ -151,7 +151,9 @@ function extractCodeOccurrences(value) {
   const occurrences = new Map();
   const inlineSpans = [];
   const add = (team, number) => {
-    const code = `${team}${Number(number)}`;
+    const normalizedNumber = Number(number);
+    if (normalizedNumber < 1 || normalizedNumber > 20) return;
+    const code = `${team}${normalizedNumber}`;
     occurrences.set(code, (occurrences.get(code) || 0) + 1);
   };
   const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*(\d{1,2})(?![A-Z0-9])/g;
@@ -159,7 +161,7 @@ function extractCodeOccurrences(value) {
     add(match[1], match[2]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /^\s*([A-Z]{2,3})\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
+  const groupedPattern = /^\s*([A-Z]{2,3})(?:\s+[^:\d\n]+)?\s*:\s*([0-9][0-9\s,;/&+.-]*)/gm;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index;
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
