@@ -1,5 +1,5 @@
-import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-6";
-import { attachVoiceInput } from "./voice_input.js?v=voice-6";
+import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-lang-1";
+import { attachVoiceInput } from "./voice_input.js?v=voice-lang-1";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";

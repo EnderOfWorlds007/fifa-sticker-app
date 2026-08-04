@@ -126,3 +126,22 @@ test("voice parser explains likely France three mishears", () => {
     details: ["FRANCIS TREE -> FRA3"],
   });
 });
+
+test("voice parser supports common number words in French, Spanish, German, and Portuguese", () => {
+  assert.deepEqual(normalizeCodeInput("France trois Allemagne dix sept"), {
+    text: "FRA3\nGER17",
+    details: ["FRANCE TROIS -> FRA3", "ALLEMAGNE DIX SEPT -> GER17"],
+  });
+  assert.deepEqual(normalizeCodeInput("Francia tres Alemania dieciséis"), {
+    text: "FRA3\nGER16",
+    details: ["FRANCIA TRES -> FRA3", "ALEMANIA DIECISEIS -> GER16"],
+  });
+  assert.deepEqual(normalizeCodeInput("Frankreich drei Deutschland zwanzig"), {
+    text: "FRA3\nGER20",
+    details: ["FRANKREICH DREI -> FRA3", "DEUTSCHLAND ZWANZIG -> GER20"],
+  });
+  assert.deepEqual(normalizeCodeInput("Brasil cinco Portugal dezessete"), {
+    text: "BRA5\nPOR17",
+    details: ["BRASIL CINCO -> BRA5", "PORTUGAL DEZESSETE -> POR17"],
+  });
+});
