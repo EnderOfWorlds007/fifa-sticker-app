@@ -33,6 +33,7 @@ let state = loadState();
 let cards = [];
 let stats = {};
 let collectionSourceLabel = "static snapshot";
+let photoScanRunning = false;
 
 function recognitionUrl(path) {
   const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
@@ -66,9 +67,12 @@ function resetPhotoProgress() {
 async function fillFromPhotos(files) {
   const selected = [...(files || [])];
   if (!selected.length) return;
+  if (photoScanRunning) return;
+  photoScanRunning = true;
   gotCardsButton.disabled = true;
   tradedAwayButton.disabled = true;
   const recognized = [];
+  setPhotoProgress("Preparing photos...");
   try {
     for (let index = 0; index < selected.length; index += 1) {
       const scanText = `Scanning... ${index + 1}/${selected.length}`;
@@ -86,6 +90,7 @@ async function fillFromPhotos(files) {
   } catch {
     status.textContent = "Could not read those photos. Make sure the scanner backend tunnel is running.";
   } finally {
+    photoScanRunning = false;
     gotCardsButton.disabled = false;
     tradedAwayButton.disabled = false;
     resetPhotoProgress();
@@ -431,6 +436,7 @@ filterButtons.forEach((button) => {
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
 photoButton.addEventListener("click", () => photoInput.click());
+photoInput.addEventListener("input", () => fillFromPhotos(photoInput.files));
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,

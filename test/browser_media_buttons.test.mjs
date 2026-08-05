@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -10,9 +10,14 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 8791;
 const DEBUG_PORT = 9331;
 
-test("media buttons align and Use Photos opens the file chooser in Chrome", async () => {
+test("media buttons align and Use Photos fills the textbox after file selection in Chrome", async () => {
   const serverRoot = await mkdtemp(join(tmpdir(), "fifa-app-server-"));
   await symlink(process.cwd(), join(serverRoot, "fifa-sticker-app"));
+  const photoPath = join(serverRoot, "sample.png");
+  await writeFile(photoPath, Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  ));
   const server = spawn("python3", ["-m", "http.server", String(PORT), "--bind", "127.0.0.1"], {
     cwd: serverRoot,
     stdio: ["ignore", "pipe", "pipe"],
@@ -37,8 +42,21 @@ test("media buttons align and Use Photos opens the file chooser in Chrome", asyn
     try {
       await send(cdp, "Runtime.enable");
       await send(cdp, "Page.enable");
+      await send(cdp, "DOM.enable");
       await send(cdp, "Page.setInterceptFileChooserDialog", { enabled: true });
       await waitForReady(cdp);
+      await evaluate(cdp, `(() => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = (url, init) => {
+          if (String(url).includes("/api/photo-codes")) {
+            return Promise.resolve(new Response(JSON.stringify({ grouped_text: "FRA3" }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }));
+          }
+          return originalFetch(url, init);
+        };
+      })()`);
 
       const metrics = await evaluate(cdp, `(() => {
         const photo = document.querySelector("#needPhotoButton").getBoundingClientRect();
@@ -57,6 +75,16 @@ test("media buttons align and Use Photos opens the file chooser in Chrome", asyn
       await clickCenter(cdp, metrics.photo);
       const chooser = await chooserPromise;
       assert.equal(chooser.mode, "selectMultiple");
+      assert.ok(chooser.backendNodeId, "file chooser should expose the input backend node id");
+
+      await send(cdp, "DOM.setFileInputFiles", {
+        backendNodeId: chooser.backendNodeId,
+        files: [photoPath],
+      });
+      const filledText = await waitForExpression(cdp, `document.querySelector("#needLookupText").value`);
+      assert.equal(filledText, "FRA3");
+      const summary = await evaluate(cdp, `document.querySelector("#needLookupSummary").textContent`);
+      assert.match(summary, /Filled card codes from 1\/1 photo/);
     } finally {
       cdp.close();
     }
@@ -152,6 +180,15 @@ async function waitForReady(cdp) {
     await delay(50);
   }
   throw new Error("Timed out waiting for document readiness");
+}
+
+async function waitForExpression(cdp, expression) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const value = await evaluate(cdp, expression);
+    if (value) return value;
+    await delay(50);
+  }
+  throw new Error(`Timed out waiting for ${expression}`);
 }
 
 function waitForEvent(cdp, method) {

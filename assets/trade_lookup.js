@@ -19,6 +19,7 @@ const INVENTORY_SOURCES = [
   { url: "/fifa-sticker-app/api/trade-inventory", label: "local scanner server" },
   { url: "/fifa-sticker-app/data/trade_inventory.json", label: "static snapshot" },
 ];
+let photoScanRunning = false;
 
 function recognitionUrl(path) {
   const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
@@ -52,8 +53,11 @@ function resetPhotoProgress() {
 async function fillFromPhotos(files) {
   const selected = [...(files || [])];
   if (!selected.length) return;
+  if (photoScanRunning) return;
+  photoScanRunning = true;
   button.disabled = true;
   const recognized = [];
+  setPhotoProgress("Preparing photos...");
   try {
     for (let index = 0; index < selected.length; index += 1) {
       const scanText = `Scanning... ${index + 1}/${selected.length}`;
@@ -71,6 +75,7 @@ async function fillFromPhotos(files) {
   } catch {
     summary.textContent = "Could not read those photos. Make sure the scanner backend tunnel is running.";
   } finally {
+    photoScanRunning = false;
     button.disabled = false;
     resetPhotoProgress();
     photoInput.value = "";
@@ -275,6 +280,7 @@ copyReplyButton.addEventListener("click", async () => {
 button.addEventListener("click", lookup);
 clearButton.addEventListener("click", clearLookup);
 photoButton.addEventListener("click", () => photoInput.click());
+photoInput.addEventListener("input", () => fillFromPhotos(photoInput.files));
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,
