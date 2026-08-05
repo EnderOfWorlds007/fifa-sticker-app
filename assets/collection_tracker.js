@@ -20,7 +20,7 @@ const progressCount = document.querySelector("#progressCount");
 const neededPlainList = document.querySelector("#neededPlainList");
 const copyMissingButton = document.querySelector("#copyMissingButton");
 const photoInput = document.querySelector("#collectionPhotoInput");
-const photoButton = document.querySelector("label[for='collectionPhotoInput']");
+const photoButton = document.querySelector("#collectionPhotoButton");
 const photoStatus = document.querySelector("#collectionPhotoStatus");
 const voiceButton = document.querySelector("#collectionVoiceButton");
 const voiceStatus = document.querySelector("#collectionVoiceStatus");
@@ -430,6 +430,7 @@ filterButtons.forEach((button) => {
 
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
+photoButton.addEventListener("click", () => photoInput.click());
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,

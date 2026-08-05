@@ -16,7 +16,7 @@ const copyReply = document.querySelector("#needCopyReply");
 const replyText = document.querySelector("#needReplyText");
 const copyReplyButton = document.querySelector("#copyNeedReplyButton");
 const photoInput = document.querySelector("#needPhotoInput");
-const photoButton = document.querySelector("label[for='needPhotoInput']");
+const photoButton = document.querySelector("#needPhotoButton");
 const photoStatus = document.querySelector("#needPhotoStatus");
 const voiceButton = document.querySelector("#needVoiceButton");
 const voiceStatus = document.querySelector("#needVoiceStatus");
@@ -251,6 +251,7 @@ copyReplyButton.addEventListener("click", async () => {
 
 button.addEventListener("click", lookupNeeds);
 clearButton.addEventListener("click", clearLookup);
+photoButton.addEventListener("click", () => photoInput.click());
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,

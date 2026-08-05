@@ -10,7 +10,7 @@ const copyReply = document.querySelector("#copyReply");
 const replyText = document.querySelector("#replyText");
 const copyReplyButton = document.querySelector("#copyReplyButton");
 const photoInput = document.querySelector("#lookupPhotoInput");
-const photoButton = document.querySelector("label[for='lookupPhotoInput']");
+const photoButton = document.querySelector("#lookupPhotoButton");
 const photoStatus = document.querySelector("#lookupPhotoStatus");
 const voiceButton = document.querySelector("#lookupVoiceButton");
 const voiceStatus = document.querySelector("#lookupVoiceStatus");
@@ -274,6 +274,7 @@ copyReplyButton.addEventListener("click", async () => {
 
 button.addEventListener("click", lookup);
 clearButton.addEventListener("click", clearLookup);
+photoButton.addEventListener("click", () => photoInput.click());
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
   button: voiceButton,
