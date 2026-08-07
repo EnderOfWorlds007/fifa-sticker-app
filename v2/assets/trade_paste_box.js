@@ -2,10 +2,24 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-c1418e782960";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-5b9ee7a456f2";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-c1418e782960";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5b9ee7a456f2";
+
+const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
+const VOICE_LANGUAGES = [
+  { value: "auto", label: "Phone language" },
+  { value: "en-US", label: "English" },
+  { value: "fr-FR", label: "French" },
+  { value: "de-DE", label: "German" },
+  { value: "es-ES", label: "Spanish" },
+  { value: "it-IT", label: "Italian" },
+  { value: "pt-PT", label: "Portuguese" },
+  { value: "nl-NL", label: "Dutch" },
+  { value: "ro-RO", label: "Romanian" },
+];
+const VOICE_LANGUAGE_VALUES = new Set(VOICE_LANGUAGES.map((item) => item.value));
 
 export function mountTradePasteBox(target, options) {
   const root = typeof target === "string" ? document.querySelector(target) : target;
@@ -50,8 +64,8 @@ export function mountTradePasteBox(target, options) {
   capabilityStatus.setAttribute("aria-live", "polite");
   capabilityStatus.hidden = true;
   if (enabledCapabilities.photo || enabledCapabilities.voice) {
-    root.append(buildCapabilityRow(textarea, capabilityStatus, enabledCapabilities, { onTextAcquired }));
     root.append(capabilityStatus);
+    root.append(buildCapabilityRow(textarea, capabilityStatus, enabledCapabilities, { onTextAcquired }));
   }
 
   const actionRow = document.createElement("div");
@@ -83,8 +97,11 @@ function buildCapabilityRow(textarea, status, capabilities, options = {}) {
   const voiceState = {
     recognition: null,
     listening: false,
+    stopping: false,
     stopTimer: null,
+    finishTimer: null,
     errorMessage: "",
+    languageSelect: null,
   };
   const setOtherAcquisitionButtonsDisabled = (activeButton, disabled) => {
     for (const item of acquisitionButtons) {
@@ -137,6 +154,9 @@ function buildCapabilityRow(textarea, status, capabilities, options = {}) {
     }));
     acquisitionButtons.push(button);
     row.append(button);
+    const languageSelect = buildVoiceLanguageSelect();
+    voiceState.languageSelect = languageSelect;
+    row.append(languageSelect);
   }
 
   return row;
@@ -225,28 +245,32 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
     return;
   }
   if (state.listening && state.recognition) {
-    state.recognition.stop();
+    requestVoiceStop(button, state);
     return;
   }
   const recognition = new SpeechRecognition();
   state.recognition = recognition;
   state.errorMessage = "";
-  recognition.lang = navigator.language || "en-US";
+  const recognitionLanguage = resolveVoiceRecognitionLanguage(state.languageSelect?.value);
+  recognition.lang = recognitionLanguage;
   recognition.interimResults = true;
-  recognition.continuous = false;
+  recognition.continuous = true;
   recognition.maxAlternatives = 1;
 
   let latestTranscript = "";
 
   recognition.addEventListener("start", () => {
     setVoiceButtonState(button, state, "Stop listening", true);
-    showVoiceMessage(status, "Tap Stop listening when you are done.", { label: "Live transcript" });
+    showLiveTranscript(status, "Listening... tap Stop listening when you are done.", {
+      language: voiceLanguageLabel(recognitionLanguage),
+      busy: true,
+    });
     clearVoiceStopTimer(state);
-    state.stopTimer = window.setTimeout(() => state.recognition?.stop(), 12000);
+    state.stopTimer = window.setTimeout(() => state.recognition?.stop(), 20000);
   });
   recognition.addEventListener("result", (event) => {
     clearVoiceStopTimer(state);
-    state.stopTimer = window.setTimeout(() => state.recognition?.stop(), 2500);
+    state.stopTimer = window.setTimeout(() => state.recognition?.stop(), 4000);
     const parts = [];
     for (let index = 0; index < event.results.length; index += 1) {
       const result = event.results[index];
@@ -254,19 +278,23 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
       if (transcript) parts.push(transcript);
     }
     latestTranscript = parts.join(" ").trim() || latestTranscript;
-    showVoiceMessage(status, latestTranscript || "Listening...", { label: "Live transcript" });
+    showLiveTranscript(status, latestTranscript || "Listening...", {
+      language: voiceLanguageLabel(recognitionLanguage),
+      busy: true,
+    });
   });
   recognition.addEventListener("error", (event) => {
     clearVoiceStopTimer(state);
+    clearVoiceFinishTimer(state);
     resetVoiceButton(button, state);
     state.recognition = null;
-    const reason = event.error === "not-allowed" ? "Microphone permission was blocked." : "Voice input could not start.";
-    state.errorMessage = `${reason} Tap the text box and use the keyboard microphone.`;
+    state.errorMessage = voiceErrorMessage(event.error);
     options.setPeerControlsDisabled?.(false);
     showVoiceMessage(status, state.errorMessage);
   });
   recognition.addEventListener("end", async () => {
     clearVoiceStopTimer(state);
+    clearVoiceFinishTimer(state);
     resetVoiceButton(button, state);
     state.recognition = null;
     options.setPeerControlsDisabled?.(false);
@@ -277,7 +305,10 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
     }
     const transcript = latestTranscript.trim();
     if (transcript) {
-      await appendProcessedTranscript(textarea, status, transcript, options);
+      await appendProcessedTranscript(textarea, status, transcript, {
+        ...options,
+        voiceLanguageLabel: voiceLanguageLabel(recognitionLanguage),
+      });
     } else {
       showVoiceMessage(status, "No voice text captured.");
     }
@@ -299,18 +330,18 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
 async function appendProcessedTranscript(textarea, status, transcript, options = {}) {
   const cleaned = transcript.trim();
   if (!cleaned) return;
-  showVoiceMessage(status, "Analyzing...");
+  showLiveTranscript(status, cleaned, { phase: "Analyzing...", language: options.voiceLanguageLabel || "" });
   const transformed = normalizeCodeInput(cleaned);
   const textToAppend = String(transformed?.text || "").trim();
   const details = Array.isArray(transformed?.details) ? transformed.details : [];
   if (!textToAppend) {
-    showVoiceMessage(status, `Heard: ${cleaned}. No card codes found.`);
+    showLiveTranscript(status, cleaned, { language: options.voiceLanguageLabel || "", normalized: "No card codes found." });
     return;
   }
   appendText(textarea, textToAppend);
   await options.onTextAcquired?.({ source: "voice", text: textToAppend, transcript: cleaned });
   const mapping = details.length ? details.join(", ") : textToAppend.split(/\s+/).join(", ");
-  showVoiceMessage(status, `Heard: ${cleaned}. Normalized: ${mapping}.`);
+  showLiveTranscript(status, cleaned, { language: options.voiceLanguageLabel || "", normalized: mapping });
 }
 
 function showVoiceMessage(status, message, { busy = false, label = "Voice" } = {}) {
@@ -319,6 +350,7 @@ function showVoiceMessage(status, message, { busy = false, label = "Voice" } = {
 
 function showCapabilityMessage(status, label, message, { busy = false } = {}) {
   status.hidden = false;
+  status.classList.remove("liveTranscriptPanel");
   status.replaceChildren();
   const title = document.createElement("strong");
   title.className = "pasteCapabilityStatusLabel";
@@ -330,14 +362,72 @@ function showCapabilityMessage(status, label, message, { busy = false } = {}) {
   status.setAttribute("aria-busy", String(busy));
 }
 
+function showLiveTranscript(status, transcript, { busy = false, language = "", phase = "Live transcript", normalized = "" } = {}) {
+  status.hidden = false;
+  status.classList.add("liveTranscriptPanel");
+  status.replaceChildren();
+  const header = document.createElement("div");
+  header.className = "liveTranscriptHeader";
+  const title = document.createElement("strong");
+  title.className = "pasteCapabilityStatusLabel";
+  title.textContent = phase;
+  header.append(title);
+  if (language) {
+    const languageBadge = document.createElement("span");
+    languageBadge.className = "liveTranscriptLanguage";
+    languageBadge.textContent = language;
+    header.append(languageBadge);
+  }
+  const raw = document.createElement("p");
+  raw.className = "liveTranscriptText";
+  raw.textContent = transcript;
+  status.append(header, raw);
+  if (normalized) {
+    const normalizedText = document.createElement("p");
+    normalizedText.className = "liveTranscriptNormalized";
+    normalizedText.textContent = `Normalized: ${normalized}`;
+    status.append(normalizedText);
+  }
+  status.setAttribute("aria-busy", String(busy));
+}
+
 function clearVoiceStopTimer(state) {
   if (!state.stopTimer) return;
   window.clearTimeout(state.stopTimer);
   state.stopTimer = null;
 }
 
+function clearVoiceFinishTimer(state) {
+  if (!state.finishTimer) return;
+  window.clearTimeout(state.finishTimer);
+  state.finishTimer = null;
+}
+
+function requestVoiceStop(button, state) {
+  if (!state.recognition || state.stopping) return;
+  state.stopping = true;
+  clearVoiceStopTimer(state);
+  button.textContent = "Finishing...";
+  button.disabled = true;
+  try {
+    state.recognition.stop();
+  } catch {
+    resetVoiceButton(button, state);
+    state.recognition = null;
+    return;
+  }
+  clearVoiceFinishTimer(state);
+  state.finishTimer = window.setTimeout(() => {
+    if (!state.recognition) return;
+    state.recognition = null;
+    resetVoiceButton(button, state);
+  }, 5000);
+}
+
 function resetVoiceButton(button, state) {
+  state.stopping = false;
   setVoiceButtonState(button, state, "Use Voice", false);
+  button.disabled = false;
 }
 
 function setVoiceButtonState(button, state, label, active = false) {
@@ -345,6 +435,76 @@ function setVoiceButtonState(button, state, label, active = false) {
   button.classList.toggle("listening", active);
   button.textContent = label;
   button.setAttribute("aria-pressed", String(active));
+  if (state.languageSelect) state.languageSelect.disabled = active;
+}
+
+function buildVoiceLanguageSelect() {
+  const select = document.createElement("select");
+  select.className = "voiceLanguageSelect";
+  select.setAttribute("aria-label", "Voice language");
+  for (const language of VOICE_LANGUAGES) {
+    const option = document.createElement("option");
+    option.value = language.value;
+    option.textContent = language.value === "auto"
+      ? `${language.label} (${voiceLanguageLabel(resolveVoiceRecognitionLanguage("auto"))})`
+      : language.label;
+    select.append(option);
+  }
+  select.value = savedVoiceLanguage();
+  select.addEventListener("change", () => {
+    try {
+      localStorage.setItem(VOICE_LANGUAGE_KEY, select.value);
+    } catch {
+      // Ignore storage failures; the selected language still applies for this recording.
+    }
+  });
+  return select;
+}
+
+function savedVoiceLanguage() {
+  try {
+    const saved = localStorage.getItem(VOICE_LANGUAGE_KEY);
+    if (VOICE_LANGUAGE_VALUES.has(saved)) return saved;
+  } catch {
+    // Ignore storage failures and fall back to browser language.
+  }
+  return "auto";
+}
+
+function resolveVoiceRecognitionLanguage(selected = "auto") {
+  if (VOICE_LANGUAGE_VALUES.has(selected) && selected !== "auto") return selected;
+  const browserLanguages = Array.isArray(navigator.languages) && navigator.languages.length
+    ? navigator.languages
+    : [navigator.language || "en-US"];
+  for (const language of browserLanguages) {
+    const normalized = normalizeLanguageTag(language);
+    const supported = VOICE_LANGUAGES.find((item) => item.value !== "auto" && (
+      item.value.toLowerCase() === normalized.toLowerCase()
+      || item.value.toLowerCase().startsWith(`${normalized.split("-")[0].toLowerCase()}-`)
+    ));
+    if (supported) return supported.value;
+  }
+  return "en-US";
+}
+
+function normalizeLanguageTag(value) {
+  return String(value || "").trim().replace("_", "-");
+}
+
+function voiceLanguageLabel(language) {
+  const value = resolveVoiceRecognitionLanguage(language);
+  return VOICE_LANGUAGES.find((item) => item.value === value)?.label || value;
+}
+
+function voiceErrorMessage(error) {
+  const messages = {
+    "not-allowed": "Microphone permission was blocked. Allow microphone access or use keyboard dictation.",
+    "no-speech": "No speech was heard. Try again closer to the microphone.",
+    "audio-capture": "The microphone is unavailable. Check the phone microphone and try again.",
+    network: "Voice recognition is unavailable right now. Check the network and try again.",
+    "language-not-supported": "That voice language is not supported on this device. Choose another language and try again.",
+  };
+  return messages[error] || "Voice input could not start. Tap the text box and use the keyboard microphone.";
 }
 
 function appendText(textarea, addition) {

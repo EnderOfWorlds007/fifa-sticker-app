@@ -649,7 +649,8 @@
 }
 
 .photoUploadButton,
-.voiceInputButton {
+.voiceInputButton,
+.voiceLanguageSelect {
   appearance: none;
   box-sizing: border-box;
   min-height: 42px;
@@ -665,6 +666,14 @@
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+}
+
+.voiceLanguageSelect {
+  max-width: min(100%, 180px);
+  border: 1px solid var(--border);
+  background: #080d0c;
+  color: var(--text);
+  font-weight: 700;
 }
 
 .photoUploadButton.scanning {
@@ -710,9 +719,9 @@
 
 .pasteCapabilityStatus {
   grid-column: 1 / -1;
-  min-height: 64px;
+  min-height: 72px;
   max-width: min(100%, 520px);
-  margin: 0;
+  margin: 0 0 10px;
   padding: 12px;
   border: 1px solid rgba(0, 194, 168, 0.55);
   border-radius: 8px;
@@ -733,6 +742,43 @@
 .pasteCapabilityStatusText {
   display: block;
   white-space: pre-wrap;
+}
+
+.liveTranscriptPanel {
+  border-color: rgba(255, 196, 87, 0.72);
+  background: #15130d;
+}
+
+.liveTranscriptHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.liveTranscriptLanguage {
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 196, 87, 0.34);
+  border-radius: 999px;
+  color: #ffd98a;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.liveTranscriptText,
+.liveTranscriptNormalized {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.liveTranscriptText {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.liveTranscriptNormalized {
+  margin-top: 8px;
+  color: var(--muted);
 }
 
 .pasteCapabilityStatus[hidden] {
