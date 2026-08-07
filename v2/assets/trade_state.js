@@ -764,6 +764,33 @@ export function compareParsedCodes(occurrences, adjustedInventory, missingCodes)
   return { canGive, needFromThem, other };
 }
 
+export function resolveCompareDirection(directed, mode = "auto") {
+  const wantsInput = directed?.wants instanceof Map ? directed.wants : new Map();
+  const offersInput = directed?.offers instanceof Map ? directed.offers : new Map();
+  const ambiguousInput = directed?.ambiguous instanceof Map ? directed.ambiguous : new Map();
+  const hasDirectedSections = Boolean(wantsInput.size || offersInput.size);
+  const hasAmbiguousOnly = !hasDirectedSections && Boolean(ambiguousInput.size);
+  const selectedMode = hasAmbiguousOnly && mode === "auto" ? "offers" : mode;
+  const wants = wantsInput.size
+    ? wantsInput
+    : hasAmbiguousOnly && ["wants", "both"].includes(selectedMode)
+      ? ambiguousInput
+      : new Map();
+  const offers = offersInput.size
+    ? offersInput
+    : hasAmbiguousOnly && ["offers", "both"].includes(selectedMode)
+      ? ambiguousInput
+      : new Map();
+  return {
+    wants,
+    offers,
+    showDirectionChooser: hasAmbiguousOnly,
+    hasResolvedDirection: hasDirectedSections || hasAmbiguousOnly,
+    selectedMode,
+    usedDefaultOffers: hasAmbiguousOnly && mode === "auto",
+  };
+}
+
 export function mergeCompareResults(giveResult, needResult, ambiguousResult, hasDirectedSections) {
   const canGive = uniqueRows(giveResult?.canGive || []);
   const needFromThem = uniqueRows(needResult?.needFromThem || []);

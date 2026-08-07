@@ -7,12 +7,13 @@ import {
   extractCodeOccurrences,
   loadLedger,
   mergeCompareResults,
+  resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8998864e89d3";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-8998864e89d3";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-8998864e89d3";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-8998864e89d3";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d09098ecb759";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-d09098ecb759";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-d09098ecb759";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-d09098ecb759";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -130,27 +131,14 @@ async function compare() {
     const adjusted = adjustedInventoryPayload(payload, loadLedger(), { catalog, legacyCollected: loadLegacyCollected() });
     const missing = missingCodes(catalog, payload);
     const directed = extractDirectedCodeOccurrences(value);
-    const hasDirectedSections = Boolean(directed.wants.size || directed.offers.size);
-    const needsClassification = !hasDirectedSections && directed.ambiguous.size && compareDirectionMode === "auto";
-    const wants = directed.wants.size
-      ? directed.wants
-      : !hasDirectedSections && ["wants", "both"].includes(compareDirectionMode)
-        ? directed.ambiguous
-        : new Map();
-    const offers = directed.offers.size
-      ? directed.offers
-      : !hasDirectedSections && ["offers", "both"].includes(compareDirectionMode)
-        ? directed.ambiguous
-        : new Map();
-    const giveResult = compareParsedCodes(wants, adjusted, new Set());
-    const needResult = compareParsedCodes(offers, { cards: {} }, missing);
+    const direction = resolveCompareDirection(directed, compareDirectionMode);
+    const giveResult = compareParsedCodes(direction.wants, adjusted, new Set());
+    const needResult = compareParsedCodes(direction.offers, { cards: {} }, missing);
     const ambiguousResult = compareParsedCodes(directed.ambiguous, adjusted, missing);
-    const result = needsClassification
-      ? { canGive: [], needFromThem: [], other: allParsedRows(directed.ambiguous) }
-      : mergeCompareResults(giveResult, needResult, ambiguousResult, hasDirectedSections || compareDirectionMode !== "auto");
+    const result = mergeCompareResults(giveResult, needResult, ambiguousResult, direction.hasResolvedDirection);
     const mentionCount = [...extractCodeOccurrences(value).values()].reduce((sum, count) => sum + count, 0);
-    ambiguousDirectionPanel.hidden = !needsClassification;
-    const directionHint = needsClassification ? " · choose how to read this list" : "";
+    updateDirectionChooser(direction);
+    const directionHint = direction.usedDefaultOffers ? " · shown as their offers" : "";
     summary.textContent = `${result.canGive.length} you can give · ${result.needFromThem.length} you need · ${mentionCount} mentions parsed · ${source.label}${directionHint}`;
     canGiveResults.replaceChildren(...rows(result.canGive, "give"));
     needFromThemResults.replaceChildren(...rows(result.needFromThem, "need"));
@@ -158,7 +146,7 @@ async function compare() {
     replyText.value = replyFor(result);
     copyReply.hidden = false;
     lastCompareResult = result;
-    updateTradeBuildAction(result, hasDirectedSections || compareDirectionMode !== "auto", needsClassification);
+    updateTradeBuildAction(result);
     resetTradeDraft();
   } catch {
     summary.textContent = "Could not read saved inventory.";
@@ -168,16 +156,14 @@ async function compare() {
   }
 }
 
-function updateTradeBuildAction(result, hasDirectedSections, needsClassification = false) {
+function updateTradeBuildAction(result) {
   const hasGive = Boolean(result.canGive.length);
   const hasNeed = Boolean(result.needFromThem.length);
   const hasUsefulMatch = hasGive || hasNeed;
   buildTradeButton.textContent = "Start trade";
-  buildTradeButton.hidden = needsClassification || !hasUsefulMatch;
-  buildTradeButton.disabled = needsClassification || !hasUsefulMatch;
-  if (needsClassification) {
-    tradeBuildHint.textContent = "Choose how to read this list before starting a trade.";
-  } else if (!hasUsefulMatch) {
+  buildTradeButton.hidden = !hasUsefulMatch;
+  buildTradeButton.disabled = !hasUsefulMatch;
+  if (!hasUsefulMatch) {
     tradeBuildHint.textContent = "";
   } else if (!hasGive) {
     tradeBuildHint.textContent = "Start a trade from what you need? Then paste what you can give them.";
@@ -188,11 +174,17 @@ function updateTradeBuildAction(result, hasDirectedSections, needsClassification
   }
 }
 
-function allParsedRows(occurrences) {
-  return [...occurrences.entries()].map(([code, mentions]) => ({
-    code,
-    mentions,
-  })).sort((a, b) => sortCode(a.code, b.code));
+function updateDirectionChooser(direction) {
+  ambiguousDirectionPanel.hidden = !direction.showDirectionChooser;
+  const active = direction.selectedMode;
+  for (const [button, mode] of [
+    [ambiguousAsWantsButton, "wants"],
+    [ambiguousAsOffersButton, "offers"],
+    [ambiguousAsBothButton, "both"],
+  ]) {
+    button.setAttribute("aria-pressed", String(active === mode));
+    button.classList.toggle("selected", active === mode);
+  }
 }
 
 async function loadInventory() {
@@ -313,7 +305,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-8998864e89d3");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-d09098ecb759");
 }
 
 function reservedQuantity(code) {

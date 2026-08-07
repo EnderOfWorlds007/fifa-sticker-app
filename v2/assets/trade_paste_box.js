@@ -2,10 +2,10 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-8998864e89d3";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-d09098ecb759";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8998864e89d3";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d09098ecb759";
 
 export function mountTradePasteBox(target, options) {
   const root = typeof target === "string" ? document.querySelector(target) : target;

@@ -623,6 +623,13 @@
   background: transparent;
 }
 
+.tradeLookupActions .secondaryButton.selected,
+.tradeLookupActions .secondaryButton[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(0, 194, 168, 0.4);
+}
+
 .photoUploadButton,
 .voiceInputButton {
   appearance: none;
