@@ -1241,7 +1241,9 @@
 }
 
 .albumReviewBody.albumReviewCompact .albumViewControls {
-  display: none;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
 .albumReviewBody.albumReviewCompact .albumReviewQueue button,
@@ -1249,6 +1251,16 @@
   min-height: 40px;
   padding: 7px 10px;
   font-size: 13px;
+}
+
+.albumReviewBody.albumReviewCompact #toggleAlbumViewRotation,
+.albumReviewBody.albumReviewCompact #showAlbumProcessing[hidden] {
+  display: none;
+}
+
+.albumReviewBody.albumReviewCompact #showAlbumProcessing {
+  display: inline-flex;
+  width: auto;
 }
 
 .albumReviewBody.albumReviewCompact .albumPhotoActions {
