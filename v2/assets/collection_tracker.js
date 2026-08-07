@@ -20,17 +20,17 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-bcb1aeaf8108";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-65d7426e56a8";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-bcb1aeaf8108";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-bcb1aeaf8108";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-bcb1aeaf8108";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-bcb1aeaf8108";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-65d7426e56a8";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-65d7426e56a8";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-65d7426e56a8";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-65d7426e56a8";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -88,6 +88,7 @@ mountTradePasteBox('[data-trade-paste-box="collection-update"]', {
   textareaId: "collectionUpdateText",
   rows: 5,
   placeholder: "Paste any message or list, e.g. I got MEX7 and CZE 5, traded away ENG13.",
+  capabilities: { photo: true, voice: true },
   actions: [
     { id: "gotCardsButton", label: "I got these cards" },
     { id: "tradedAwayButton", label: "I traded them away", secondary: true },

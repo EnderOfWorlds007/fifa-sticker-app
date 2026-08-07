@@ -1,3 +1,9 @@
+import {
+  createPhotoCodeJob,
+  recognitionBaseUrl,
+  waitForPhotoCodeJob,
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-65d7426e56a8";
+
 export function mountTradePasteBox(target, options) {
   const root = typeof target === "string" ? document.querySelector(target) : target;
   if (!root) return null;
@@ -13,7 +19,12 @@ export function mountTradePasteBox(target, options) {
     summary,
     notice,
     notices,
+    capabilities = {},
   } = options;
+  const enabledCapabilities = {
+    photo: capabilities.photo === true,
+    voice: capabilities.voice === true,
+  };
 
   root.replaceChildren();
   const labelElement = document.createElement("label");
@@ -28,6 +39,14 @@ export function mountTradePasteBox(target, options) {
   textarea.placeholder = placeholder;
   if (autofocus) textarea.autofocus = true;
   root.append(textarea);
+
+  const capabilityStatus = document.createElement("p");
+  capabilityStatus.className = "hint pasteCapabilityStatus";
+  capabilityStatus.setAttribute("aria-live", "polite");
+  if (enabledCapabilities.photo || enabledCapabilities.voice) {
+    root.append(buildCapabilityRow(textarea, capabilityStatus, enabledCapabilities));
+    root.append(capabilityStatus);
+  }
 
   const actionRow = document.createElement("div");
   actionRow.className = "tradeLookupActions";
@@ -46,7 +65,109 @@ export function mountTradePasteBox(target, options) {
   if (summary) root.append(buildParagraph(summary.id, "hint", summary.text || "", { ariaLive: summary.ariaLive }));
   for (const noticeConfig of notices || (notice ? [notice] : [])) root.append(buildNotice(noticeConfig));
 
-  return { root, textarea, actionRow };
+  return { root, textarea, actionRow, capabilityStatus };
+}
+
+function buildCapabilityRow(textarea, status, capabilities) {
+  const row = document.createElement("div");
+  row.className = "tradeLookupActions pasteCapabilityActions";
+
+  if (capabilities.photo) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.capture = "environment";
+    input.hidden = true;
+    input.setAttribute("data-paste-photo-input", "true");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondaryButton";
+    button.textContent = "Photo";
+    button.addEventListener("click", () => input.click());
+    input.addEventListener("change", () => scanPhotoIntoText(input, textarea, status));
+    row.append(button, input);
+  }
+
+  if (capabilities.voice) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondaryButton";
+    button.setAttribute("data-paste-voice-button", "true");
+    button.textContent = "Voice";
+    button.addEventListener("click", () => captureVoiceIntoText(textarea, status, button));
+    row.append(button);
+  }
+
+  return row;
+}
+
+async function scanPhotoIntoText(input, textarea, status) {
+  const file = input.files?.[0];
+  if (!file) return;
+  if (!recognitionBaseUrl()) {
+    status.textContent = "Photo input needs the laptop OCR backend. Set it on Scan first.";
+    input.value = "";
+    return;
+  }
+  status.textContent = "Scanning photo...";
+  try {
+    const job = await createPhotoCodeJob(file);
+    const payload = await waitForPhotoCodeJob(job.job_id, {
+      onStatus: (message) => { status.textContent = message; },
+    });
+    const result = payload.result || payload;
+    const text = String(result?.grouped_text || (Array.isArray(result?.codes) ? result.codes.join(", ") : "")).trim();
+    if (!text) {
+      status.textContent = "No card codes recognized in that photo.";
+      return;
+    }
+    appendText(textarea, text);
+    const count = Array.isArray(result?.codes) ? result.codes.length : text.split(/[,;\n]+/).filter(Boolean).length;
+    status.textContent = `${count} recognized card${count === 1 ? "" : "s"} added from photo.`;
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
+  } finally {
+    input.value = "";
+  }
+}
+
+function captureVoiceIntoText(textarea, status, button) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    status.textContent = "Voice input is not available in this browser.";
+    return;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = navigator.language || "en-US";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+  button.disabled = true;
+  status.textContent = "Listening...";
+  recognition.addEventListener("result", (event) => {
+    const transcript = [...event.results]
+      .map((result) => result[0]?.transcript || "")
+      .join(" ")
+      .trim();
+    if (transcript) {
+      appendText(textarea, transcript);
+      status.textContent = "Voice text added.";
+    }
+  });
+  recognition.addEventListener("error", () => {
+    status.textContent = "Voice input stopped before any text was added.";
+  });
+  recognition.addEventListener("end", () => {
+    button.disabled = false;
+    if (status.textContent === "Listening...") status.textContent = "Voice input ended.";
+  });
+  recognition.start();
+}
+
+function appendText(textarea, addition) {
+  const current = textarea.value.trim();
+  textarea.value = current ? `${current}\n${addition}` : addition;
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  textarea.focus();
 }
 
 function buildParagraph(id, className, text, { ariaLive } = {}) {

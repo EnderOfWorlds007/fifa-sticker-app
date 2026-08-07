@@ -15,12 +15,12 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-bcb1aeaf8108";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-bcb1aeaf8108";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-65d7426e56a8";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-65d7426e56a8";
 import {
   loadInventoryPayload,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-bcb1aeaf8108";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-bcb1aeaf8108";
+} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-65d7426e56a8";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-65d7426e56a8";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17], RSA: [6, 10], CZE: [5, 8, 13], CAN: [4, 16], BIH: [2, 3, 9, 14, 16],
@@ -42,6 +42,7 @@ mountTradePasteBox('[data-trade-paste-box="trade-builder"]', {
   textareaId: "tradeOtherSideText",
   rows: 5,
   placeholder: "Paste card codes, e.g. BIH 16, CIV 12, SWE 3",
+  capabilities: { photo: true, voice: true },
   actions: [
     { id: "addTradeGiveButton", label: "Add to I give", secondary: true },
     { id: "addTradeReceiveButton", label: "Add to I receive", secondary: true },

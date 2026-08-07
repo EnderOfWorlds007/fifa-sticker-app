@@ -10,16 +10,93 @@ const TRANSACTION_TRANSITIONS = {
   completed: new Set(["cancelled"]),
   cancelled: new Set(),
 };
+const COUNTRY_NAME_CODES = [
+  ["We Are Panini", "00"],
+  ["Algeria", "ALG"],
+  ["Argentina", "ARG"],
+  ["Australia", "AUS"],
+  ["Austria", "AUT"],
+  ["Belgium", "BEL"],
+  ["Bosnia and Herzegovina", "BIH"],
+  ["Brazil", "BRA"],
+  ["Canada", "CAN"],
+  ["Cape Verde", "CPV"],
+  ["Colombia", "COL"],
+  ["Costa Rica", "CRC"],
+  ["Croatia", "CRO"],
+  ["Curacao", "CUW"],
+  ["Czech Republic", "CZE"],
+  ["Czechia", "CZE"],
+  ["DR Congo", "COD"],
+  ["Congo DR", "COD"],
+  ["Egypt", "EGY"],
+  ["England", "ENG"],
+  ["Ecuador", "ECU"],
+  ["France", "FRA"],
+  ["Germany", "GER"],
+  ["Ghana", "GHA"],
+  ["Haiti", "HAI"],
+  ["Iran", "IRN"],
+  ["Iraq", "IRQ"],
+  ["Ivory Coast", "CIV"],
+  ["Cote d Ivoire", "CIV"],
+  ["Cote d'Ivoire", "CIV"],
+  ["Japan", "JPN"],
+  ["Jordan", "JOR"],
+  ["Mexico", "MEX"],
+  ["Morocco", "MAR"],
+  ["Netherlands", "NED"],
+  ["New Zealand", "NZL"],
+  ["Norway", "NOR"],
+  ["Panama", "PAN"],
+  ["Paraguay", "PAR"],
+  ["Portugal", "POR"],
+  ["Qatar", "QAT"],
+  ["Saudi Arabia", "KSA"],
+  ["Scotland", "SCO"],
+  ["Senegal", "SEN"],
+  ["South Africa", "RSA"],
+  ["South Korea", "KOR"],
+  ["Spain", "ESP"],
+  ["Sweden", "SWE"],
+  ["Switzerland", "SUI"],
+  ["Tunisia", "TUN"],
+  ["Turkey", "TUR"],
+  ["Turkiye", "TUR"],
+  ["United Arab Emirates", "UAE"],
+  ["United States", "USA"],
+  ["USA", "USA"],
+  ["Uruguay", "URU"],
+  ["Uzbekistan", "UZB"],
+].sort((a, b) => b[0].length - a[0].length);
 
 export function extractCodeOccurrences(value) {
-  const upper = String(value || "").toUpperCase();
+  const upper = normalizedParserText(value);
   const occurrences = new Map();
+  const countryNameSpans = [];
   const inlineSpans = [];
   const add = (team, number = "", suffix = "", quantity = 1) => {
     const code = normalizeCardCode(`${team}${number}${suffix}`);
     if (!code) return;
     occurrences.set(code, (occurrences.get(code) || 0) + Math.max(1, Number(quantity || 1)));
   };
+  const countryGroupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
+  for (const [name, team] of COUNTRY_NAME_CODES) {
+    if (team === "00") continue;
+    const namePattern = countryNamePattern(name);
+    const inlineCountryPattern = new RegExp(`(?<![A-Z0-9])${namePattern}\\s*[-–—_./]?\\s*([1-9]\\d?)(S)?(?:\\s*\\(\\s*(\\d{1,2})\\s*X\\s*\\))?(?![A-Z0-9])`, "g");
+    for (const match of upper.matchAll(inlineCountryPattern)) {
+      if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
+      add(team, match[1], match[2], match[3]);
+      countryNameSpans.push([match.index, match.index + match[0].length]);
+    }
+    const groupedCountryPattern = new RegExp(`(?:^|[\\n,;])\\s*${namePattern}\\s*:\\s*([1-9][0-9S\\s,;/&+().X-]*)`, "gm");
+    for (const match of upper.matchAll(groupedCountryPattern)) {
+      if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
+      for (const token of match[1].matchAll(countryGroupedTokenPattern)) add(team, token[1], token[2], token[3]);
+      countryNameSpans.push([match.index, match.index + match[0].length]);
+    }
+  }
   const zeroPattern = /(?<![A-Z0-9])00(?:\s*\(\s*(\d{1,2})\s*X\s*\))?(?![A-Z0-9])/g;
   for (const match of upper.matchAll(zeroPattern)) {
     add("00", "", "", match[1]);
@@ -27,6 +104,7 @@ export function extractCodeOccurrences(value) {
   }
   const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?(?![A-Z0-9])/g;
   for (const match of upper.matchAll(inlinePattern)) {
+    if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
     add(match[1], match[2], match[3], match[4]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
@@ -889,6 +967,24 @@ function normalizeCardCode(value) {
   const match = text.match(/^([A-Z]{2,3})(\d{1,2})(S)?$/);
   if (!match) return "";
   return `${match[1]}${Number(match[2])}${match[3] || ""}`;
+}
+
+function normalizedParserText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function countryNamePattern(name) {
+  const words = normalizedParserText(name)
+    .split(/[^A-Z0-9]+/)
+    .filter(Boolean);
+  return words.map(escapeRegExp).join("[\\s'’._-]+");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function normalizeCatalogCards(catalog) {
