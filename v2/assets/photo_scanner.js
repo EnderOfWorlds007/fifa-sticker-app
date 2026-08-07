@@ -1,7 +1,7 @@
 const config = window.PANINI_CONFIG || {};
 const RECOGNITION_URL_KEY = "panini.recognitionBaseUrl.v1";
 const OCR_TOKEN_KEY = "panini.ocrToken.v1";
-const PHOTO_CODE_JOBS_PATH = ["", "api", "photo-code-jobs"].join("/fifa-sticker-app/v2/");
+const PHOTO_CODE_JOBS_PATH = ["", "api", "photo-code-jobs"].join('/');
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
 const scanButton = document.querySelector("#photoScannerButton");

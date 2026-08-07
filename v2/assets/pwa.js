@@ -3,7 +3,7 @@ const statusElement = document.querySelector("[data-pwa-status]");
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("/fifa-sticker-app/v2/sw.js?v=build-153b7ac2b5ca", { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register("/fifa-sticker-app/v2/sw.js?v=build-4f0cddbd5fe0", { updateViaCache: "none" });
       await registration.update();
       if (statusElement) statusElement.textContent = registration.active ? "Ready for local use." : "Preparing local app cache.";
     } catch {
