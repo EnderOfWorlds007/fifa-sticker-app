@@ -1529,9 +1529,27 @@
   background: #15191d;
 }
 
+.albumReviewBody .albumDebugStepHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .albumReviewBody .albumDebugSteps h2 {
   margin: 0;
   font-size: 15px;
+}
+
+.albumReviewBody .albumDebugStepHeader button {
+  min-height: 30px;
+  border: 1px solid #7d8a94;
+  border-radius: 7px;
+  padding: 5px 9px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .albumReviewBody .albumDebugSteps p,

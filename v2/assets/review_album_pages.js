@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-1e4792b7a3e9";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-373044315896";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -514,13 +514,24 @@ function openProcessingDebug() {
   const registration = currentPhoto.focus?.registration || {};
   debugSummary.textContent = `${currentPhoto.source_name} · ${registration.state || "unknown"} · ${(registration.warnings || []).join(", ") || "no warnings"}`;
   debugSteps.replaceChildren(
-    ...steps.map((step) => {
+    ...steps.map((step, index) => {
       const card = document.createElement("article");
+      const heading = document.createElement("div");
       const title = document.createElement("h2");
       const outcome = document.createElement("p");
-      title.textContent = step.title || "Step";
-      outcome.textContent = typeof step.outcome === "string" ? step.outcome : JSON.stringify(step.outcome || {});
-      card.append(title);
+      const serializedOutcome = typeof step.outcome === "string" ? step.outcome : JSON.stringify(step.outcome || {}, null, 2);
+      title.textContent = `${String(index + 1).padStart(2, "0")} ${step.title || "Step"}`;
+      heading.className = "albumDebugStepHeader";
+      heading.append(title);
+      if (step.kind === "json" || serializedOutcome) {
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.textContent = "Copy";
+        copyButton.addEventListener("click", () => copyProcessingText(copyButton, serializedOutcome));
+        heading.append(copyButton);
+      }
+      outcome.textContent = serializedOutcome;
+      card.append(heading);
       if (step.kind === "image" && step.url) {
         const image = document.createElement("img");
         image.alt = step.title || "Processing step";
@@ -535,16 +546,40 @@ function openProcessingDebug() {
             image.replaceWith(error);
           });
         card.append(image);
+        card.append(outcome);
       } else if (step.kind === "json") {
         const pre = document.createElement("pre");
-        pre.textContent = JSON.stringify(step.outcome || {}, null, 2);
+        pre.textContent = serializedOutcome;
         card.append(pre);
+      } else {
+        card.append(outcome);
       }
-      card.append(outcome);
       return card;
     }),
   );
   debugPanel.hidden = false;
+}
+
+async function copyProcessingText(button, text) {
+  const original = button.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "Copied";
+  } catch {
+    const scratch = document.createElement("textarea");
+    scratch.value = text;
+    scratch.setAttribute("readonly", "");
+    scratch.style.position = "fixed";
+    scratch.style.opacity = "0";
+    document.body.append(scratch);
+    scratch.select();
+    document.execCommand("copy");
+    scratch.remove();
+    button.textContent = "Copied";
+  }
+  window.setTimeout(() => {
+    button.textContent = original || "Copy";
+  }, 1200);
 }
 
 function closeProcessingDebug() {
