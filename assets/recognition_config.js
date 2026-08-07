@@ -43,5 +43,8 @@ export function recognitionErrorMessage(error) {
   if (error?.message === "photo OCR backend is not configured") {
     return "Photo OCR backend is not configured.";
   }
+  if (error?.message === "browser OCR did not load") {
+    return "Browser photo OCR could not start. Check your connection and try again.";
+  }
   return "Could not read those photos. Make sure the scanner backend is running.";
 }

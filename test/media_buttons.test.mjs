@@ -22,6 +22,7 @@ test("service worker does not app-shell-cache OCR backend config", () => {
   const appShell = sw.match(/APP_SHELL = \[([\s\S]*?)\];/)?.[1] || "";
 
   assert.match(sw, /assets\/recognition_config\.js/);
+  assert.match(sw, /assets\/photo_ocr\.js/);
   assert.doesNotMatch(appShell, /assets\/site_config\.js/);
   assert.match(sw, /assets\/site_config\.js"\) \{\n\s*event\.respondWith\(networkFirst\(request\)\)/);
 });
