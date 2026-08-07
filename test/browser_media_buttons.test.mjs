@@ -48,9 +48,28 @@ test("media buttons align and Use Photos fills the textbox after file selection 
       await evaluate(cdp, `(() => {
         const originalFetch = window.fetch.bind(window);
         window.fetch = (url, init) => {
-          if (String(url).includes("/api/photo-codes")) {
+          if (String(url).includes("/readyz")) {
+            return Promise.resolve(new Response(JSON.stringify({
+              ok: true,
+              available_sides: ["back"],
+              ocr_auth_required: false,
+            }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }));
+          }
+          if (String(url).includes("/api/photo-code-jobs") && init?.method === "POST") {
             window.__lastPhotoRequestHeaders = Object.fromEntries(new Headers(init?.headers || {}));
-            return Promise.resolve(new Response(JSON.stringify({ grouped_text: "FRA3" }), {
+            return Promise.resolve(new Response(JSON.stringify({ job_id: "job1", status: "queued" }), {
+              status: 202,
+              headers: { "content-type": "application/json" },
+            }));
+          }
+          if (String(url).includes("/api/photo-code-jobs/job1")) {
+            return Promise.resolve(new Response(JSON.stringify({
+              status: "done",
+              result: { grouped_text: "FRA3", codes: ["FRA3"] },
+            }), {
               status: 200,
               headers: { "content-type": "application/json" },
             }));

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Card Apps">
   <title>Cards I Can Give</title>
   <link rel="manifest" href="/fifa-sticker-app/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css?v=photo-flow-1">
+  <link rel="stylesheet" href="/fifa-sticker-app/assets/styles.css?v=ocr-funnel-1">
 </head>
 <body class="tradeLookupBody">
   <main class="tradeLookupShell">
@@ -28,6 +28,22 @@
     <section class="tradeLookupCard">
       <label for="lookupText">Their wanted cards</label>
       <textarea id="lookupText" rows="7" autofocus placeholder="Example: They need ENG7, POR-11 and COL 5."></textarea>
+      <details class="ocrBackendSettings">
+        <summary>OCR backend</summary>
+        <label>
+          <span>Laptop Funnel URL</span>
+          <input data-ocr-backend-url type="url" inputmode="url" autocomplete="off" placeholder="https://your-mac.tailnet.ts.net">
+        </label>
+        <label>
+          <span>Laptop OCR token</span>
+          <input data-ocr-backend-token type="password" autocomplete="off" placeholder="Token from setup script">
+        </label>
+        <div class="buttonRow">
+          <button data-ocr-backend-save class="secondaryButton" type="button">Save backend</button>
+          <button data-ocr-backend-test class="secondaryButton" type="button">Test backend</button>
+        </div>
+        <p data-ocr-backend-status class="backendStatus">Blank laptop URL uses Railway only.</p>
+      </details>
       <div class="tradeLookupActions">
         <button id="lookupPhotoButton" class="photoUploadButton" type="button">Use Photos</button>
         <input id="lookupPhotoInput" class="visuallyHiddenInput" type="file" accept="image/*" multiple>
@@ -47,8 +63,8 @@
       </section>
     </section>
   </main>
-  <script src="/fifa-sticker-app/assets/site_config.js?v=ocr-side-1"></script>
-  <script src="/fifa-sticker-app/assets/trade_lookup.js?v=ocr-side-1" type="module"></script>
+  <script src="/fifa-sticker-app/assets/site_config.js?v=ocr-funnel-1"></script>
+  <script src="/fifa-sticker-app/assets/trade_lookup.js?v=ocr-funnel-1" type="module"></script>
   <script src="/fifa-sticker-app/assets/pwa.js" type="module"></script>
 </body>
 </html>

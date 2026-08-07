@@ -565,6 +565,45 @@
   line-height: 1.4;
 }
 
+.ocrBackendSettings {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #111518;
+}
+
+.ocrBackendSettings summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.ocrBackendSettings label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.ocrBackendSettings input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.backendStatus {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .tradeLookupActions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

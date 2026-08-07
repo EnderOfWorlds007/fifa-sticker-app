@@ -2,10 +2,10 @@ import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } fr
 import { attachVoiceInput } from "./voice_input.js?v=voice-lang-1";
 import {
   applyRecognitionBaseUrlFromQuery,
-  photoOcrSide,
+  bindRecognitionBackendSettings,
+  recognizePhotoCodes,
   recognitionErrorMessage,
-  recognitionUrl,
-} from "./recognition_config.js?v=ocr-side-1";
+} from "./recognition_config.js?v=ocr-funnel-1";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const COLLECTION_SOURCES = [
@@ -33,20 +33,7 @@ let photoScanRunning = false;
 let lastPhotoSelectionSignature = "";
 
 applyRecognitionBaseUrlFromQuery();
-
-async function scanPhoto(file) {
-  const response = await fetch(recognitionUrl("/api/photo-codes"), {
-    method: "POST",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-      "X-Panini-Expected-Side": photoOcrSide(),
-    },
-    body: file,
-  });
-  if (response.status === 409) throw new Error("photo OCR side is not available");
-  if (!response.ok) throw new Error("photo OCR unavailable");
-  return response.json();
-}
+bindRecognitionBackendSettings();
 
 function setPhotoProgress(scanText) {
   photoButton.textContent = scanText;
@@ -77,7 +64,7 @@ async function fillFromPhotos(files) {
     for (let index = 0; index < selected.length; index += 1) {
       const scanText = `Scanning... ${index + 1}/${selected.length}`;
       setPhotoProgress(scanText);
-      const payload = await scanPhoto(selected[index]);
+      const payload = await recognizePhotoCodes(selected[index], { onStatus: setPhotoProgress });
       if (payload.grouped_text) recognized.push(payload.grouped_text);
     }
     if (!recognized.length) {
