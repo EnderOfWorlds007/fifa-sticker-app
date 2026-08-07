@@ -2,7 +2,9 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-65d7426e56a8";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-eea91a46959f";
+
+let photoDisclosureCounter = 0;
 
 export function mountTradePasteBox(target, options) {
   const root = typeof target === "string" ? document.querySelector(target) : target;
@@ -73,19 +75,71 @@ function buildCapabilityRow(textarea, status, capabilities) {
   row.className = "tradeLookupActions pasteCapabilityActions";
 
   if (capabilities.photo) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment";
-    input.hidden = true;
-    input.setAttribute("data-paste-photo-input", "true");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "secondaryButton";
-    button.textContent = "Photo";
-    button.addEventListener("click", () => input.click());
-    input.addEventListener("change", () => scanPhotoIntoText(input, textarea, status));
-    row.append(button, input);
+    const cameraInput = buildPhotoInput("data-paste-camera-input");
+    cameraInput.capture = "environment";
+    cameraInput.setAttribute("capture", "environment");
+    cameraInput.setAttribute("data-paste-photo-input", "true");
+    const libraryInput = buildPhotoInput("data-paste-library-input");
+    const disclosureId = `pastePhotoSources${photoDisclosureCounter += 1}`;
+
+    const photoButton = document.createElement("button");
+    photoButton.type = "button";
+    photoButton.className = "secondaryButton";
+    photoButton.textContent = "Photo";
+    photoButton.setAttribute("aria-controls", disclosureId);
+    photoButton.setAttribute("aria-expanded", "false");
+
+    const menu = document.createElement("div");
+    menu.id = disclosureId;
+    menu.className = "pasteCapabilityMenu";
+    menu.hidden = true;
+
+    let takePhotoButton;
+    {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondaryButton";
+      button.textContent = "Take photo";
+      button.addEventListener("click", () => {
+        hidePhotoMenu(photoButton, menu);
+        cameraInput.click();
+      });
+      takePhotoButton = button;
+    }
+
+    let choosePhotoButton;
+    {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondaryButton";
+      button.textContent = "Choose photo";
+      button.addEventListener("click", () => {
+        hidePhotoMenu(photoButton, menu);
+        libraryInput.click();
+      });
+      choosePhotoButton = button;
+    }
+
+    photoButton.addEventListener("click", () => {
+      const willOpen = menu.hidden;
+      if (willOpen) {
+        showPhotoMenu(photoButton, menu, takePhotoButton);
+        status.textContent = "Choose camera or photo library.";
+      } else {
+        hidePhotoMenu(photoButton, menu);
+        status.textContent = "";
+      }
+    });
+    menu.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      hidePhotoMenu(photoButton, menu, { restoreFocus: true });
+    });
+    cameraInput.addEventListener("change", () => scanPhotoIntoText(cameraInput, textarea, status));
+    libraryInput.addEventListener("change", () => scanPhotoIntoText(libraryInput, textarea, status));
+
+    menu.append(takePhotoButton, choosePhotoButton);
+    row.append(photoButton, menu, cameraInput, libraryInput);
   }
 
   if (capabilities.voice) {
@@ -93,12 +147,34 @@ function buildCapabilityRow(textarea, status, capabilities) {
     button.type = "button";
     button.className = "secondaryButton";
     button.setAttribute("data-paste-voice-button", "true");
+    button.setAttribute("aria-pressed", "false");
     button.textContent = "Voice";
     button.addEventListener("click", () => captureVoiceIntoText(textarea, status, button));
     row.append(button);
   }
 
   return row;
+}
+
+function buildPhotoInput(marker) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.hidden = true;
+  input.setAttribute(marker, "true");
+  return input;
+}
+
+function showPhotoMenu(button, menu, focusTarget) {
+  menu.hidden = false;
+  button.setAttribute("aria-expanded", "true");
+  focusTarget?.focus();
+}
+
+function hidePhotoMenu(button, menu, { restoreFocus = false } = {}) {
+  menu.hidden = true;
+  button.setAttribute("aria-expanded", "false");
+  if (restoreFocus) button.focus();
 }
 
 async function scanPhotoIntoText(input, textarea, status) {
@@ -134,7 +210,8 @@ async function scanPhotoIntoText(input, textarea, status) {
 function captureVoiceIntoText(textarea, status, button) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    status.textContent = "Voice input is not available in this browser.";
+    status.textContent = "Voice input is not available in this browser. Use keyboard dictation in the text box.";
+    textarea.focus();
     return;
   }
   const recognition = new SpeechRecognition();
@@ -142,6 +219,8 @@ function captureVoiceIntoText(textarea, status, button) {
   recognition.interimResults = false;
   recognition.continuous = false;
   button.disabled = true;
+  button.textContent = "Listening...";
+  button.setAttribute("aria-pressed", "true");
   status.textContent = "Listening...";
   recognition.addEventListener("result", (event) => {
     const transcript = [...event.results]
@@ -154,13 +233,26 @@ function captureVoiceIntoText(textarea, status, button) {
     }
   });
   recognition.addEventListener("error", () => {
+    resetVoiceButton(button);
     status.textContent = "Voice input stopped before any text was added.";
   });
   recognition.addEventListener("end", () => {
-    button.disabled = false;
+    resetVoiceButton(button);
     if (status.textContent === "Listening...") status.textContent = "Voice input ended.";
   });
-  recognition.start();
+  try {
+    recognition.start();
+  } catch (error) {
+    resetVoiceButton(button);
+    status.textContent = error instanceof Error ? error.message : "Voice input could not start.";
+    textarea.focus();
+  }
+}
+
+function resetVoiceButton(button) {
+  button.disabled = false;
+  button.textContent = "Voice";
+  button.setAttribute("aria-pressed", "false");
 }
 
 function appendText(textarea, addition) {
