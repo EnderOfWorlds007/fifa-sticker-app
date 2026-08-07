@@ -2,10 +2,10 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-5b9ee7a456f2";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b77e023df2a9";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5b9ee7a456f2";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b77e023df2a9";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -63,9 +63,11 @@ export function mountTradePasteBox(target, options) {
   capabilityStatus.setAttribute("role", "status");
   capabilityStatus.setAttribute("aria-live", "polite");
   capabilityStatus.hidden = true;
+  const voiceTranscriptStatus = enabledCapabilities.voice ? buildVoiceTranscriptStatus() : null;
   if (enabledCapabilities.photo || enabledCapabilities.voice) {
-    root.append(capabilityStatus);
-    root.append(buildCapabilityRow(textarea, capabilityStatus, enabledCapabilities, { onTextAcquired }));
+    if (voiceTranscriptStatus) root.append(voiceTranscriptStatus);
+    if (enabledCapabilities.photo) root.append(capabilityStatus);
+    root.append(buildCapabilityRow(textarea, capabilityStatus, voiceTranscriptStatus || capabilityStatus, enabledCapabilities, { onTextAcquired }));
   }
 
   const actionRow = document.createElement("div");
@@ -85,10 +87,10 @@ export function mountTradePasteBox(target, options) {
   if (summary) root.append(buildParagraph(summary.id, "hint", summary.text || "", { ariaLive: summary.ariaLive }));
   for (const noticeConfig of notices || (notice ? [notice] : [])) root.append(buildNotice(noticeConfig));
 
-  return { root, textarea, actionRow, capabilityStatus };
+  return { root, textarea, actionRow, capabilityStatus, voiceTranscriptStatus };
 }
 
-function buildCapabilityRow(textarea, status, capabilities, options = {}) {
+function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options = {}) {
   const row = document.createElement("div");
   row.className = "tradeLookupActions pasteCapabilityActions";
   const acquisitionButtons = [];
@@ -148,7 +150,7 @@ function buildCapabilityRow(textarea, status, capabilities, options = {}) {
     button.setAttribute("data-paste-voice-button", "true");
     button.setAttribute("aria-pressed", "false");
     button.textContent = "Use Voice";
-    button.addEventListener("click", () => captureVoiceIntoText(textarea, status, button, voiceState, {
+    button.addEventListener("click", () => captureVoiceIntoText(textarea, voiceStatus, button, voiceState, {
       ...options,
       setPeerControlsDisabled: (disabled) => setOtherAcquisitionButtonsDisabled(button, disabled),
     }));
@@ -156,10 +158,22 @@ function buildCapabilityRow(textarea, status, capabilities, options = {}) {
     row.append(button);
     const languageSelect = buildVoiceLanguageSelect();
     voiceState.languageSelect = languageSelect;
-    row.append(languageSelect);
+    row.append(buildVoiceLanguageControl(languageSelect));
   }
 
   return row;
+}
+
+function buildVoiceTranscriptStatus() {
+  const status = document.createElement("div");
+  status.className = "hint pasteCapabilityStatus liveTranscriptPanel";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  showLiveTranscript(status, "No dictation yet. Press Use Voice to see raw recognized text here.", {
+    phase: "Dictation transcript",
+    normalized: "Processed card codes will be added to the text box after you stop.",
+  });
+  return status;
 }
 
 function buildPhotoInput() {
@@ -459,6 +473,15 @@ function buildVoiceLanguageSelect() {
     }
   });
   return select;
+}
+
+function buildVoiceLanguageControl(select) {
+  const control = document.createElement("label");
+  control.className = "voiceLanguageControl";
+  const text = document.createElement("span");
+  text.textContent = "Choose dictation language";
+  control.append(text, select);
+  return control;
 }
 
 function savedVoiceLanguage() {

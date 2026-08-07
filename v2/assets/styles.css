@@ -676,6 +676,21 @@
   font-weight: 700;
 }
 
+.voiceLanguageControl {
+  box-sizing: border-box;
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 240px);
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.voiceLanguageControl .voiceLanguageSelect {
+  width: 100%;
+  max-width: none;
+}
+
 .photoUploadButton.scanning {
   background: #20242a;
   color: var(--text);
@@ -747,6 +762,7 @@
 .liveTranscriptPanel {
   border-color: rgba(255, 196, 87, 0.72);
   background: #15130d;
+  color: var(--text);
 }
 
 .liveTranscriptHeader {
