@@ -2,10 +2,10 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b77e023df2a9";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-82814427db31";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b77e023df2a9";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-82814427db31";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -104,6 +104,7 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
     finishTimer: null,
     errorMessage: "",
     languageSelect: null,
+    liveText: "",
   };
   const setOtherAcquisitionButtonsDisabled = (activeButton, disabled) => {
     for (const item of acquisitionButtons) {
@@ -275,6 +276,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
 
   recognition.addEventListener("start", () => {
     setVoiceButtonState(button, state, "Stop listening", true);
+    setLiveDictationText(textarea, state, "Listening...");
     showLiveTranscript(status, "Listening... tap Stop listening when you are done.", {
       language: voiceLanguageLabel(recognitionLanguage),
       busy: true,
@@ -292,6 +294,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
       if (transcript) parts.push(transcript);
     }
     latestTranscript = parts.join(" ").trim() || latestTranscript;
+    setLiveDictationText(textarea, state, latestTranscript || "Listening...");
     showLiveTranscript(status, latestTranscript || "Listening...", {
       language: voiceLanguageLabel(recognitionLanguage),
       busy: true,
@@ -304,6 +307,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
     state.recognition = null;
     state.errorMessage = voiceErrorMessage(event.error);
     options.setPeerControlsDisabled?.(false);
+    clearLiveDictationText(textarea, state);
     showVoiceMessage(status, state.errorMessage);
   });
   recognition.addEventListener("end", async () => {
@@ -321,9 +325,11 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
     if (transcript) {
       await appendProcessedTranscript(textarea, status, transcript, {
         ...options,
+        voiceState: state,
         voiceLanguageLabel: voiceLanguageLabel(recognitionLanguage),
       });
     } else {
+      clearLiveDictationText(textarea, state);
       showVoiceMessage(status, "No voice text captured.");
     }
   });
@@ -336,6 +342,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
     resetVoiceButton(button, state);
     state.recognition = null;
     options.setPeerControlsDisabled?.(false);
+    clearLiveDictationText(textarea, state);
     showVoiceMessage(status, "Voice input could not start. Tap the text box and use the keyboard microphone.");
     textarea.focus();
   }
@@ -349,10 +356,11 @@ async function appendProcessedTranscript(textarea, status, transcript, options =
   const textToAppend = String(transformed?.text || "").trim();
   const details = Array.isArray(transformed?.details) ? transformed.details : [];
   if (!textToAppend) {
+    clearLiveDictationText(textarea, options.voiceState);
     showLiveTranscript(status, cleaned, { language: options.voiceLanguageLabel || "", normalized: "No card codes found." });
     return;
   }
-  appendText(textarea, textToAppend);
+  replaceLiveDictationText(textarea, options.voiceState, textToAppend);
   await options.onTextAcquired?.({ source: "voice", text: textToAppend, transcript: cleaned });
   const mapping = details.length ? details.join(", ") : textToAppend.split(/\s+/).join(", ");
   showLiveTranscript(status, cleaned, { language: options.voiceLanguageLabel || "", normalized: mapping });
@@ -450,6 +458,48 @@ function setVoiceButtonState(button, state, label, active = false) {
   button.textContent = label;
   button.setAttribute("aria-pressed", String(active));
   if (state.languageSelect) state.languageSelect.disabled = active;
+}
+
+function liveDictationBlock(value) {
+  return `Dictation: ${String(value || "").trim() || "Listening..."}`;
+}
+
+function setLiveDictationText(textarea, state, transcript) {
+  if (!state) return;
+  const nextBlock = liveDictationBlock(transcript);
+  const current = textarea.value;
+  const next = state.liveText && current.includes(state.liveText)
+    ? current.replace(state.liveText, nextBlock)
+    : [current.trimEnd(), nextBlock].filter(Boolean).join("\n");
+  state.liveText = nextBlock;
+  textarea.value = next;
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  textarea.selectionStart = textarea.value.length;
+  textarea.selectionEnd = textarea.value.length;
+}
+
+function replaceLiveDictationText(textarea, state, replacement) {
+  const nextText = String(replacement || "").trim();
+  if (!state?.liveText) {
+    appendText(textarea, nextText);
+    return;
+  }
+  textarea.value = textarea.value.includes(state.liveText)
+    ? textarea.value.replace(state.liveText, nextText)
+    : [textarea.value.trimEnd(), nextText].filter(Boolean).join("\n");
+  state.liveText = "";
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  textarea.focus();
+}
+
+function clearLiveDictationText(textarea, state) {
+  if (!state?.liveText) return;
+  textarea.value = textarea.value
+    .replace(state.liveText, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  state.liveText = "";
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function buildVoiceLanguageSelect() {
