@@ -115,7 +115,7 @@ export async function recognizePhotoCodes(file, options = {}) {
       return payload.result || payload;
     } catch (error) {
       errors.push(`${backend.label}: ${messageFromError(error)}`);
-      if (!backend.fallback) options.onStatus?.(`${backend.label} unavailable. Trying fallback...`);
+      if (!backend.fallback) break;
     }
   }
   const error = new Error("photo OCR unavailable");
@@ -152,7 +152,7 @@ function renderBackendStatus(status, message = "") {
     return;
   }
   status.textContent = localBackend()
-    ? "Laptop OCR configured. Railway remains fallback."
+    ? "Laptop OCR configured."
     : "Blank laptop URL uses Railway only.";
 }
 

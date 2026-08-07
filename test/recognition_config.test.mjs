@@ -17,6 +17,49 @@ test("normalizes stable OCR backend URLs", async () => {
   assert.equal(normalizeRecognitionBaseUrl(""), "");
 });
 
+test("configured Laptop OCR failure does not silently fall back to Railway", async () => {
+  const { recognizePhotoCodes } = await loadRecognitionConfig();
+  const storage = new Map([
+    ["panini.localOcrUrl.v1", "https://laptop.test"],
+    ["panini.localOcrToken.v1", "token"],
+  ]);
+  const calls = [];
+  const previousWindow = globalThis.window;
+  const previousFetch = globalThis.fetch;
+  globalThis.window = {
+    PANINI_CONFIG: {
+      photoOcrSide: "back",
+      recognitionBackends: [{ label: "Railway OCR", url: "https://railway.test" }],
+    },
+    localStorage: {
+      getItem: (key) => storage.get(key) || null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
+    setTimeout,
+    clearTimeout,
+  };
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    throw new Error("Failed to fetch");
+  };
+
+  try {
+    await assert.rejects(
+      () => recognizePhotoCodes(new File(["image"], "cards.jpg", { type: "image/jpeg" })),
+      (error) => {
+        assert.deepEqual(error.details, ["Laptop OCR: Failed to fetch"]);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.fetch = previousFetch;
+  }
+
+  assert.deepEqual(calls, ["https://laptop.test/readyz"]);
+});
+
 async function loadRecognitionConfig() {
   const source = await readFile(new URL("../assets/recognition_config.js", import.meta.url), "utf8");
   const dir = await mkdtemp(join(tmpdir(), "recognition-config-"));
