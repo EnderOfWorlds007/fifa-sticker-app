@@ -2,10 +2,10 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-d09098ecb759";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-c1418e782960";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d09098ecb759";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-c1418e782960";
 
 export function mountTradePasteBox(target, options) {
   const root = typeof target === "string" ? document.querySelector(target) : target;
@@ -44,8 +44,9 @@ export function mountTradePasteBox(target, options) {
   if (autofocus) textarea.autofocus = true;
   root.append(textarea);
 
-  const capabilityStatus = document.createElement("p");
+  const capabilityStatus = document.createElement("div");
   capabilityStatus.className = "hint pasteCapabilityStatus";
+  capabilityStatus.setAttribute("role", "status");
   capabilityStatus.setAttribute("aria-live", "polite");
   capabilityStatus.hidden = true;
   if (enabledCapabilities.photo || enabledCapabilities.voice) {
@@ -156,7 +157,7 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
   if (!selected.length) return;
   if (!recognitionBaseUrl()) {
     status.hidden = false;
-    status.textContent = "Photo input needs the laptop OCR backend. Set it on Scan first.";
+    showCapabilityMessage(status, "Photo scan", "Photo input needs the laptop OCR backend. Set it on Scan first.");
     return;
   }
   const recognized = [];
@@ -184,7 +185,7 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
       }
     }
     if (!recognized.length) {
-      status.textContent = lastError instanceof Error ? lastError.message : "No card numbers were found in those photos.";
+      showCapabilityMessage(status, "Photo scan", lastError instanceof Error ? lastError.message : "No card numbers were found in those photos.");
       return;
     }
     const recognizedText = recognized.join("\n");
@@ -192,10 +193,9 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
     await options.onTextAcquired?.({ source: "photo", text: recognizedText });
     const success = `Filled card codes from ${recognized.length}/${selected.length} photo${selected.length === 1 ? "" : "s"}.`;
     const failures = failureCount ? ` ${failureCount} photo${failureCount === 1 ? "" : "s"} could not be read.` : "";
-    status.textContent = `${success}${failures}`;
+    showCapabilityMessage(status, "Photo scan", `${success}${failures}`);
   } catch (error) {
-    status.hidden = false;
-    status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
+    showCapabilityMessage(status, "Photo scan", error instanceof Error ? error.message : "Photo scan failed.");
   } finally {
     resetPhotoButton(button);
     status.setAttribute("aria-busy", "false");
@@ -207,9 +207,7 @@ function setPhotoProgress(button, status, text) {
   button.classList.add("scanning");
   button.setAttribute("aria-busy", "true");
   button.textContent = text;
-  status.hidden = false;
-  status.textContent = text;
-  status.setAttribute("aria-busy", "true");
+  showCapabilityMessage(status, "Photo scan", text, { busy: true });
 }
 
 function resetPhotoButton(button) {
@@ -242,7 +240,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
 
   recognition.addEventListener("start", () => {
     setVoiceButtonState(button, state, "Stop listening", true);
-    showVoiceMessage(status, "Listening... Tap Stop listening when you are done.", { busy: true });
+    showVoiceMessage(status, "Tap Stop listening when you are done.", { label: "Live transcript" });
     clearVoiceStopTimer(state);
     state.stopTimer = window.setTimeout(() => state.recognition?.stop(), 12000);
   });
@@ -256,7 +254,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
       if (transcript) parts.push(transcript);
     }
     latestTranscript = parts.join(" ").trim() || latestTranscript;
-    showVoiceMessage(status, latestTranscript ? `Listening: ${latestTranscript}` : "Listening...", { busy: true });
+    showVoiceMessage(status, latestTranscript || "Listening...", { label: "Live transcript" });
   });
   recognition.addEventListener("error", (event) => {
     clearVoiceStopTimer(state);
@@ -301,7 +299,7 @@ function captureVoiceIntoText(textarea, status, button, state, options = {}) {
 async function appendProcessedTranscript(textarea, status, transcript, options = {}) {
   const cleaned = transcript.trim();
   if (!cleaned) return;
-  showVoiceMessage(status, "Analyzing...", { busy: true });
+  showVoiceMessage(status, "Analyzing...");
   const transformed = normalizeCodeInput(cleaned);
   const textToAppend = String(transformed?.text || "").trim();
   const details = Array.isArray(transformed?.details) ? transformed.details : [];
@@ -315,9 +313,20 @@ async function appendProcessedTranscript(textarea, status, transcript, options =
   showVoiceMessage(status, `Heard: ${cleaned}. Normalized: ${mapping}.`);
 }
 
-function showVoiceMessage(status, message, { busy = false } = {}) {
+function showVoiceMessage(status, message, { busy = false, label = "Voice" } = {}) {
+  showCapabilityMessage(status, label, message, { busy });
+}
+
+function showCapabilityMessage(status, label, message, { busy = false } = {}) {
   status.hidden = false;
-  status.textContent = message;
+  status.replaceChildren();
+  const title = document.createElement("strong");
+  title.className = "pasteCapabilityStatusLabel";
+  title.textContent = label;
+  const body = document.createElement("span");
+  body.className = "pasteCapabilityStatusText";
+  body.textContent = message;
+  status.append(title, body);
   status.setAttribute("aria-busy", String(busy));
 }
 
@@ -336,7 +345,6 @@ function setVoiceButtonState(button, state, label, active = false) {
   button.classList.toggle("listening", active);
   button.textContent = label;
   button.setAttribute("aria-pressed", String(active));
-  button.setAttribute("aria-busy", String(active));
 }
 
 function appendText(textarea, addition) {

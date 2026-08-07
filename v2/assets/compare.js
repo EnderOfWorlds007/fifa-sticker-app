@@ -10,10 +10,10 @@ import {
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d09098ecb759";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-d09098ecb759";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-d09098ecb759";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-d09098ecb759";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-c1418e782960";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-c1418e782960";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-c1418e782960";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-c1418e782960";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -73,30 +73,19 @@ mountTradePasteBox('[data-trade-paste-box="compare"]', {
   autofocus: true,
   placeholder: "Example: I need ENG13 and can offer MEX7, CZE 5, FRA-19.",
   capabilities: { photo: true, voice: true },
-  onTextAcquired: () => compare(),
-  actions: [
-    { id: "compareButton", label: "Compare" },
-    { id: "buildTradeButton", label: "Build trade", secondary: true, hidden: true },
-    { id: "clearCompareButton", label: "Clear", secondary: true },
-    { id: "copyCompareReplyButton", label: "Copy reply", secondary: true },
-  ],
-  hint: { id: "tradeBuildHint", text: "", ariaLive: "polite" },
-  summary: {
-    id: "compareSummary",
-    text: "Paste once to check both directions. Adjusted inventory includes reserved and completed local trade activity on this phone.",
-  },
 });
 
 const text = document.querySelector("#compareText");
-const button = document.querySelector("#compareButton");
 const buildTradeButton = document.querySelector("#buildTradeButton");
 const clearButton = document.querySelector("#clearCompareButton");
 const summary = document.querySelector("#compareSummary");
 const tradeBuildHint = document.querySelector("#tradeBuildHint");
-const ambiguousDirectionPanel = document.querySelector("#ambiguousDirectionPanel");
+const compareDirectionHint = document.querySelector("#compareDirectionHint");
 const ambiguousAsWantsButton = document.querySelector("#ambiguousAsWantsButton");
 const ambiguousAsOffersButton = document.querySelector("#ambiguousAsOffersButton");
 const ambiguousAsBothButton = document.querySelector("#ambiguousAsBothButton");
+const compareResultsPanel = document.querySelector("#compareResultsPanel");
+const otherParsedPanel = document.querySelector("#otherParsedPanel");
 const canGiveResults = document.querySelector("#canGiveResults");
 const needFromThemResults = document.querySelector("#needFromThemResults");
 const otherResults = document.querySelector("#otherCompareResults");
@@ -110,8 +99,9 @@ let lastInventoryPayload = null;
 let lastComparedText = "";
 let compareDirectionMode = "auto";
 let collectionCatalog = null;
+let compareRequestId = 0;
 
-async function compare() {
+async function compare(mode = "offers") {
   const value = text.value.trim();
   if (!value) {
     summary.textContent = "Paste at least one card code first.";
@@ -122,11 +112,16 @@ async function compare() {
     compareDirectionMode = "auto";
     lastComparedText = value;
   }
-  button.disabled = true;
+  compareDirectionMode = mode;
+  const requestId = compareRequestId + 1;
+  compareRequestId = requestId;
+  const comparedValue = value;
+  setDirectionButtonsDisabled(true);
   summary.textContent = "Loading adjusted inventory...";
   try {
     const { payload, source } = await loadInventory();
     const catalog = await loadCatalogue();
+    if (requestId !== compareRequestId || text.value.trim() !== comparedValue) return;
     lastInventoryPayload = payload;
     const adjusted = adjustedInventoryPayload(payload, loadLedger(), { catalog, legacyCollected: loadLegacyCollected() });
     const missing = missingCodes(catalog, payload);
@@ -138,22 +133,36 @@ async function compare() {
     const result = mergeCompareResults(giveResult, needResult, ambiguousResult, direction.hasResolvedDirection);
     const mentionCount = [...extractCodeOccurrences(value).values()].reduce((sum, count) => sum + count, 0);
     updateDirectionChooser(direction);
-    const directionHint = direction.usedDefaultOffers ? " · shown as their offers" : "";
-    summary.textContent = `${result.canGive.length} you can give · ${result.needFromThem.length} you need · ${mentionCount} mentions parsed · ${source.label}${directionHint}`;
+    summary.textContent = `${result.canGive.length} you can give · ${result.needFromThem.length} you need · ${mentionCount} mentions parsed · ${source.label}`;
     canGiveResults.replaceChildren(...rows(result.canGive, "give"));
     needFromThemResults.replaceChildren(...rows(result.needFromThem, "need"));
     otherResults.replaceChildren(...rows(result.other, "other"));
+    compareResultsPanel.hidden = false;
+    otherParsedPanel.hidden = !result.other.length;
     replyText.value = replyFor(result);
     copyReply.hidden = false;
+    copyReplyButton.disabled = false;
     lastCompareResult = result;
     updateTradeBuildAction(result);
     resetTradeDraft();
   } catch {
-    summary.textContent = "Could not read saved inventory.";
-    clearResults();
+    if (requestId === compareRequestId && text.value.trim() === comparedValue) {
+      summary.textContent = "Could not read saved inventory.";
+      clearResults();
+    }
   } finally {
-    button.disabled = false;
+    if (requestId === compareRequestId) setDirectionButtonsDisabled(false);
   }
+}
+
+function handleInputChanged() {
+  if (text.value.trim() === lastComparedText) return;
+  compareRequestId += 1;
+  setDirectionButtonsDisabled(false);
+  clearResults();
+  summary.textContent = text.value.trim()
+    ? "Choose how to compare this pasted list."
+    : "Paste a list, then choose how to compare it.";
 }
 
 function updateTradeBuildAction(result) {
@@ -175,8 +184,10 @@ function updateTradeBuildAction(result) {
 }
 
 function updateDirectionChooser(direction) {
-  ambiguousDirectionPanel.hidden = !direction.showDirectionChooser;
   const active = direction.selectedMode;
+  compareDirectionHint.textContent = direction.showDirectionChooser
+    ? `Showing this list as ${directionLabel(active)}. You can switch it any time.`
+    : "Using the direction found in the pasted message.";
   for (const [button, mode] of [
     [ambiguousAsWantsButton, "wants"],
     [ambiguousAsOffersButton, "offers"],
@@ -185,6 +196,18 @@ function updateDirectionChooser(direction) {
     button.setAttribute("aria-pressed", String(active === mode));
     button.classList.toggle("selected", active === mode);
   }
+}
+
+function directionLabel(mode) {
+  if (mode === "wants") return "cards they need";
+  if (mode === "both") return "both directions";
+  return "cards they offer";
+}
+
+function setDirectionButtonsDisabled(disabled) {
+  ambiguousAsWantsButton.disabled = disabled;
+  ambiguousAsOffersButton.disabled = disabled;
+  ambiguousAsBothButton.disabled = disabled;
 }
 
 async function loadInventory() {
@@ -269,9 +292,13 @@ function clearResults() {
   canGiveResults.replaceChildren();
   needFromThemResults.replaceChildren();
   otherResults.replaceChildren();
-  ambiguousDirectionPanel.hidden = true;
+  compareResultsPanel.hidden = true;
+  otherParsedPanel.hidden = true;
+  updateDirectionChooser({ selectedMode: "auto", showDirectionChooser: true });
+  compareDirectionHint.textContent = "Choose how to read the pasted list.";
   replyText.value = "";
   copyReply.hidden = true;
+  copyReplyButton.disabled = true;
   buildTradeButton.hidden = true;
   buildTradeButton.disabled = false;
   tradeBuildHint.textContent = "";
@@ -305,7 +332,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-d09098ecb759");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-c1418e782960");
 }
 
 function reservedQuantity(code) {
@@ -354,21 +381,18 @@ function transactionLabel(transaction) {
 
 clearButton.addEventListener("click", () => {
   text.value = "";
-  summary.textContent = "Paste once to check both directions. Adjusted inventory includes reserved and completed local trade activity on this phone.";
+  summary.textContent = "Paste a list, then choose how to compare it.";
   clearResults();
   text.focus();
 });
 ambiguousAsWantsButton.addEventListener("click", () => {
-  compareDirectionMode = "wants";
-  compare();
+  compare("wants");
 });
 ambiguousAsOffersButton.addEventListener("click", () => {
-  compareDirectionMode = "offers";
-  compare();
+  compare("offers");
 });
 ambiguousAsBothButton.addEventListener("click", () => {
-  compareDirectionMode = "both";
-  compare();
+  compare("both");
 });
 copyReplyButton.addEventListener("click", async () => {
   if (!replyText.value) return;
@@ -382,8 +406,9 @@ copyReplyButton.addEventListener("click", async () => {
   }
 });
 buildTradeButton.addEventListener("click", buildTradeDraft);
-button.addEventListener("click", compare);
 text.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") compare();
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") compare("offers");
 });
+text.addEventListener("input", handleInputChanged);
+clearResults();
 renderPendingTrades();

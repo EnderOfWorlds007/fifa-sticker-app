@@ -768,6 +768,17 @@ export function resolveCompareDirection(directed, mode = "auto") {
   const wantsInput = directed?.wants instanceof Map ? directed.wants : new Map();
   const offersInput = directed?.offers instanceof Map ? directed.offers : new Map();
   const ambiguousInput = directed?.ambiguous instanceof Map ? directed.ambiguous : new Map();
+  const allInput = mergeOccurrenceMaps(wantsInput, offersInput, ambiguousInput);
+  if (["wants", "offers", "both"].includes(mode)) {
+    return {
+      wants: ["wants", "both"].includes(mode) ? allInput : new Map(),
+      offers: ["offers", "both"].includes(mode) ? allInput : new Map(),
+      showDirectionChooser: Boolean(allInput.size),
+      hasResolvedDirection: Boolean(allInput.size),
+      selectedMode: mode,
+      usedDefaultOffers: false,
+    };
+  }
   const hasDirectedSections = Boolean(wantsInput.size || offersInput.size);
   const hasAmbiguousOnly = !hasDirectedSections && Boolean(ambiguousInput.size);
   const selectedMode = hasAmbiguousOnly && mode === "auto" ? "offers" : mode;
@@ -789,6 +800,16 @@ export function resolveCompareDirection(directed, mode = "auto") {
     selectedMode,
     usedDefaultOffers: hasAmbiguousOnly && mode === "auto",
   };
+}
+
+function mergeOccurrenceMaps(...maps) {
+  const merged = new Map();
+  for (const map of maps) {
+    for (const [code, quantity] of map.entries()) {
+      merged.set(code, (merged.get(code) || 0) + quantity);
+    }
+  }
+  return sortOccurrenceMap(merged);
 }
 
 export function mergeCompareResults(giveResult, needResult, ambiguousResult, hasDirectedSections) {

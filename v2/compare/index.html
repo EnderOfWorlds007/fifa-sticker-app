@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
   <title>Compare Trade Lists</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-d09098ecb759">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-c1418e782960">
 </head>
 <body class="tradeLookupBody">
   <main class="tradeLookupShell">
@@ -28,16 +28,27 @@
 
     <section class="tradeLookupCard">
       <div data-trade-paste-box="compare"></div>
-      <section id="ambiguousDirectionPanel" class="compareDirectionPanel" hidden aria-live="polite">
-        <p class="hint">This list does not say whether the other person needs or offers these cards. Showing it as cards they offer.</p>
-        <div class="tradeLookupActions" role="group" aria-label="Choose list meaning">
+      <section id="compareDirectionPanel" class="compareDirectionPanel" aria-live="polite">
+        <div class="tradeLookupActions compareDirectionActions" role="group" aria-label="Choose list meaning">
           <button id="ambiguousAsWantsButton" class="secondaryButton" type="button">They need these</button>
           <button id="ambiguousAsOffersButton" class="secondaryButton" type="button">They offer these</button>
           <button id="ambiguousAsBothButton" class="secondaryButton" type="button">Check both</button>
         </div>
+        <p id="compareDirectionHint" class="hint">Choose how to read the pasted list.</p>
       </section>
 
-      <section class="compareGrid" aria-label="Comparison results">
+      <div class="tradeLookupActions compareUtilityActions">
+        <button id="clearCompareButton" class="secondaryButton" type="button">Clear</button>
+        <button id="copyCompareReplyButton" class="secondaryButton" type="button">Copy reply</button>
+        <button id="buildTradeButton" class="secondaryButton" type="button" hidden>Start trade</button>
+      </div>
+
+      <section id="compareStatusPanel" class="compareStatusPanel">
+        <p id="compareSummary" class="hint" aria-live="polite">Paste a list, then choose how to compare it.</p>
+        <p id="tradeBuildHint" class="hint" aria-live="polite"></p>
+      </section>
+
+      <section id="compareResultsPanel" class="compareGrid" aria-label="Comparison results" hidden>
         <div>
           <h2>You can give them</h2>
           <ol id="canGiveResults" class="tradeLookupResults"></ol>
@@ -48,7 +59,7 @@
         </div>
       </section>
 
-      <section>
+      <section id="otherParsedPanel" hidden>
         <h2>Other parsed cards</h2>
         <ol id="otherCompareResults" class="tradeLookupResults"></ol>
       </section>
@@ -77,8 +88,8 @@
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-d09098ecb759" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/compare.js?v=build-d09098ecb759" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-d09098ecb759" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-c1418e782960" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/compare.js?v=build-c1418e782960" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-c1418e782960" type="module"></script>
 </body>
 </html>
