@@ -7,7 +7,7 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6b94f67d0ce7";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f00ce7c65d44";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");

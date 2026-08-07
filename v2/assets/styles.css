@@ -1145,7 +1145,6 @@
 .albumReviewBody .albumImageFrame {
   position: absolute;
   overflow: hidden;
-  transform-origin: center;
 }
 
 .albumReviewBody .albumStage img,
