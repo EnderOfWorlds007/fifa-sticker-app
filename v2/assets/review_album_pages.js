@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f00ce7c65d44";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-1e4792b7a3e9";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -61,6 +61,9 @@ let autoOpenedDebugPhotoId = null;
 let imageLoadRequestId = 0;
 let currentImageObjectUrl = "";
 let debugObjectUrls = [];
+let saveInFlight = false;
+let activeSaveButton = null;
+let saveDisabledStates = new Map();
 const sampler = document.createElement("canvas");
 const samplerCtx = sampler.getContext("2d", { willReadFrequently: true });
 const compactLayoutMedia = window.matchMedia?.("(max-width: 900px), (hover: none) and (pointer: coarse)");
@@ -124,9 +127,9 @@ function bindControls() {
     resizeOverlay();
     draw();
   });
-  markFilled.addEventListener("click", () => saveLabel("filled"));
-  markEmpty.addEventListener("click", () => saveLabel("empty"));
-  markUnknown.addEventListener("click", () => saveLabel("unknown"));
+  markFilled.addEventListener("click", () => saveLabel("filled", markFilled));
+  markEmpty.addEventListener("click", () => saveLabel("empty", markEmpty));
+  markUnknown.addEventListener("click", () => saveLabel("unknown", markUnknown));
   reviewLowConfidence.addEventListener("click", startLowConfidenceReview);
   toggleViewRotationButton?.addEventListener("click", togglePhotoViewRotation);
   showProcessingButton?.addEventListener("click", openProcessingDebug);
@@ -136,8 +139,8 @@ function bindControls() {
     clearDebugObjectUrls();
   });
   previousPhoto.addEventListener("click", () => movePhoto(-1));
-  approvePhoto.addEventListener("click", approveCurrentPhoto);
-  markBadPhoto.addEventListener("click", markCurrentPhotoBad);
+  approvePhoto.addEventListener("click", () => approveCurrentPhoto(approvePhoto));
+  markBadPhoto.addEventListener("click", () => markCurrentPhotoBad(markBadPhoto));
   flipTypedSlots.addEventListener("click", flipTypedSlotList);
   flipSlotsInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") flipTypedSlotList();
@@ -596,10 +599,10 @@ function startLowConfidenceReview() {
   }
 }
 
-async function saveLabel(label) {
-  if (!currentPhoto || !currentTemplate?.slots?.length) return;
+async function saveLabel(label, button = null) {
+  if (saveInFlight || !currentPhoto || !currentTemplate?.slots?.length) return;
   const slot = currentTemplate.slots[currentSlotIndex];
-  await saveSlotLabel(slot, label, { reason: reasonInput.value.trim(), advance: true });
+  await withSavingState(button, () => saveSlotLabel(slot, label, { reason: reasonInput.value.trim(), advance: true }));
 }
 
 async function saveSlotLabel(slot, label, options = {}) {
@@ -711,26 +714,76 @@ function flippedState(state) {
 }
 
 async function flipSlot(index) {
-  if (!currentTemplate?.slots?.[index]) return;
+  if (saveInFlight || !currentTemplate?.slots?.[index]) return;
   currentSlotIndex = index;
   const slot = currentTemplate.slots[index];
-  await saveSlotLabel(slot, flippedState(slotState(slot)), { reason: "flip" });
+  await withSavingState(null, () => saveSlotLabel(slot, flippedState(slotState(slot)), { reason: "flip" }));
 }
 
-async function approveCurrentPhoto() {
-  if (!currentTemplate?.slots?.length) return;
-  for (const slot of currentTemplate.slots) {
-    await saveSlotLabel(slot, slotState(slot), { reason: "photo_good" });
-  }
-  movePhoto(1);
+async function approveCurrentPhoto(button = null) {
+  if (saveInFlight || !currentTemplate?.slots?.length) return;
+  await withSavingState(button, async () => {
+    for (const slot of currentTemplate.slots) {
+      await saveSlotLabel(slot, slotState(slot), { reason: "photo_good" });
+    }
+    movePhoto(1);
+  });
 }
 
-async function markCurrentPhotoBad() {
-  if (!currentTemplate?.slots?.length) return;
-  for (const slot of currentTemplate.slots) {
-    await saveSlotLabel(slot, "unknown", { reason: "photo_bad" });
+async function markCurrentPhotoBad(button = null) {
+  if (saveInFlight || !currentTemplate?.slots?.length) return;
+  await withSavingState(button, async () => {
+    for (const slot of currentTemplate.slots) {
+      await saveSlotLabel(slot, "unknown", { reason: "photo_bad" });
+    }
+    movePhoto(1);
+  });
+}
+
+async function withSavingState(button, task) {
+  if (saveInFlight) return false;
+  saveInFlight = true;
+  activeSaveButton = button || null;
+  updateSavingControls();
+  const originalLabel = button?.textContent;
+  if (button) {
+    button.dataset.originalLabel = originalLabel || "";
+    button.textContent = "Saving";
   }
-  movePhoto(1);
+  try {
+    return await task();
+  } finally {
+    saveInFlight = false;
+    if (button) {
+      button.textContent = button.dataset.originalLabel || originalLabel || "";
+      delete button.dataset.originalLabel;
+    }
+    activeSaveButton = null;
+    restoreSavingControls();
+    updateSavingControls();
+  }
+}
+
+function updateSavingControls() {
+  const controls = [markFilled, markEmpty, markUnknown, approvePhoto, markBadPhoto, flipTypedSlots, previousSlot, nextSlot, previousPhoto];
+  for (const control of controls) {
+    if (!control) continue;
+    if (saveInFlight && !saveDisabledStates.has(control)) saveDisabledStates.set(control, control.disabled);
+    control.disabled = saveInFlight || Boolean(saveDisabledStates.get(control));
+    control.classList.toggle("saving", saveInFlight && control === activeSaveButton);
+    control.setAttribute("aria-busy", saveInFlight && control === activeSaveButton ? "true" : "false");
+  }
+  slotList?.classList.toggle("saving", saveInFlight);
+}
+
+function restoreSavingControls() {
+  for (const [control, disabled] of saveDisabledStates.entries()) {
+    control.disabled = disabled;
+    control.classList.remove("saving");
+    control.setAttribute("aria-busy", "false");
+  }
+  saveDisabledStates = new Map();
+  updatePhotoNavControls();
 }
 
 function movePhoto(delta) {

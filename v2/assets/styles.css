@@ -1390,6 +1390,32 @@
 .albumReviewBody .albumPhotoActions .secondary { border-color: #7d8a94; }
 .albumReviewBody .albumPhotoActions button:disabled { opacity: 0.42; }
 
+.albumReviewBody button.saving {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0.82;
+}
+
+.albumReviewBody button.saving::after {
+  content: "";
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: albumSavingSpin 0.75s linear infinite;
+}
+
+.albumReviewBody .albumSlotList.saving {
+  pointer-events: none;
+}
+
+@keyframes albumSavingSpin {
+  to { transform: rotate(360deg); }
+}
+
 .albumReviewBody .albumSlotNav {
   display: grid;
   grid-template-columns: 1fr 1fr;
