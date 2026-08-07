@@ -3,6 +3,7 @@ const RECOGNITION_URL_KEY = "panini.recognitionBaseUrl.v1";
 const OCR_TOKEN_KEY = "panini.ocrToken.v1";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 export const PHOTO_CODE_JOBS_PATH = ["", "api", "photo-code-jobs"].join('/');
+export const ALBUM_PAGE_JOBS_PATH = ["", "api", "album-page-jobs"].join('/');
 
 export function applyOcrBackendFromQuery() {
   const params = new URLSearchParams(window.location.search);
@@ -93,6 +94,19 @@ export async function createPhotoCodeJob(file, { side = photoOcrSide() } = {}) {
   return response.json();
 }
 
+export async function createAlbumPageJob(file) {
+  const response = await fetch(recognitionUrl(ALBUM_PAGE_JOBS_PATH), {
+    method: "POST",
+    headers: authHeaders({
+      "Content-Type": file.type || "application/octet-stream",
+    }),
+    body: file,
+  });
+  if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
+  if (!response.ok) throw new Error(`Album upload failed (${response.status}).`);
+  return response.json();
+}
+
 export async function waitForPhotoCodeJob(jobId, { onStatus } = {}) {
   if (!jobId) throw new Error("Backend did not return a job id.");
   for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -109,6 +123,24 @@ export async function waitForPhotoCodeJob(jobId, { onStatus } = {}) {
     await delay(1000);
   }
   throw new Error("Recognition timed out.");
+}
+
+export async function waitForAlbumPageJob(jobId, { onStatus } = {}) {
+  if (!jobId) throw new Error("Backend did not return an album job id.");
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const response = await fetch(recognitionUrl(`${ALBUM_PAGE_JOBS_PATH}/${encodeURIComponent(jobId)}`), {
+      cache: "no-store",
+      headers: authHeaders(),
+    });
+    if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
+    if (!response.ok) throw new Error(`Album recognition status failed (${response.status}).`);
+    const payload = await response.json();
+    if (payload.status === "done") return payload;
+    if (payload.status === "error") throw new Error(payload.error || "Album page recognition failed.");
+    if (onStatus) onStatus(payload.status === "running" ? "Parsing album page..." : "Waiting for album parser...");
+    await delay(1000);
+  }
+  throw new Error("Album page recognition timed out.");
 }
 
 function authHeaders(headers = {}) {

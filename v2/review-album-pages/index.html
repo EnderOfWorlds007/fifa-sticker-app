@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <title>Review Album Pages</title>
+  <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-682d67b32ef4">
+</head>
+<body class="albumReviewBody">
+  <main class="albumReviewShell">
+    <header class="albumReviewTop">
+      <div>
+        <h1>Review Album Pages</h1>
+        <p id="albumReviewStatus">Loading album pages...</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/v2/apps/">Apps</a>
+        <a href="/fifa-sticker-app/v2/getting-started/">Getting Started</a>
+        <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scanner</a>
+      </nav>
+    </header>
+
+    <section class="albumReviewTools" aria-label="Album review controls">
+      <label>
+        <span>Photo</span>
+        <select id="albumPhotoSelect"></select>
+      </label>
+      <label>
+        <span>Roster page</span>
+        <select id="albumTemplateSelect"></select>
+      </label>
+      <label>
+        <span>Scale</span>
+        <input id="albumScale" type="range" min="0.70" max="1.35" step="0.01" value="1">
+      </label>
+      <label>
+        <span>Left/right</span>
+        <input id="albumOffsetX" type="range" min="-0.30" max="0.30" step="0.005" value="0">
+      </label>
+      <label>
+        <span>Up/down</span>
+        <input id="albumOffsetY" type="range" min="-0.30" max="0.30" step="0.005" value="0">
+      </label>
+      <label>
+        <span>Rotate</span>
+        <select id="albumRotate">
+          <option value="0">0</option>
+          <option value="90">90</option>
+          <option value="180">180</option>
+          <option value="270">270</option>
+        </select>
+      </label>
+      <button id="resetAlbumTransform" type="button">Reset</button>
+    </section>
+
+    <section class="albumReviewWorkspace">
+      <div class="albumStageWrap">
+        <div id="albumStage" class="albumStage">
+          <div id="albumStageSurface" class="albumStageSurface">
+            <img id="albumImage" alt="">
+            <canvas id="albumOverlay"></canvas>
+          </div>
+          <div id="albumRegistrationBadge" class="albumRegistrationBadge"></div>
+        </div>
+      </div>
+
+      <aside class="albumSlotPanel">
+        <div class="albumSlotHeader">
+          <strong id="albumSlotTitle">-</strong>
+          <span id="albumSlotProgress">-</span>
+        </div>
+        <p id="albumSlotName" class="albumSlotName">-</p>
+        <div class="albumViewControls">
+          <button id="toggleAlbumViewRotation" type="button">Rotate view</button>
+          <button id="showAlbumProcessing" type="button" hidden>Processing</button>
+        </div>
+        <div id="albumReviewQueue" class="albumReviewQueue" hidden>
+          <span id="albumReviewQueueText"></span>
+          <button id="reviewLowConfidence" type="button">Review uncertain</button>
+        </div>
+        <div class="albumPhotoActions">
+          <button id="previousPhoto" class="secondary" type="button">Back</button>
+          <button id="approvePhoto" class="approve" type="button">Done</button>
+          <button id="markBadPhoto" class="bad" type="button">All photo is bad</button>
+        </div>
+        <label class="albumFlipInput">
+          <span>Flip slots</span>
+          <div>
+            <input id="albumFlipSlotsInput" type="text" placeholder="1, 4, MEX7">
+            <button id="flipTypedSlots" type="button">Flip</button>
+          </div>
+        </label>
+        <div class="albumSlotActions">
+          <button id="markFilled" class="filled" type="button">Filled</button>
+          <button id="markEmpty" class="empty" type="button">Empty</button>
+          <button id="markUnknown" class="unknown" type="button">Unknown</button>
+        </div>
+        <label class="albumReason">
+          <span>Reason / note</span>
+          <input id="albumReasonInput" type="text" placeholder="glare, bad alignment, cropped...">
+        </label>
+        <div class="albumSlotNav">
+          <button id="previousSlot" type="button">Previous</button>
+          <button id="nextSlot" type="button">Next</button>
+        </div>
+        <ol id="albumSlotList" class="albumSlotList"></ol>
+      </aside>
+    </section>
+    <section id="albumDebugPanel" class="albumDebugPanel" hidden>
+      <div class="albumDebugHeader">
+        <div>
+          <strong>Processing steps</strong>
+          <span id="albumDebugSummary"></span>
+        </div>
+        <button id="closeAlbumProcessing" type="button">Close</button>
+      </div>
+      <div id="albumDebugSteps" class="albumDebugSteps"></div>
+    </section>
+  </main>
+
+  <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/review_album_pages.js?v=build-682d67b32ef4" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-682d67b32ef4" type="module"></script>
+</body>
+</html>

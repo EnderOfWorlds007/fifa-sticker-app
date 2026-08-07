@@ -98,6 +98,8 @@
 }
 
 .appTile.scanner { border-top: 4px solid #00c2a8; }
+.appTile.gettingStarted { border-top: 4px solid #ffcf5a; }
+.appTile.albumReview { border-top: 4px solid #ff7d7d; }
 .appTile.inventory { border-top: 4px solid #6ea8fe; }
 .appTile.collection { border-top: 4px solid #f3b35b; }
 .appTile.lookup { border-top: 4px solid #d47de2; }
@@ -820,6 +822,104 @@
   }
 }
 
+@media (max-width: 800px) {
+  .albumReviewBody .albumReviewShell {
+    width: 100%;
+    min-height: 100dvh;
+    padding: 0;
+  }
+
+  .albumReviewBody .albumReviewTop,
+  .albumReviewBody .albumReviewTools {
+    display: none;
+  }
+
+  .albumReviewBody .albumReviewWorkspace {
+    min-height: 100dvh;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .albumReviewBody .albumStageWrap {
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .albumReviewBody .albumStage {
+    height: 100dvh;
+    min-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .albumReviewBody .albumStage.viewRotated .albumStageSurface {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: calc(100dvh - clamp(170px, 24dvh, 236px) - env(safe-area-inset-bottom));
+    height: 100vw;
+    max-width: 980px;
+    max-height: calc(100dvh - clamp(132px, 16dvh, 172px));
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  .albumReviewBody .albumSlotPanel {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 20;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(15, 19, 21, 0), rgba(15, 19, 21, 0.92) 26%, rgba(15, 19, 21, 0.98));
+  }
+
+  .albumReviewBody .albumSlotHeader,
+  .albumReviewBody .albumSlotName,
+  .albumReviewBody .albumFlipInput,
+  .albumReviewBody .albumSlotActions,
+  .albumReviewBody .albumReason,
+  .albumReviewBody .albumSlotNav,
+  .albumReviewBody .albumSlotList {
+    display: none;
+  }
+
+  .albumReviewBody .albumReviewQueue {
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-bottom: 8px;
+    padding: 8px;
+  }
+
+  .albumReviewBody .albumReviewQueue span {
+    font-size: 13px;
+  }
+
+  .albumReviewBody .albumReviewQueue button,
+  .albumReviewBody .albumViewControls button {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .albumReviewBody .albumViewControls {
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  .albumReviewBody .albumPhotoActions {
+    display: grid;
+    grid-template-columns: 0.72fr 0.9fr 1.38fr;
+    gap: 8px;
+  }
+
+  .albumReviewBody .albumPhotoActions button {
+    min-height: 54px;
+    border-radius: 8px;
+    font-size: 15px;
+    line-height: 1.1;
+  }
+}
+
 .tradeLookupResults {
   display: grid;
   gap: 8px;
@@ -857,6 +957,547 @@
 .tradeLookupResults button {
   min-height: 32px;
   padding: 4px 8px;
+}
+
+.gettingStartedShell {
+  width: min(880px, 100%);
+}
+
+.gettingStartedCard {
+  border-bottom: 1px solid var(--line);
+}
+
+.albumPhotoActions button,
+.ocrBackendSettings button {
+  appearance: none;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--accent);
+  color: #06110f;
+  font: inherit;
+  font-weight: 850;
+}
+
+.albumPhotoActions .secondaryButton,
+.ocrBackendSettings .secondaryButton {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+}
+
+.ocrBackendSettings {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #12171a;
+}
+
+.ocrBackendSettings summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 850;
+}
+
+.ocrBackendSettings label {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.ocrBackendSettings input {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.ocrBackendSettings .buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ocrBackendSettings .hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.albumParseResults {
+  gap: 10px;
+}
+
+.albumParseResults h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.albumParseList {
+  display: grid;
+  gap: 12px;
+}
+
+.albumParseCard {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #151a1d;
+}
+
+.albumParseHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.albumParseHeader h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.albumParseHeader p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.albumParseImage {
+  width: 100%;
+  max-height: 52dvh;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #060808;
+}
+
+.albumParseSummary {
+  margin: 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #0d1114;
+  color: var(--text);
+  font: 0.9rem/1.35 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.albumSlotList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.albumSlotList li {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-left: 5px solid #89939e;
+  border-radius: 7px;
+  padding: 7px 8px;
+  background: var(--panel);
+}
+
+.albumSlotList li[data-state="filled"] {
+  border-left-color: #55c891;
+}
+
+.albumSlotList li[data-state="empty"] {
+  border-left-color: #ffcf5a;
+}
+
+.albumSlotList li[data-state="unknown"] {
+  border-left-color: #d16666;
+}
+
+.albumSlotList strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.albumSlotList span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.albumReviewBody {
+  min-height: 100dvh;
+  background: #0f1315;
+}
+
+.albumReviewBody .albumReviewShell {
+  width: min(1440px, 100%);
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 0 12px 18px;
+}
+
+.albumReviewBody .albumReviewTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: calc(14px + env(safe-area-inset-top)) 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.albumReviewBody .albumReviewTop h1 {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.albumReviewBody .albumReviewTop p {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.albumReviewBody .albumReviewTools {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1.2fr) repeat(5, minmax(96px, 0.7fr));
+  gap: 10px;
+  align-items: end;
+  padding: 12px 0;
+}
+
+.albumReviewBody .albumReviewTools label,
+.albumReviewBody .albumReason {
+  display: grid;
+  gap: 6px;
+}
+
+.albumReviewBody .albumReviewTools span,
+.albumReviewBody .albumReason span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.albumReviewBody .albumReviewTools select,
+.albumReviewBody .albumReviewTools input,
+.albumReviewBody .albumReason input {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: #111519;
+  color: var(--text);
+}
+
+.albumReviewBody .albumReviewTools input[type="range"] {
+  padding: 0;
+}
+
+.albumReviewBody .albumReviewWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  align-items: start;
+}
+
+.albumReviewBody .albumStageWrap {
+  min-height: 68dvh;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #07090a;
+}
+
+.albumReviewBody .albumStage {
+  position: relative;
+  height: min(76dvh, 920px);
+  min-height: 560px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.albumReviewBody .albumStageSurface,
+.albumReviewBody .albumStage img,
+.albumReviewBody .albumStage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.albumReviewBody .albumStage img {
+  object-fit: contain;
+}
+
+.albumReviewBody .albumStageSurface {
+  transform-origin: center;
+}
+
+.albumReviewBody .albumStage canvas {
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.albumReviewBody .albumRegistrationBadge {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 3;
+  max-width: calc(100% - 20px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 7px;
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.albumReviewBody .albumRegistrationBadge[data-state="valid"] { border-color: #28d17c; }
+.albumReviewBody .albumRegistrationBadge[data-state="needs_review"],
+.albumReviewBody .albumRegistrationBadge[data-state="raw"] { border-color: #f1be59; }
+.albumReviewBody .albumRegistrationBadge[data-state="invalid"] { border-color: #ff6b6b; }
+
+.albumReviewBody .albumSlotPanel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #171b1f;
+}
+
+.albumReviewBody .albumSlotHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.albumReviewBody .albumSlotHeader strong {
+  font-size: 22px;
+}
+
+.albumReviewBody .albumSlotHeader span,
+.albumReviewBody .albumSlotName {
+  color: var(--muted);
+}
+
+.albumReviewBody .albumReviewQueue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #f1be59;
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(241, 190, 89, 0.10);
+}
+
+.albumReviewBody .albumReviewQueue span {
+  color: var(--text);
+  font-weight: 750;
+  min-width: 0;
+}
+
+.albumReviewBody .albumViewControls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.albumReviewBody .albumViewControls button,
+.albumReviewBody .albumReviewQueue button,
+.albumReviewBody .albumSlotActions button,
+.albumReviewBody .albumSlotNav button,
+.albumReviewBody .albumPhotoActions button,
+.albumReviewBody .albumFlipInput button,
+.albumReviewBody .albumSlotList button,
+.albumReviewBody .albumReviewTools button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.albumReviewBody .albumViewControls button[aria-pressed="true"],
+.albumReviewBody .albumReviewQueue[data-active="true"] button {
+  border-color: #28d17c;
+}
+
+.albumReviewBody .albumSlotActions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.albumReviewBody .albumPhotoActions,
+.albumReviewBody .albumFlipInput div {
+  display: grid;
+  grid-template-columns: 0.75fr 1fr 1.35fr;
+  gap: 8px;
+}
+
+.albumReviewBody .albumSlotActions .filled { border-color: #28d17c; }
+.albumReviewBody .albumSlotActions .empty { border-color: #63a9ff; }
+.albumReviewBody .albumSlotActions .unknown { border-color: #f1be59; }
+.albumReviewBody .albumPhotoActions .approve { border-color: #28d17c; }
+.albumReviewBody .albumPhotoActions .bad { border-color: #f1be59; }
+.albumReviewBody .albumPhotoActions .secondary { border-color: #7d8a94; }
+.albumReviewBody .albumPhotoActions button:disabled { opacity: 0.42; }
+
+.albumReviewBody .albumSlotNav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.albumReviewBody .albumSlotList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 42dvh;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.albumReviewBody .albumSlotList button {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  text-align: left;
+}
+
+.albumReviewBody .albumSlotList button.active {
+  outline: 2px solid var(--accent);
+}
+
+.albumReviewBody .albumSlotList button.filled { background: #173027; }
+.albumReviewBody .albumSlotList button.empty { background: #172538; }
+.albumReviewBody .albumSlotList button.unknown { background: #342815; }
+.albumReviewBody .albumSlotList button.predicted { opacity: 0.78; }
+.albumReviewBody .albumSlotList button.reviewed { opacity: 1; }
+.albumReviewBody .albumSlotList button.needsReview {
+  border-color: #f1be59;
+  opacity: 1;
+}
+
+.albumReviewBody .albumSlotList span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.albumReviewBody .albumDebugPanel {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(8, 11, 12, 0.98);
+}
+
+.albumReviewBody .albumDebugPanel[hidden] {
+  display: none;
+}
+
+.albumReviewBody .albumDebugHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.albumReviewBody .albumDebugHeader div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.albumReviewBody .albumDebugHeader strong {
+  font-size: 18px;
+}
+
+.albumReviewBody .albumDebugHeader span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.albumReviewBody .albumDebugHeader button {
+  min-height: 42px;
+  border: 1px solid #7d8a94;
+  border-radius: 7px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 850;
+}
+
+.albumReviewBody .albumDebugSteps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  overflow: auto;
+  padding-bottom: 12px;
+}
+
+.albumReviewBody .albumDebugSteps article {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #15191d;
+}
+
+.albumReviewBody .albumDebugSteps h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.albumReviewBody .albumDebugSteps p,
+.albumReviewBody .albumDebugSteps pre {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.albumReviewBody .albumDebugSteps img {
+  width: 100%;
+  max-height: 58dvh;
+  object-fit: contain;
+  background: #050708;
 }
 
 .transactionDetails {

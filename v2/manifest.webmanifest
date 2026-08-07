@@ -11,6 +11,11 @@
   "categories": ["utilities", "productivity"],
   "shortcuts": [
     {
+      "name": "Getting Started",
+      "short_name": "Start",
+      "url": "/fifa-sticker-app/v2/getting-started/"
+    },
+    {
       "name": "Collection",
       "short_name": "Collection",
       "url": "/fifa-sticker-app/v2/collection/"
