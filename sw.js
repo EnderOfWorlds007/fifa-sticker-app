@@ -1,4 +1,4 @@
-const CACHE_NAME = "fifa-card-apps-v25";
+const CACHE_NAME = "fifa-card-apps-v24";
 const APP_SHELL = [
   "/fifa-sticker-app/",
   "/fifa-sticker-app/apps/",
@@ -16,7 +16,6 @@ const APP_SHELL = [
   "/fifa-sticker-app/assets/card_parser.js",
   "/fifa-sticker-app/assets/voice_input.js",
   "/fifa-sticker-app/assets/recognition_config.js",
-  "/fifa-sticker-app/assets/photo_ocr.js",
   "/fifa-sticker-app/assets/apps.js",
   "/fifa-sticker-app/assets/pwa.js",
   "/fifa-sticker-app/data/collection_inventory.json",

@@ -86,24 +86,6 @@ test("media buttons align and Use Photos fills the textbox after file selection 
       assert.equal(filledText, "FRA3");
       const summary = await evaluate(cdp, `document.querySelector("#needLookupSummary").textContent`);
       assert.match(summary, /Filled card codes from 1\/1 photo/);
-
-      await evaluate(cdp, `(() => {
-        window.PANINI_CONFIG.recognitionBaseUrl = "";
-        window.localStorage.removeItem("panini.recognitionBaseUrl.v1");
-        window.Tesseract = {
-          recognize: async () => ({ data: { text: "Algeria won Egypt five" } }),
-        };
-        document.querySelector("#needLookupText").value = "";
-      })()`);
-      const browserChooserPromise = withTimeout(waitForEvent(cdp, "Page.fileChooserOpened"), 3000, "browser OCR file chooser did not open");
-      await clickCenter(cdp, metrics.photo);
-      const browserChooser = await browserChooserPromise;
-      await send(cdp, "DOM.setFileInputFiles", {
-        backendNodeId: browserChooser.backendNodeId,
-        files: [photoPath],
-      });
-      const browserFilledText = await waitForExpression(cdp, `document.querySelector("#needLookupText").value`);
-      assert.equal(browserFilledText, "ALG1\nEGY5");
     } finally {
       cdp.close();
     }

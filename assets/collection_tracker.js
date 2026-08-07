@@ -3,8 +3,8 @@ import { attachVoiceInput } from "./voice_input.js?v=voice-lang-1";
 import {
   applyRecognitionBaseUrlFromQuery,
   recognitionErrorMessage,
+  recognitionUrl,
 } from "./recognition_config.js?v=stable-ocr-1";
-import { scanPhotoForCodes } from "./photo_ocr.js?v=github-pages-ocr-1";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
@@ -43,6 +43,16 @@ let lastPhotoSelectionSignature = "";
 
 applyRecognitionBaseUrlFromQuery();
 
+async function scanPhoto(file) {
+  const response = await fetch(recognitionUrl("/api/photo-codes"), {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) throw new Error("photo OCR unavailable");
+  return response.json();
+}
+
 function setPhotoProgress(scanText) {
   photoButton.textContent = scanText;
   photoButton.classList.add("scanning");
@@ -73,7 +83,7 @@ async function fillFromPhotos(files) {
     for (let index = 0; index < selected.length; index += 1) {
       const scanText = `Scanning... ${index + 1}/${selected.length}`;
       setPhotoProgress(scanText);
-      const payload = await scanPhotoForCodes(selected[index]);
+      const payload = await scanPhoto(selected[index]);
       if (payload.grouped_text) recognized.push(payload.grouped_text);
     }
     if (!recognized.length) {
