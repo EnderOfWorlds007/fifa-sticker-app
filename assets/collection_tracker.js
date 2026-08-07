@@ -1,5 +1,10 @@
 import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } from "./card_parser.js?v=voice-lang-1";
 import { attachVoiceInput } from "./voice_input.js?v=voice-lang-1";
+import {
+  applyRecognitionBaseUrlFromQuery,
+  recognitionErrorMessage,
+  recognitionUrl,
+} from "./recognition_config.js?v=stable-ocr-1";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
@@ -36,10 +41,7 @@ let collectionSourceLabel = "static snapshot";
 let photoScanRunning = false;
 let lastPhotoSelectionSignature = "";
 
-function recognitionUrl(path) {
-  const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
-  return `${base}${path}`;
-}
+applyRecognitionBaseUrlFromQuery();
 
 async function scanPhoto(file) {
   const response = await fetch(recognitionUrl("/api/photo-codes"), {
@@ -91,8 +93,8 @@ async function fillFromPhotos(files) {
     updateText.value = [updateText.value.trim(), ...recognized].filter(Boolean).join("\n");
     status.textContent = `Filled card codes from ${recognized.length}/${selected.length} photo${selected.length === 1 ? "" : "s"}.`;
     updateText.focus();
-  } catch {
-    status.textContent = "Could not read those photos. Make sure the scanner backend tunnel is running.";
+  } catch (error) {
+    status.textContent = recognitionErrorMessage(error);
   } finally {
     photoScanRunning = false;
     gotCardsButton.disabled = false;

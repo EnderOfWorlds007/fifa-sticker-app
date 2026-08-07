@@ -56,6 +56,7 @@ test("media buttons align and Use Photos fills the textbox after file selection 
           }
           return originalFetch(url, init);
         };
+        window.PANINI_CONFIG.recognitionBaseUrl = "https://ocr.test";
       })()`);
 
       const metrics = await evaluate(cdp, `(() => {

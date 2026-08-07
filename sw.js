@@ -1,4 +1,4 @@
-const CACHE_NAME = "fifa-card-apps-v23";
+const CACHE_NAME = "fifa-card-apps-v24";
 const APP_SHELL = [
   "/fifa-sticker-app/",
   "/fifa-sticker-app/apps/",
@@ -15,7 +15,7 @@ const APP_SHELL = [
   "/fifa-sticker-app/assets/need_lookup.js",
   "/fifa-sticker-app/assets/card_parser.js",
   "/fifa-sticker-app/assets/voice_input.js",
-  "/fifa-sticker-app/assets/site_config.js",
+  "/fifa-sticker-app/assets/recognition_config.js",
   "/fifa-sticker-app/assets/apps.js",
   "/fifa-sticker-app/assets/pwa.js",
   "/fifa-sticker-app/data/collection_inventory.json",
@@ -46,8 +46,27 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => cachedJsonUnavailable(url.pathname)));
     return;
   }
+  if (url.pathname === "/fifa-sticker-app/assets/site_config.js") {
+    event.respondWith(networkFirst(request));
+    return;
+  }
   event.respondWith(cacheFirst(request));
 });
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response.ok && !response.redirected && response.type === "basic") {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw new Error("Network unavailable and no cached response exists.");
+  }
+}
 
 async function cacheFirst(request) {
   const cached = await caches.match(request);

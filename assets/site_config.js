@@ -1,6 +1,6 @@
 window.PANINI_CONFIG = {
-  // Set this to a named Cloudflare Tunnel origin when the app shell is hosted
-  // separately from the local Mac recognition server, for example:
-  // recognitionBaseUrl: "https://cards.example.com"
-  recognitionBaseUrl: "https://focal-roulette-ordering-radar.trycloudflare.com",
+  // Set this to the stable named Cloudflare Tunnel origin for OCR.
+  // You can also set it on a phone with:
+  // /fifa-sticker-app/need-lookup/?ocr=https://cards.example.com
+  recognitionBaseUrl: "",
 };

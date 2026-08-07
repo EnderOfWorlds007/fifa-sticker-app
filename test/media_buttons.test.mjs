@@ -16,3 +16,18 @@ test("media input controls use real buttons with matching first-row controls", (
     assert.match(html, new RegExp(`<button id="${voiceButtonId}" class="voiceInputButton" type="button"`), path);
   }
 });
+
+test("service worker does not app-shell-cache OCR backend config", () => {
+  const sw = readFileSync("sw.js", "utf8");
+  const appShell = sw.match(/APP_SHELL = \[([\s\S]*?)\];/)?.[1] || "";
+
+  assert.match(sw, /assets\/recognition_config\.js/);
+  assert.doesNotMatch(appShell, /assets\/site_config\.js/);
+  assert.match(sw, /assets\/site_config\.js"\) \{\n\s*event\.respondWith\(networkFirst\(request\)\)/);
+});
+
+test("production config does not hard-code quick tunnels", () => {
+  const config = readFileSync("assets/site_config.js", "utf8");
+
+  assert.doesNotMatch(config, /trycloudflare\.com/);
+});
