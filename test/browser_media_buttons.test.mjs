@@ -49,6 +49,7 @@ test("media buttons align and Use Photos fills the textbox after file selection 
         const originalFetch = window.fetch.bind(window);
         window.fetch = (url, init) => {
           if (String(url).includes("/api/photo-codes")) {
+            window.__lastPhotoRequestHeaders = Object.fromEntries(new Headers(init?.headers || {}));
             return Promise.resolve(new Response(JSON.stringify({ grouped_text: "FRA3" }), {
               status: 200,
               headers: { "content-type": "application/json" },
@@ -84,6 +85,8 @@ test("media buttons align and Use Photos fills the textbox after file selection 
       });
       const filledText = await waitForExpression(cdp, `document.querySelector("#needLookupText").value`);
       assert.equal(filledText, "FRA3");
+      const requestHeaders = await evaluate(cdp, `window.__lastPhotoRequestHeaders`);
+      assert.equal(requestHeaders["x-panini-expected-side"], "back");
       const summary = await evaluate(cdp, `document.querySelector("#needLookupSummary").textContent`);
       assert.match(summary, /Filled card codes from 1\/1 photo/);
     } finally {

@@ -2,9 +2,10 @@ import { extractCodeOccurrences as parseCodeOccurrences, normalizeCodeInput } fr
 import { attachVoiceInput } from "./voice_input.js?v=voice-lang-1";
 import {
   applyRecognitionBaseUrlFromQuery,
+  photoOcrSide,
   recognitionErrorMessage,
   recognitionUrl,
-} from "./recognition_config.js?v=stable-ocr-1";
+} from "./recognition_config.js?v=ocr-side-1";
 
 const STORAGE_KEY = "panini.collectionTracker.v2";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
@@ -46,9 +47,13 @@ applyRecognitionBaseUrlFromQuery();
 async function scanPhoto(file) {
   const response = await fetch(recognitionUrl("/api/photo-codes"), {
     method: "POST",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "X-Panini-Expected-Side": photoOcrSide(),
+    },
     body: file,
   });
+  if (response.status === 409) throw new Error("photo OCR side is not available");
   if (!response.ok) throw new Error("photo OCR unavailable");
   return response.json();
 }

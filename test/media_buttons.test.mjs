@@ -30,4 +30,5 @@ test("production config does not hard-code quick tunnels", () => {
   const config = readFileSync("assets/site_config.js", "utf8");
 
   assert.doesNotMatch(config, /trycloudflare\.com/);
+  assert.match(config, /photoOcrSide:\s*"back"/);
 });

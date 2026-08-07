@@ -39,7 +39,15 @@ export function recognitionUrl(path) {
   return `${base}${path}`;
 }
 
+export function photoOcrSide() {
+  const side = String(window.PANINI_CONFIG?.photoOcrSide || "back").trim().toLowerCase();
+  return side === "front" ? "front" : "back";
+}
+
 export function recognitionErrorMessage(error) {
+  if (error?.message === "photo OCR side is not available") {
+    return "That scanner backend does not serve the photo model this page needs.";
+  }
   if (error?.message === "photo OCR backend is not configured") {
     return "Photo OCR backend is not configured.";
   }
