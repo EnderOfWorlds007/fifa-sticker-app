@@ -2,10 +2,10 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-682d67b32ef4";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-24952b3863ed";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-682d67b32ef4";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-24952b3863ed";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [

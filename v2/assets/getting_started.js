@@ -6,8 +6,8 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-682d67b32ef4";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-682d67b32ef4";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-24952b3863ed";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-24952b3863ed";
 
 const status = document.querySelector("#gettingStartedStatus");
 const albumPhotoButton = document.querySelector("#albumPhotoButton");

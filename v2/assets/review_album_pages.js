@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-682d67b32ef4";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-24952b3863ed";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -10,6 +10,7 @@ const rotateSelect = document.querySelector("#albumRotate");
 const resetTransformButton = document.querySelector("#resetAlbumTransform");
 const stage = document.querySelector("#albumStage");
 const stageSurface = document.querySelector("#albumStageSurface");
+const imageFrame = document.querySelector("#albumImageFrame");
 const image = document.querySelector("#albumImage");
 const overlay = document.querySelector("#albumOverlay");
 const registrationBadge = document.querySelector("#albumRegistrationBadge");
@@ -292,7 +293,7 @@ function handleTransformChanged() {
 }
 
 function resizeOverlay() {
-  const rect = surfaceRect();
+  const rect = updateImageFrameLayout();
   overlay.width = Math.max(1, Math.round(rect.width * window.devicePixelRatio));
   overlay.height = Math.max(1, Math.round(rect.height * window.devicePixelRatio));
   ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
@@ -334,22 +335,37 @@ function drawInvalidRegistrationMessage(rect) {
 
 function surfaceRect() {
   return {
-    width: Math.max(1, stageSurface.clientWidth),
-    height: Math.max(1, stageSurface.clientHeight),
+    width: Math.max(1, imageFrame.clientWidth),
+    height: Math.max(1, imageFrame.clientHeight),
+  };
+}
+
+function updateImageFrameLayout() {
+  const stageWidth = Math.max(1, stageSurface.clientWidth);
+  const stageHeight = Math.max(1, stageSurface.clientHeight);
+  const naturalW = image.naturalWidth || Number(currentPhoto?.width || 0) || 1;
+  const naturalH = image.naturalHeight || Number(currentPhoto?.height || 0) || 1;
+  const scale = Math.min(stageWidth / naturalW, stageHeight / naturalH);
+  const width = Math.max(1, naturalW * scale);
+  const height = Math.max(1, naturalH * scale);
+  const x = (stageWidth - width) / 2;
+  const y = (stageHeight - height) / 2;
+  imageFrame.style.left = `${x}px`;
+  imageFrame.style.top = `${y}px`;
+  imageFrame.style.width = `${width}px`;
+  imageFrame.style.height = `${height}px`;
+  return {
+    width,
+    height,
   };
 }
 
 function drawnImageRect(rect) {
-  const naturalW = image.naturalWidth || 1;
-  const naturalH = image.naturalHeight || 1;
-  const scale = Math.min(rect.width / naturalW, rect.height / naturalH);
-  const width = naturalW * scale;
-  const height = naturalH * scale;
   return {
-    x: (rect.width - width) / 2,
-    y: (rect.height - height) / 2,
-    width,
-    height,
+    x: 0,
+    y: 0,
+    width: rect.width,
+    height: rect.height,
   };
 }
 
@@ -758,7 +774,12 @@ function handleStageTap(event) {
   }
   const rect = surfaceRect();
   const imageRect = drawnImageRect(rect);
-  const point = { x: event.offsetX, y: event.offsetY };
+  const overlayRect = overlay.getBoundingClientRect();
+  const point = {
+    x: event.clientX - overlayRect.left,
+    y: event.clientY - overlayRect.top,
+  };
+  if (point.x < 0 || point.y < 0 || point.x > overlayRect.width || point.y > overlayRect.height) return;
   for (let i = currentTemplate.slots.length - 1; i >= 0; i--) {
     const polygon = slotPolygon(currentTemplate.slots[i]).map((item) => transformPoint(item[0], item[1], imageRect));
     if (pointInPolygon(point, polygon)) {

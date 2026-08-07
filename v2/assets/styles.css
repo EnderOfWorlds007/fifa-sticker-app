@@ -822,104 +822,6 @@
   }
 }
 
-@media (max-width: 800px) {
-  .albumReviewBody .albumReviewShell {
-    width: 100%;
-    min-height: 100dvh;
-    padding: 0;
-  }
-
-  .albumReviewBody .albumReviewTop,
-  .albumReviewBody .albumReviewTools {
-    display: none;
-  }
-
-  .albumReviewBody .albumReviewWorkspace {
-    min-height: 100dvh;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
-  .albumReviewBody .albumStageWrap {
-    min-height: 100dvh;
-    border: 0;
-    border-radius: 0;
-  }
-
-  .albumReviewBody .albumStage {
-    height: 100dvh;
-    min-height: 100dvh;
-    border-radius: 0;
-  }
-
-  .albumReviewBody .albumStage.viewRotated .albumStageSurface {
-    inset: auto;
-    left: 50%;
-    top: 50%;
-    width: calc(100dvh - clamp(170px, 24dvh, 236px) - env(safe-area-inset-bottom));
-    height: 100vw;
-    max-width: 980px;
-    max-height: calc(100dvh - clamp(132px, 16dvh, 172px));
-    transform: translate(-50%, -50%) rotate(90deg);
-  }
-
-  .albumReviewBody .albumSlotPanel {
-    position: fixed;
-    inset: auto 0 0;
-    z-index: 20;
-    display: block;
-    border: 0;
-    border-radius: 0;
-    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
-    background: linear-gradient(180deg, rgba(15, 19, 21, 0), rgba(15, 19, 21, 0.92) 26%, rgba(15, 19, 21, 0.98));
-  }
-
-  .albumReviewBody .albumSlotHeader,
-  .albumReviewBody .albumSlotName,
-  .albumReviewBody .albumFlipInput,
-  .albumReviewBody .albumSlotActions,
-  .albumReviewBody .albumReason,
-  .albumReviewBody .albumSlotNav,
-  .albumReviewBody .albumSlotList {
-    display: none;
-  }
-
-  .albumReviewBody .albumReviewQueue {
-    grid-template-columns: minmax(0, 1fr) auto;
-    margin-bottom: 8px;
-    padding: 8px;
-  }
-
-  .albumReviewBody .albumReviewQueue span {
-    font-size: 13px;
-  }
-
-  .albumReviewBody .albumReviewQueue button,
-  .albumReviewBody .albumViewControls button {
-    min-height: 40px;
-    padding: 7px 10px;
-    font-size: 13px;
-  }
-
-  .albumReviewBody .albumViewControls {
-    justify-content: flex-end;
-    margin-bottom: 8px;
-  }
-
-  .albumReviewBody .albumPhotoActions {
-    display: grid;
-    grid-template-columns: 0.72fr 0.9fr 1.38fr;
-    gap: 8px;
-  }
-
-  .albumReviewBody .albumPhotoActions button {
-    min-height: 54px;
-    border-radius: 8px;
-    font-size: 15px;
-    line-height: 1.1;
-  }
-}
-
 .tradeLookupResults {
   display: grid;
   gap: 8px;
@@ -1229,7 +1131,22 @@
   border-radius: 8px;
 }
 
-.albumReviewBody .albumStageSurface,
+.albumReviewBody .albumStageSurface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.albumReviewBody .albumStageSurface {
+  transform-origin: center;
+}
+
+.albumReviewBody .albumImageFrame {
+  position: absolute;
+  overflow: hidden;
+}
+
 .albumReviewBody .albumStage img,
 .albumReviewBody .albumStage canvas {
   position: absolute;
@@ -1239,11 +1156,7 @@
 }
 
 .albumReviewBody .albumStage img {
-  object-fit: contain;
-}
-
-.albumReviewBody .albumStageSurface {
-  transform-origin: center;
+  object-fit: fill;
 }
 
 .albumReviewBody .albumStage canvas {
@@ -2917,5 +2830,103 @@ body[data-overview-review="true"] .overviewPanel {
   .collectionBackupActions,
   .collectionDashboard {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .albumReviewBody .albumReviewShell {
+    width: 100%;
+    min-height: 100dvh;
+    padding: 0;
+  }
+
+  .albumReviewBody .albumReviewTop,
+  .albumReviewBody .albumReviewTools {
+    display: none;
+  }
+
+  .albumReviewBody .albumReviewWorkspace {
+    min-height: 100dvh;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .albumReviewBody .albumStageWrap {
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .albumReviewBody .albumStage {
+    height: 100dvh;
+    min-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .albumReviewBody .albumStage.viewRotated .albumStageSurface {
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: calc(100dvh - clamp(170px, 24dvh, 236px) - env(safe-area-inset-bottom));
+    height: 100vw;
+    max-width: 980px;
+    max-height: calc(100dvh - clamp(132px, 16dvh, 172px));
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  .albumReviewBody .albumSlotPanel {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 20;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(15, 19, 21, 0), rgba(15, 19, 21, 0.92) 26%, rgba(15, 19, 21, 0.98));
+  }
+
+  .albumReviewBody .albumSlotHeader,
+  .albumReviewBody .albumSlotName,
+  .albumReviewBody .albumFlipInput,
+  .albumReviewBody .albumSlotActions,
+  .albumReviewBody .albumReason,
+  .albumReviewBody .albumSlotNav,
+  .albumReviewBody .albumSlotList {
+    display: none;
+  }
+
+  .albumReviewBody .albumReviewQueue {
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-bottom: 8px;
+    padding: 8px;
+  }
+
+  .albumReviewBody .albumReviewQueue span {
+    font-size: 13px;
+  }
+
+  .albumReviewBody .albumReviewQueue button,
+  .albumReviewBody .albumViewControls button {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .albumReviewBody .albumViewControls {
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  .albumReviewBody .albumPhotoActions {
+    display: grid;
+    grid-template-columns: 0.72fr 0.9fr 1.38fr;
+    gap: 8px;
+  }
+
+  .albumReviewBody .albumPhotoActions button {
+    min-height: 54px;
+    border-radius: 8px;
+    font-size: 15px;
+    line-height: 1.1;
   }
 }
