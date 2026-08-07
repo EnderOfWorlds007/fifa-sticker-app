@@ -1,5 +1,5 @@
-const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-023a20dddc41";
-const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-023a20dddc41$/, "");
+const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-8ed17238dac5";
+const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-8ed17238dac5$/, "");
 const APP_SHELL = [
   "/fifa-sticker-app/v2/",
   "/fifa-sticker-app/v2/apps/",
@@ -33,7 +33,7 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
   "/fifa-sticker-app/v2/assets/pwa.js",
   "/fifa-sticker-app/v2/data/trade_inventory.json",
-  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-023a20dddc41",
+  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-8ed17238dac5",
   "/fifa-sticker-app/v2/manifest.webmanifest",
 ];
 
@@ -60,11 +60,38 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => cachedJsonUnavailable(url.pathname)));
     return;
   }
+  if (request.mode === "navigate" || shouldPreferNetwork(url)) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
   event.respondWith(cacheFirst(request));
 });
 
+function shouldPreferNetwork(url) {
+  return url.pathname.endsWith(".html")
+    || url.pathname.endsWith(".js")
+    || url.pathname.endsWith(".css")
+    || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-pages/")
+    || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-pages");
+}
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response.ok && !response.redirected && response.type === "basic") {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    return caches.match(request, { ignoreSearch: true });
+  }
+}
+
 async function cacheFirst(request) {
-  const cached = await caches.match(request, { ignoreSearch: true });
+  const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok && !response.redirected && response.type === "basic") {
