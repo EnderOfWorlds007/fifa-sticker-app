@@ -1299,6 +1299,14 @@
 .albumReviewBody .albumRegistrationBadge[data-state="needs_review"],
 .albumReviewBody .albumRegistrationBadge[data-state="raw"] { border-color: #f1be59; }
 .albumReviewBody .albumRegistrationBadge[data-state="invalid"] { border-color: #ff6b6b; }
+.albumReviewBody .albumRegistrationBadge[data-trust="diagnostic"] {
+  border-color: #f1be59;
+  color: #ffe2a3;
+}
+.albumReviewBody .albumRegistrationBadge[data-trust="untrusted"] {
+  border-color: #ff6b6b;
+  color: #ffc4c4;
+}
 
 .albumReviewBody .albumSlotPanel {
   display: grid;

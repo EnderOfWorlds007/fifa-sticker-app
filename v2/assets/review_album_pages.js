@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-373044315896";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-535591427b8d";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -336,7 +336,11 @@ function draw() {
   ctx.clearRect(0, 0, rect.width, rect.height);
   if (!currentTemplate?.slots?.length || !image.complete) return;
   if (registrationIsInvalid()) {
-    drawInvalidRegistrationMessage(rect);
+    drawOverlayTrustMessage(rect, "Alignment invalid - open Processing");
+    return;
+  }
+  if (overlayTrustLevel() === "untrusted") {
+    drawOverlayTrustMessage(rect, "Overlay untrusted - open Processing");
     return;
   }
   const imageRect = drawnImageRect(rect);
@@ -349,8 +353,15 @@ function registrationIsInvalid() {
   return currentPhoto?.focus?.registration?.state === "invalid";
 }
 
-function drawInvalidRegistrationMessage(rect) {
-  const text = "Alignment invalid - open Processing";
+function overlayTrustLevel() {
+  return currentPhoto?.focus?.overlay_trust?.level || currentPhoto?.focus?.registration?.overlay_trust?.level || "trusted";
+}
+
+function overlayTrustReasons() {
+  return currentPhoto?.focus?.overlay_trust?.reasons || currentPhoto?.focus?.registration?.overlay_trust?.reasons || [];
+}
+
+function drawOverlayTrustMessage(rect, text) {
   ctx.font = "800 18px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
   const width = Math.min(rect.width - 24, Math.max(260, ctx.measureText(text).width + 28));
   ctx.fillStyle = "rgba(0, 0, 0, 0.78)";
@@ -408,26 +419,38 @@ function drawSlot(slot, index, imageRect) {
   const state = slotState(slot);
   const review = slotReviewRequired(slot);
   const active = index === currentSlotIndex;
-  const color = state === "filled" ? "#28d17c" : state === "empty" ? "#63a9ff" : state === "unknown" ? "#f1be59" : "#ffffff";
+  const trust = overlayTrustLevel();
+  const color =
+    trust === "diagnostic"
+      ? "#f1be59"
+      : state === "filled"
+        ? "#28d17c"
+        : state === "empty"
+          ? "#63a9ff"
+          : state === "unknown"
+            ? "#f1be59"
+            : "#ffffff";
   ctx.beginPath();
   points.forEach((point, i) => (i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
   ctx.closePath();
-  ctx.lineWidth = active ? 4 : review ? 3 : 2;
+  ctx.lineWidth = active ? 4 : review || trust === "diagnostic" ? 3 : 2;
   ctx.strokeStyle = color;
-  ctx.setLineDash(review ? [6, 4] : state === "empty" ? [8, 5] : []);
+  ctx.globalAlpha = trust === "diagnostic" ? 0.72 : 1;
+  ctx.setLineDash(trust === "diagnostic" ? [7, 5] : review ? [6, 4] : state === "empty" ? [8, 5] : []);
   ctx.stroke();
   ctx.setLineDash([]);
   if (active) {
-    ctx.fillStyle = "rgba(0, 194, 168, 0.16)";
+    ctx.fillStyle = trust === "diagnostic" ? "rgba(241, 190, 89, 0.12)" : "rgba(0, 194, 168, 0.16)";
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
   const center = points.reduce((acc, point) => ({ x: acc.x + point.x / points.length, y: acc.y + point.y / points.length }), { x: 0, y: 0 });
   const stateLetter = state === "filled" ? "F" : state === "empty" ? "E" : "?";
-  const label = `${slot.ordinal} ${stateLetter}${review ? " !" : ""}`;
+  const label = `${slot.ordinal} ${stateLetter}${review || trust === "diagnostic" ? " !" : ""}`;
   const labelWidth = Math.max(50, ctx.measureText(label).width + 18);
-  ctx.fillStyle = saved ? "rgba(0, 0, 0, 0.86)" : "rgba(0, 0, 0, 0.64)";
+  ctx.fillStyle = trust === "diagnostic" ? "rgba(36, 28, 15, 0.74)" : saved ? "rgba(0, 0, 0, 0.86)" : "rgba(0, 0, 0, 0.64)";
   ctx.fillRect(center.x - labelWidth / 2, center.y - 15, labelWidth, 30);
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = trust === "diagnostic" ? "#ffe2a3" : "#fff";
   ctx.font = "700 14px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -464,7 +487,8 @@ function renderSlot() {
   const state = slotState(slot);
   const reviewed = currentTemplate.slots.filter((item) => labels[labelKey(item)]?.label && labels[labelKey(item)]?.label !== "skip").length;
   const registrationState = currentPhoto.focus?.registration?.state || (currentPhoto.focus ? "needs_review" : "raw");
-  const registrationText = registrationState === "valid" ? "registered" : registrationState.replaceAll("_", " ");
+  const trust = overlayTrustLevel();
+  const registrationText = trust !== "trusted" ? `${trust} overlay` : registrationState === "valid" ? "registered" : registrationState.replaceAll("_", " ");
   status.textContent = `${currentPhoto.source_name} · ${currentTemplate.page_label} · ${registrationText}`;
   slotTitle.textContent = `${slot.code} · ${state}`;
   slotName.textContent = `${slot.name} · ${slot.team}${saved ? " · reviewed" : " · predicted"}`;
@@ -485,22 +509,25 @@ function renderRegistrationBadge() {
   }
   const registration = currentPhoto.focus?.registration;
   const state = registration?.state || (currentPhoto.focus ? "needs_review" : "raw");
+  const trust = overlayTrustLevel();
   const version = currentPhoto.focus?.registration?.version || "raw";
   const label = currentTemplate?.catalog_prefix || currentPhoto.template_hint?.split("_")[0]?.toUpperCase() || "?";
   registrationBadge.hidden = false;
   registrationBadge.dataset.state = state;
-  registrationBadge.textContent = `${currentPhoto.source_name} · ${label} · ${version} · ${state.replaceAll("_", " ")}`;
+  registrationBadge.dataset.trust = trust;
+  registrationBadge.textContent = `${currentPhoto.source_name} · ${label} · ${version} · ${trust === "trusted" ? state.replaceAll("_", " ") : trust}`;
 }
 
 function renderProcessingDebugControls() {
   if (!showProcessingButton) return;
   const registrationState = currentPhoto?.focus?.registration?.state || (currentPhoto?.focus ? "needs_review" : "raw");
+  const trust = overlayTrustLevel();
   const hasSteps = Array.isArray(currentPhoto?.focus?.debug_steps) && currentPhoto.focus.debug_steps.length > 0;
   showProcessingButton.hidden = !hasSteps;
   if (!showProcessingButton.hidden) {
-    showProcessingButton.textContent = registrationState === "invalid" ? "Processing: invalid" : "Processing";
+    showProcessingButton.textContent = trust === "untrusted" ? "Processing: untrusted" : registrationState === "invalid" ? "Processing: invalid" : "Processing";
   }
-  if (registrationState === "invalid" && currentPhoto?.id && autoOpenedDebugPhotoId !== currentPhoto.id) {
+  if ((registrationState === "invalid" || trust === "untrusted") && currentPhoto?.id && autoOpenedDebugPhotoId !== currentPhoto.id) {
     autoOpenedDebugPhotoId = currentPhoto.id;
     requestAnimationFrame(openProcessingDebug);
   }
@@ -512,7 +539,9 @@ function openProcessingDebug() {
   const steps = currentPhoto.focus?.debug_steps || [];
   if (!steps.length) return;
   const registration = currentPhoto.focus?.registration || {};
-  debugSummary.textContent = `${currentPhoto.source_name} · ${registration.state || "unknown"} · ${(registration.warnings || []).join(", ") || "no warnings"}`;
+  const trust = overlayTrustLevel();
+  const trustReasons = overlayTrustReasons();
+  debugSummary.textContent = `${currentPhoto.source_name} · ${registration.state || "unknown"} · ${trust} · ${trustReasons.join(", ") || (registration.warnings || []).join(", ") || "no warnings"}`;
   debugSteps.replaceChildren(
     ...steps.map((step, index) => {
       const card = document.createElement("article");
