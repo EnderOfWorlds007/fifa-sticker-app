@@ -1,3 +1,4 @@
 window.PANINI_CONFIG = {
-  recognitionBaseUrl: "https://fifa-sticker-scanner-production.up.railway.app",
+  recognitionBaseUrl: "https://ionuts-macbook-pro.tail0bd2ca.ts.net",
+  photoOcrSide: "back",
 };
