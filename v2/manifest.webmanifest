@@ -1,0 +1,29 @@
+{
+  "name": "FIFA Sticker Hub",
+  "short_name": "Sticker Hub",
+  "description": "A local-first phone app for collection progress, pasted-list comparison, trades, and scanning.",
+  "start_url": "/fifa-sticker-app/v2/apps/",
+  "scope": "/fifa-sticker-app/v2/",
+  "display": "standalone",
+  "background_color": "#0f1315",
+  "theme_color": "#00c2a8",
+  "orientation": "portrait-primary",
+  "categories": ["utilities", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Collection",
+      "short_name": "Collection",
+      "url": "/fifa-sticker-app/v2/collection/"
+    },
+    {
+      "name": "Compare",
+      "short_name": "Compare",
+      "url": "/fifa-sticker-app/v2/compare/"
+    },
+    {
+      "name": "Trades",
+      "short_name": "Trades",
+      "url": "/fifa-sticker-app/v2/trades/"
+    }
+  ]
+}

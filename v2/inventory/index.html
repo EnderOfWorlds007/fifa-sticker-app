@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Sticker Hub">
+  <title>FIFA Inventory</title>
+  <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-878956532e53">
+</head>
+<body class="inventoryBody">
+  <main class="inventoryShell">
+    <header class="inventoryTop">
+      <div>
+        <h1>Inventory</h1>
+        <p>Cards already saved from scanner sessions.</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/v2/apps/">Apps</a>
+        <a href="/fifa-sticker-app/v2/compare/">Compare</a>
+        <a href="/fifa-sticker-app/v2/trades/">Trades</a>
+        <a href="/fifa-sticker-app/v2/collection/">Collection</a>
+      </nav>
+    </header>
+
+    <section class="inventoryStats" aria-label="Inventory summary">
+      <div class="collectionStat">
+        <span>Total cards</span>
+        <strong id="inventoryTotalCards">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Codes</span>
+        <strong id="inventoryUniqueCodes">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Photos</span>
+        <strong id="inventoryPhotoCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Sessions</span>
+        <strong id="inventorySessionCount">0</strong>
+      </div>
+    </section>
+
+    <section class="inventoryTools" aria-label="Inventory tools">
+      <label class="collectionSearch">
+        <span>Search</span>
+        <input id="inventorySearch" type="search" placeholder="Code, team, or name">
+      </label>
+      <div class="collectionActions">
+        <button id="downloadAdjustedInventoryButton" class="buttonLike" type="button">Download adjusted CSV</button>
+        <a class="buttonLike" href="/fifa-sticker-app/v2/api/trade-inventory.csv" download>Download raw scanner CSV</a>
+        <a class="buttonLike secondary" href="/fifa-sticker-app/v2/compare/">Compare pasted list</a>
+      </div>
+    </section>
+
+    <div id="inventoryFreshness" class="localTrustStatus" aria-live="polite">
+      <strong>Inventory source</strong>
+      <span>Checking local inventory source.</span>
+    </div>
+
+    <p id="inventoryStatus" class="collectionStatus" aria-live="polite">Loading inventory...</p>
+    <ol id="inventoryCards" class="inventoryCards"></ol>
+  </main>
+
+  <nav class="phoneTabBar" data-app-nav aria-label="Primary">
+    <a href="/fifa-sticker-app/v2/collection/">Collection</a>
+    <a href="/fifa-sticker-app/v2/compare/">Compare</a>
+    <a href="/fifa-sticker-app/v2/trades/">Trades</a>
+    <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
+  </nav>
+  <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/inventory.js?v=build-878956532e53" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-878956532e53" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Sticker Hub">
+  <title>FIFA Sticker Hub</title>
+  <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-878956532e53">
+</head>
+<body class="appsBody">
+  <main class="appsShell">
+    <header class="appsHero">
+      <div>
+        <p class="appsEyebrow">FIFA Sticker Hub</p>
+        <h1>Your album, trades, and scans</h1>
+        <p>Start from collection progress, compare a pasted message, continue a trade, or scan physical stickers.</p>
+        <p class="localFirstNote" data-pwa-status>Phone-first, local-first.</p>
+      </div>
+    </header>
+
+    <section class="appLauncher hubLauncher" aria-label="Primary destinations">
+      <a class="appTile collection" href="/fifa-sticker-app/v2/collection/">
+        <span class="appTileIcon">01</span>
+        <strong>Collection</strong>
+        <span>Review progress, paste updates, undo activity, and backup this phone.</span>
+      </a>
+      <a class="appTile lookup" href="/fifa-sticker-app/v2/compare/">
+        <span class="appTileIcon">Cmp</span>
+        <strong>Compare</strong>
+        <span>Paste one message and see what you can give plus what you still need.</span>
+      </a>
+      <a class="appTile trade" href="/fifa-sticker-app/v2/trades/">
+        <span class="appTileIcon">Trd</span>
+        <strong>Trades</strong>
+        <span>Continue drafts, review reservations, and inspect completed exchanges.</span>
+      </a>
+      <a id="scannerAppLink" class="appTile scanner" href="/fifa-sticker-app/v2/scanner/" data-scan-link>
+        <span class="appTileIcon">Scan</span>
+        <strong>Scan</strong>
+        <span>Capture stickers and refresh the inventory baseline.</span>
+      </a>
+    </section>
+
+    <section class="hubSecondary" aria-label="Secondary actions">
+      <a href="/fifa-sticker-app/v2/inventory/">Saved inventory</a>
+      <a href="/fifa-sticker-app/v2/compare/?mode=give">Old give shortcut</a>
+      <a href="/fifa-sticker-app/v2/compare/?mode=need">Old need shortcut</a>
+    </section>
+  </main>
+  <nav class="phoneTabBar" data-app-nav aria-label="Primary">
+    <a href="/fifa-sticker-app/v2/collection/">Collection</a>
+    <a href="/fifa-sticker-app/v2/compare/">Compare</a>
+    <a href="/fifa-sticker-app/v2/trades/">Trades</a>
+    <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
+  </nav>
+  <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js" type="module"></script>
+</body>
+</html>

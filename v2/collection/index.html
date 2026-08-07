@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Sticker Hub">
+  <title>FIFA Collection Tracker</title>
+  <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-878956532e53">
+</head>
+<body class="collectionBody">
+  <main class="collectionShell">
+    <header class="collectionTop">
+      <div>
+        <h1>Collection Tracker</h1>
+        <p>Track the cards you are still chasing and mark them off as you find them.</p>
+      </div>
+      <nav class="collectionNav" aria-label="Collection navigation">
+        <a href="/fifa-sticker-app/v2/apps/">Apps</a>
+        <a href="/fifa-sticker-app/v2/compare/">Compare</a>
+        <a href="/fifa-sticker-app/v2/trades/">Trades</a>
+        <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
+      </nav>
+    </header>
+
+    <section class="collectionDashboard" aria-label="Collection summary">
+      <div class="collectionStat">
+        <span>Still needed</span>
+        <strong id="missingCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Found</span>
+        <strong id="collectedCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Teams left</span>
+        <strong id="teamCount">0</strong>
+      </div>
+      <div class="collectionStat">
+        <span>Hunt progress</span>
+        <strong id="progressCount">0%</strong>
+      </div>
+    </section>
+
+    <section class="collectionTools" aria-label="Collection tools">
+      <label class="collectionSearch">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Team or code, e.g. ENG 13">
+      </label>
+      <div class="collectionSegmented" role="group" aria-label="Filter cards">
+        <button id="showMissing" type="button" data-filter="missing">Missing</button>
+        <button id="showAll" type="button" data-filter="all">All</button>
+        <button id="showCollected" type="button" data-filter="collected">Collected</button>
+      </div>
+      <div class="collectionActions">
+        <button id="copyMissingButton" type="button">Copy missing list</button>
+        <button id="resetButton" class="secondaryButton" type="button">Reset</button>
+      </div>
+    </section>
+
+    <section class="collectionUpdateCard" aria-label="Update collection from pasted text">
+      <div data-trade-paste-box="collection-update"></div>
+      <div id="parsedBatchPreview" class="parsedBatchPreview" aria-live="polite"></div>
+      <p class="hint">We parse card codes from the text. Cards you traded away are removed from Cards I Can Give on this phone.</p>
+    </section>
+
+    <section id="activity" class="collectionUpdateCard" aria-label="Activity and backup">
+      <div class="collectionBackupActions">
+        <button id="backupButton" type="button">Create JSON backup</button>
+        <button id="restoreButton" class="secondaryButton" type="button">Restore JSON</button>
+      </div>
+      <div id="storagePersistenceStatus" class="localTrustStatus" data-severity="warning" aria-live="polite">
+        <strong>Storage status</strong>
+        <span>Checking browser storage protection.</span>
+      </div>
+      <textarea id="backupText" rows="5" placeholder="Backup JSON appears here. Paste a backup here to restore."></textarea>
+      <h2>Activity</h2>
+      <ol id="activityList" class="tradeLookupResults"></ol>
+    </section>
+
+    <p id="collectionStatus" class="collectionStatus" aria-live="polite"></p>
+
+    <section class="collectionListWrap" aria-label="Cards by team">
+      <div id="teamList" class="collectionTeamList"></div>
+      <div id="emptyState" class="collectionEmpty" hidden>No cards match this view.</div>
+    </section>
+  </main>
+
+  <nav class="phoneTabBar" data-app-nav aria-label="Primary">
+    <a href="/fifa-sticker-app/v2/collection/" aria-current="page">Collection</a>
+    <a href="/fifa-sticker-app/v2/compare/">Compare</a>
+    <a href="/fifa-sticker-app/v2/trades/">Trades</a>
+    <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
+  </nav>
+  <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-878956532e53" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/collection_tracker.js?v=build-878956532e53" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-878956532e53" type="module"></script>
+</body>
+</html>

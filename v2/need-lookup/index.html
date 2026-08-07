@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Apps">
+  <title>Cards I Need From Them</title>
+  <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-878956532e53">
+</head>
+<body class="tradeLookupBody">
+  <main class="tradeLookupShell">
+    <header class="tradeLookupTop">
+      <div>
+        <h1>Cards I Need From Them</h1>
+        <p>This shortcut now opens Compare with the old “need from them” workflow. Paste someone else's available cards to compare them with your missing list.</p>
+      </div>
+      <nav class="appSwitcher" aria-label="Apps">
+        <a href="/fifa-sticker-app/v2/apps/">Apps</a>
+        <a href="/fifa-sticker-app/v2/compare/?mode=need">Compare</a>
+        <a href="/fifa-sticker-app/v2/trade-lookup/">Can give</a>
+        <a href="/fifa-sticker-app/v2/collection/">Collection</a>
+        <a href="/fifa-sticker-app/v2/inventory/">Inventory</a>
+      </nav>
+    </header>
+
+    <section class="tradeLookupCard">
+      <p class="hint">Opening the unified Compare page...</p>
+      <p><a class="buttonLike" href="/fifa-sticker-app/v2/compare/?mode=need">Open Compare</a></p>
+      <noscript><p class="hint">JavaScript is disabled, so use the Compare link above.</p></noscript>
+    </section>
+  </main>
+  <script>window.location.replace("../compare/?mode=need");</script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js" type="module"></script>
+</body>
+</html>
