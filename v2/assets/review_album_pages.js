@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-24952b3863ed";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-023a20dddc41";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -63,6 +63,7 @@ let currentImageObjectUrl = "";
 let debugObjectUrls = [];
 const sampler = document.createElement("canvas");
 const samplerCtx = sampler.getContext("2d", { willReadFrequently: true });
+const compactLayoutMedia = window.matchMedia?.("(max-width: 900px), (hover: none) and (pointer: coarse)");
 
 init();
 
@@ -107,6 +108,7 @@ function bindControls() {
   }
   resetTransformButton.addEventListener("click", resetTransform);
   image.addEventListener("load", () => {
+    updateReviewLayoutMode();
     seedPredictions();
     refreshOcrPredictions();
     resizeOverlay();
@@ -114,6 +116,7 @@ function bindControls() {
     renderSlot();
   });
   window.addEventListener("resize", () => {
+    updateReviewLayoutMode();
     if (!viewRotationPinned) {
       viewRotated = shouldRotatePhotoView();
       applyPhotoViewRotation();
@@ -149,6 +152,13 @@ function bindControls() {
   });
   stageSurface.addEventListener("touchstart", handleStageTouchStart, { passive: true });
   stageSurface.addEventListener("touchend", handleStageTouchEnd, { passive: true });
+  compactLayoutMedia?.addEventListener?.("change", () => {
+    updateReviewLayoutMode();
+    viewRotated = shouldRotatePhotoView();
+    applyPhotoViewRotation();
+    resizeOverlay();
+    draw();
+  });
   slotList.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-slot-index]");
     if (!button) return;
@@ -175,6 +185,7 @@ function setPhoto(id) {
   if (!currentPhoto) return;
   lowConfidenceReviewMode = false;
   viewRotationPinned = false;
+  updateReviewLayoutMode();
   photoSelect.value = currentPhoto.id;
   const guessed = guessTemplateForPhoto(currentPhoto);
   if (guessed && templateSelect.value !== guessed) {
@@ -241,9 +252,26 @@ function guessTemplateForPhoto(photo) {
 
 function shouldRotatePhotoView() {
   if (!currentPhoto) return false;
+  if (isCompactReviewLayout()) return false;
   const isLandscape = Number(currentPhoto.width || 0) > Number(currentPhoto.height || 0);
   const isPhonePortrait = window.matchMedia?.("(max-width: 720px) and (orientation: portrait)")?.matches;
   return Boolean(isLandscape && isPhonePortrait);
+}
+
+function isCompactReviewLayout() {
+  return Boolean(compactLayoutMedia?.matches || window.innerWidth <= 900);
+}
+
+function updateReviewLayoutMode() {
+  const compact = isCompactReviewLayout();
+  document.body.classList.toggle("albumReviewCompact", compact);
+  if (!compact) {
+    document.documentElement.style.removeProperty("--album-review-tray-height");
+    return;
+  }
+  const tray = document.querySelector(".albumSlotPanel");
+  const trayHeight = Math.ceil(tray?.getBoundingClientRect?.().height || 96);
+  document.documentElement.style.setProperty("--album-review-tray-height", `${Math.max(72, trayHeight)}px`);
 }
 
 function applyPhotoViewRotation() {
@@ -341,6 +369,7 @@ function surfaceRect() {
 }
 
 function updateImageFrameLayout() {
+  updateReviewLayoutMode();
   const stageWidth = Math.max(1, stageSurface.clientWidth);
   const stageHeight = Math.max(1, stageSurface.clientHeight);
   const naturalW = image.naturalWidth || Number(currentPhoto?.width || 0) || 1;
@@ -349,7 +378,7 @@ function updateImageFrameLayout() {
   const width = Math.max(1, naturalW * scale);
   const height = Math.max(1, naturalH * scale);
   const x = (stageWidth - width) / 2;
-  const y = (stageHeight - height) / 2;
+  const y = isCompactReviewLayout() ? 0 : (stageHeight - height) / 2;
   imageFrame.style.left = `${x}px`;
   imageFrame.style.top = `${y}px`;
   imageFrame.style.width = `${width}px`;
