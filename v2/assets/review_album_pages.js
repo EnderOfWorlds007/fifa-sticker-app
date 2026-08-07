@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f00ce7c65d44";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6b94f67d0ce7";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -252,8 +252,8 @@ function guessTemplateForPhoto(photo) {
 
 function shouldRotatePhotoView() {
   if (!currentPhoto) return false;
-  if (isCompactReviewLayout()) return false;
   const isLandscape = Number(currentPhoto.width || 0) > Number(currentPhoto.height || 0);
+  if (isCompactReviewLayout()) return isLandscape;
   const isPhonePortrait = window.matchMedia?.("(max-width: 720px) and (orientation: portrait)")?.matches;
   return Boolean(isLandscape && isPhonePortrait);
 }
@@ -374,15 +374,19 @@ function updateImageFrameLayout() {
   const stageHeight = Math.max(1, stageSurface.clientHeight);
   const naturalW = image.naturalWidth || Number(currentPhoto?.width || 0) || 1;
   const naturalH = image.naturalHeight || Number(currentPhoto?.height || 0) || 1;
-  const scale = Math.min(stageWidth / naturalW, stageHeight / naturalH);
+  const rotatedFill = isCompactReviewLayout() && viewRotated;
+  const scale = rotatedFill
+    ? Math.max(stageHeight / naturalW, stageWidth / naturalH)
+    : Math.min(stageWidth / naturalW, stageHeight / naturalH);
   const width = Math.max(1, naturalW * scale);
   const height = Math.max(1, naturalH * scale);
-  const x = (stageWidth - width) / 2;
-  const y = isCompactReviewLayout() ? 0 : (stageHeight - height) / 2;
+  const x = rotatedFill ? stageWidth / 2 : (stageWidth - width) / 2;
+  const y = rotatedFill ? stageHeight / 2 : isCompactReviewLayout() ? 0 : (stageHeight - height) / 2;
   imageFrame.style.left = `${x}px`;
   imageFrame.style.top = `${y}px`;
   imageFrame.style.width = `${width}px`;
   imageFrame.style.height = `${height}px`;
+  imageFrame.style.transform = rotatedFill ? "translate(-50%, -50%) rotate(90deg)" : "";
   return {
     width,
     height,
@@ -804,11 +808,8 @@ function handleStageTap(event) {
   const rect = surfaceRect();
   const imageRect = drawnImageRect(rect);
   const overlayRect = overlay.getBoundingClientRect();
-  const point = {
-    x: event.clientX - overlayRect.left,
-    y: event.clientY - overlayRect.top,
-  };
-  if (point.x < 0 || point.y < 0 || point.x > overlayRect.width || point.y > overlayRect.height) return;
+  const point = eventPointToOverlayPoint(event, overlayRect, rect);
+  if (!point) return;
   for (let i = currentTemplate.slots.length - 1; i >= 0; i--) {
     const polygon = slotPolygon(currentTemplate.slots[i]).map((item) => transformPoint(item[0], item[1], imageRect));
     if (pointInPolygon(point, polygon)) {
@@ -816,6 +817,19 @@ function handleStageTap(event) {
       return;
     }
   }
+}
+
+function eventPointToOverlayPoint(event, overlayRect, surface) {
+  const visualX = event.clientX - overlayRect.left;
+  const visualY = event.clientY - overlayRect.top;
+  if (visualX < 0 || visualY < 0 || visualX > overlayRect.width || visualY > overlayRect.height) return null;
+  if (!(isCompactReviewLayout() && viewRotated)) {
+    return { x: visualX, y: visualY };
+  }
+  return {
+    x: visualY * (surface.width / overlayRect.height),
+    y: surface.height - visualX * (surface.height / overlayRect.width),
+  };
 }
 
 function pointInPolygon(point, polygon) {
