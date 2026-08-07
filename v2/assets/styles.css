@@ -623,16 +623,6 @@
   background: transparent;
 }
 
-.pasteCapabilityMenu {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.pasteCapabilityMenu[hidden] {
-  display: none;
-}
-
 .tradeLookupResults {
   display: grid;
   gap: 8px;

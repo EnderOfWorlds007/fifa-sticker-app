@@ -2,9 +2,7 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-eea91a46959f";
-
-let photoDisclosureCounter = 0;
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-25e0cde387fc";
 
 export function mountTradePasteBox(target, options) {
   const root = typeof target === "string" ? document.querySelector(target) : target;
@@ -75,71 +73,19 @@ function buildCapabilityRow(textarea, status, capabilities) {
   row.className = "tradeLookupActions pasteCapabilityActions";
 
   if (capabilities.photo) {
-    const cameraInput = buildPhotoInput("data-paste-camera-input");
-    cameraInput.capture = "environment";
-    cameraInput.setAttribute("capture", "environment");
-    cameraInput.setAttribute("data-paste-photo-input", "true");
-    const libraryInput = buildPhotoInput("data-paste-library-input");
-    const disclosureId = `pastePhotoSources${photoDisclosureCounter += 1}`;
+    const photoInput = buildPhotoInput();
 
     const photoButton = document.createElement("button");
     photoButton.type = "button";
     photoButton.className = "secondaryButton";
     photoButton.textContent = "Photo";
-    photoButton.setAttribute("aria-controls", disclosureId);
-    photoButton.setAttribute("aria-expanded", "false");
-
-    const menu = document.createElement("div");
-    menu.id = disclosureId;
-    menu.className = "pasteCapabilityMenu";
-    menu.hidden = true;
-
-    let takePhotoButton;
-    {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "secondaryButton";
-      button.textContent = "Take photo";
-      button.addEventListener("click", () => {
-        hidePhotoMenu(photoButton, menu);
-        cameraInput.click();
-      });
-      takePhotoButton = button;
-    }
-
-    let choosePhotoButton;
-    {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "secondaryButton";
-      button.textContent = "Choose photo";
-      button.addEventListener("click", () => {
-        hidePhotoMenu(photoButton, menu);
-        libraryInput.click();
-      });
-      choosePhotoButton = button;
-    }
-
     photoButton.addEventListener("click", () => {
-      const willOpen = menu.hidden;
-      if (willOpen) {
-        showPhotoMenu(photoButton, menu, takePhotoButton);
-        status.textContent = "Choose camera or photo library.";
-      } else {
-        hidePhotoMenu(photoButton, menu);
-        status.textContent = "";
-      }
+      status.textContent = "Choose a photo source from your device.";
+      photoInput.click();
     });
-    menu.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      hidePhotoMenu(photoButton, menu, { restoreFocus: true });
-    });
-    cameraInput.addEventListener("change", () => scanPhotoIntoText(cameraInput, textarea, status));
-    libraryInput.addEventListener("change", () => scanPhotoIntoText(libraryInput, textarea, status));
+    photoInput.addEventListener("change", () => scanPhotoIntoText(photoInput, textarea, status, photoButton));
 
-    menu.append(takePhotoButton, choosePhotoButton);
-    row.append(photoButton, menu, cameraInput, libraryInput);
+    row.append(photoButton, photoInput);
   }
 
   if (capabilities.voice) {
@@ -156,36 +102,28 @@ function buildCapabilityRow(textarea, status, capabilities) {
   return row;
 }
 
-function buildPhotoInput(marker) {
+function buildPhotoInput() {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = "image/*";
   input.hidden = true;
-  input.setAttribute(marker, "true");
+  input.setAttribute("data-paste-photo-input", "true");
   return input;
 }
 
-function showPhotoMenu(button, menu, focusTarget) {
-  menu.hidden = false;
-  button.setAttribute("aria-expanded", "true");
-  focusTarget?.focus();
-}
-
-function hidePhotoMenu(button, menu, { restoreFocus = false } = {}) {
-  menu.hidden = true;
-  button.setAttribute("aria-expanded", "false");
-  if (restoreFocus) button.focus();
-}
-
-async function scanPhotoIntoText(input, textarea, status) {
+async function scanPhotoIntoText(input, textarea, status, button) {
   const file = input.files?.[0];
   if (!file) return;
+  button.disabled = true;
+  button.textContent = "Scanning...";
+  status.textContent = "Photo selected. Starting scan...";
   if (!recognitionBaseUrl()) {
     status.textContent = "Photo input needs the laptop OCR backend. Set it on Scan first.";
     input.value = "";
+    resetPhotoButton(button);
     return;
   }
-  status.textContent = "Scanning photo...";
+  status.textContent = "Photo selected. Scanning...";
   try {
     const job = await createPhotoCodeJob(file);
     const payload = await waitForPhotoCodeJob(job.job_id, {
@@ -204,7 +142,13 @@ async function scanPhotoIntoText(input, textarea, status) {
     status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
   } finally {
     input.value = "";
+    resetPhotoButton(button);
   }
+}
+
+function resetPhotoButton(button) {
+  button.disabled = false;
+  button.textContent = "Photo";
 }
 
 function captureVoiceIntoText(textarea, status, button) {
