@@ -623,6 +623,102 @@
   background: transparent;
 }
 
+.photoUploadButton,
+.voiceInputButton {
+  appearance: none;
+  box-sizing: border-box;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #06110f;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.photoUploadButton.scanning {
+  background: #20242a;
+  color: var(--text);
+  cursor: wait;
+}
+
+.voiceInputButton.listening {
+  background: #20242a;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.photoUploadButton.scanning::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: photoScanSpin 0.8s linear infinite;
+}
+
+.voiceInputButton::before {
+  content: "";
+  width: 10px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  box-shadow: 0 8px 0 -5px currentColor;
+}
+
+.voiceInputButton.listening::before {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5);
+  animation: voicePulse 1s ease-out infinite;
+}
+
+.pasteCapabilityStatus {
+  grid-column: 1 / -1;
+  min-height: 42px;
+  max-width: min(100%, 520px);
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f1418;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.pasteCapabilityStatus[hidden] {
+  display: none;
+}
+
+@keyframes photoScanSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes voicePulse {
+  to {
+    box-shadow: 0 0 0 12px rgba(255, 255, 255, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photoUploadButton.scanning::before,
+  .voiceInputButton.listening::before {
+    animation: none;
+  }
+}
+
 .tradeLookupResults {
   display: grid;
   gap: 8px;

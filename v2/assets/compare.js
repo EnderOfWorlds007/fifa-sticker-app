@@ -9,10 +9,10 @@ import {
   mergeCompareResults,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-25e0cde387fc";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-25e0cde387fc";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-25e0cde387fc";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-25e0cde387fc";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8998864e89d3";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-8998864e89d3";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-8998864e89d3";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-8998864e89d3";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -72,6 +72,7 @@ mountTradePasteBox('[data-trade-paste-box="compare"]', {
   autofocus: true,
   placeholder: "Example: I need ENG13 and can offer MEX7, CZE 5, FRA-19.",
   capabilities: { photo: true, voice: true },
+  onTextAcquired: () => compare(),
   actions: [
     { id: "compareButton", label: "Compare" },
     { id: "buildTradeButton", label: "Build trade", secondary: true, hidden: true },
@@ -312,7 +313,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-25e0cde387fc");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-8998864e89d3");
 }
 
 function reservedQuantity(code) {
