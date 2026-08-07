@@ -20,6 +20,7 @@ const INVENTORY_SOURCES = [
   { url: "/fifa-sticker-app/data/trade_inventory.json", label: "static snapshot" },
 ];
 let photoScanRunning = false;
+let lastPhotoSelectionSignature = "";
 
 function recognitionUrl(path) {
   const base = String(window.PANINI_CONFIG?.recognitionBaseUrl || "").replace(/\/$/, "");
@@ -53,6 +54,9 @@ function resetPhotoProgress() {
 async function fillFromPhotos(files) {
   const selected = [...(files || [])];
   if (!selected.length) return;
+  const selectionSignature = selected.map((file) => `${file.name}:${file.size}:${file.lastModified}`).join("|");
+  if (selectionSignature === lastPhotoSelectionSignature) return;
+  lastPhotoSelectionSignature = selectionSignature;
   if (photoScanRunning) return;
   photoScanRunning = true;
   button.disabled = true;
@@ -279,7 +283,10 @@ copyReplyButton.addEventListener("click", async () => {
 
 button.addEventListener("click", lookup);
 clearButton.addEventListener("click", clearLookup);
-photoButton.addEventListener("click", () => photoInput.click());
+photoButton.addEventListener("click", () => {
+  lastPhotoSelectionSignature = "";
+  photoInput.click();
+});
 photoInput.addEventListener("input", () => fillFromPhotos(photoInput.files));
 photoInput.addEventListener("change", () => fillFromPhotos(photoInput.files));
 attachVoiceInput({
