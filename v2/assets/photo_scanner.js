@@ -1,6 +1,7 @@
 const config = window.PANINI_CONFIG || {};
 const RECOGNITION_URL_KEY = "panini.recognitionBaseUrl.v1";
 const OCR_TOKEN_KEY = "panini.ocrToken.v1";
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 const PHOTO_CODE_JOBS_PATH = ["", "api", "photo-code-jobs"].join('/');
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -117,22 +118,26 @@ function delay(ms) {
 function applyBackendFromQuery() {
   const params = new URLSearchParams(window.location.search);
   const backend = params.get("ocr") || params.get("recognitionBaseUrl");
+  let changedSensitiveParams = false;
   if (backend !== null) {
     const normalized = normalizeRecognitionBaseUrl(backend);
     if (normalized) {
-      localStorage.setItem(RECOGNITION_URL_KEY, normalized);
+      savePersistedValue(RECOGNITION_URL_KEY, normalized);
     } else if (backend.trim() === "") {
-      localStorage.removeItem(RECOGNITION_URL_KEY);
+      clearPersistedValue(RECOGNITION_URL_KEY);
     }
+    changedSensitiveParams = true;
   }
   const token = params.get("ocrToken");
   if (token !== null) {
     if (token) {
-      localStorage.setItem(OCR_TOKEN_KEY, token);
+      savePersistedValue(OCR_TOKEN_KEY, token);
     } else {
-      localStorage.removeItem(OCR_TOKEN_KEY);
+      clearPersistedValue(OCR_TOKEN_KEY);
     }
+    changedSensitiveParams = true;
   }
+  if (changedSensitiveParams) clearSensitiveQueryParams();
 }
 
 function initializeBackendSettings() {
@@ -151,17 +156,17 @@ function initializeSideSelection() {
 function saveBackendSettings() {
   const normalized = normalizeRecognitionBaseUrl(backendUrlInput?.value || "");
   if (normalized) {
-    localStorage.setItem(RECOGNITION_URL_KEY, normalized);
+    savePersistedValue(RECOGNITION_URL_KEY, normalized);
     if (backendUrlInput) backendUrlInput.value = normalized;
   } else {
-    localStorage.removeItem(RECOGNITION_URL_KEY);
+    clearPersistedValue(RECOGNITION_URL_KEY);
     if (backendUrlInput) backendUrlInput.value = "";
   }
   const token = String(backendTokenInput?.value || "");
   if (token) {
-    localStorage.setItem(OCR_TOKEN_KEY, token);
+    savePersistedValue(OCR_TOKEN_KEY, token);
   } else {
-    localStorage.removeItem(OCR_TOKEN_KEY);
+    clearPersistedValue(OCR_TOKEN_KEY);
   }
   updateBackendStatus("Backend saved.");
 }
@@ -197,7 +202,7 @@ function updateBackendStatus(message) {
 }
 
 function recognitionBaseUrl() {
-  const stored = normalizeRecognitionBaseUrl(localStorage.getItem(RECOGNITION_URL_KEY));
+  const stored = normalizeRecognitionBaseUrl(persistedValue(RECOGNITION_URL_KEY));
   if (stored) return stored;
   return normalizeRecognitionBaseUrl(config.recognitionBaseUrl);
 }
@@ -227,10 +232,62 @@ function photoOcrSide() {
 }
 
 function ocrToken() {
-  return String(localStorage.getItem(OCR_TOKEN_KEY) || "");
+  return String(persistedValue(OCR_TOKEN_KEY) || "");
 }
 
 function authHeaders(headers = {}) {
   const token = ocrToken();
   return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+}
+
+function persistedValue(name) {
+  return localStorage.getItem(name) || cookieValue(name);
+}
+
+function savePersistedValue(name, value) {
+  localStorage.setItem(name, value);
+  setCookieValue(name, value);
+}
+
+function clearPersistedValue(name) {
+  localStorage.removeItem(name);
+  clearCookieValue(name);
+}
+
+function cookieValue(name) {
+  const prefix = `${encodeURIComponent(name)}=`;
+  const value = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value.slice(prefix.length));
+  } catch {
+    return "";
+  }
+}
+
+function setCookieValue(name, value) {
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Max-Age=${COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secureCookieSuffix()}`;
+}
+
+function clearCookieValue(name) {
+  document.cookie = `${encodeURIComponent(name)}=; Max-Age=0; Path=/; SameSite=Lax${secureCookieSuffix()}`;
+}
+
+function secureCookieSuffix() {
+  return window.location.protocol === "https:" ? "; Secure" : "";
+}
+
+function clearSensitiveQueryParams() {
+  const url = new URL(window.location.href);
+  let changed = false;
+  for (const key of ["ocr", "recognitionBaseUrl", "ocrToken"]) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
