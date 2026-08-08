@@ -20,23 +20,23 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000004";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000005";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-960000000004";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000004";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000004";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-960000000005";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000005";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000005";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000004";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000004";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000005";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000005";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -530,16 +530,35 @@ async function copyMissingList() {
 function renderParsedPreview() {
   const value = updateText.value.trim();
   if (!value) {
+    gotCardsButton.textContent = "I got these cards";
+    tradedAwayButton.textContent = "I traded them away";
+    parsedBatchPreview.dataset.state = "empty";
     parsedBatchPreview.textContent = "Parsed preview appears here before anything changes.";
     return;
   }
   const occurrences = extractCodeOccurrences(value);
   if (!occurrences.size) {
+    gotCardsButton.textContent = "I got these cards";
+    tradedAwayButton.textContent = "I traded them away";
+    parsedBatchPreview.dataset.state = "empty";
     parsedBatchPreview.textContent = "No card codes found yet.";
     return;
   }
   const tracked = trackedCodeSet();
-  parsedBatchPreview.textContent = `Preview: ${[...occurrences.entries()].map(([code, quantity]) => {
+  const lines = parsedLines(occurrences);
+  const split = splitReceivedLines(lines);
+  const trackedCount = tradeLineQuantityTotal([...split.added, ...split.ignored]);
+  const newCount = tradeLineQuantityTotal(split.added);
+  const duplicateCount = tradeLineQuantityTotal(split.ignored);
+  const untrackedCount = tradeLineQuantityTotal(split.untracked);
+  gotCardsButton.textContent = trackedCount ? `Record ${trackedCount} received` : "I got these cards";
+  tradedAwayButton.textContent = trackedCount ? `Record ${trackedCount} traded away` : "I traded them away";
+  parsedBatchPreview.dataset.state = trackedCount ? "ready" : "empty";
+  const actionSummary = trackedCount
+    ? `Action preview: received records ${trackedCount} card${trackedCount === 1 ? "" : "s"}${newCount ? `, marks ${newCount} new` : ""}${duplicateCount ? `, adds ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"} to trade inventory` : ""}. Traded away removes matching cards from Cards I Can Give.`
+    : "Action preview: no tracked card codes will change your inventory.";
+  const ignoredText = untrackedCount ? ` ${untrackedCount} untracked card${untrackedCount === 1 ? "" : "s"} will be ignored.` : "";
+  parsedBatchPreview.textContent = `${actionSummary}${ignoredText} Codes: ${[...occurrences.entries()].map(([code, quantity]) => {
     const canonical = canonicalCollectionCode(code);
     const statusText = tracked.has(canonical) ? "tracked" : "not in missing list";
     const label = canonical === code ? code : `${code} as ${canonical}`;

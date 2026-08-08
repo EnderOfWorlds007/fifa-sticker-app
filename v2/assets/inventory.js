@@ -4,13 +4,13 @@ import {
   deriveCollectionModel,
   inventoryFreshnessSummary,
   loadLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000004";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000004";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000005";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000005";
 import {
   loadCachedInventoryPayload,
   loadInventoryCacheMeta,
   loadInventoryPayload,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000004";
+} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000005";
 
 const COLLECTION_KEY = "panini.collectionTracker.v1";
 

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
   <title>FIFA Collection Tracker</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-960000000004">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-960000000005">
 </head>
 <body class="collectionBody">
   <main class="collectionShell">
@@ -66,7 +66,20 @@
       <p class="hint">We parse card codes from the text. Cards you traded away are removed from Cards I Can Give on this phone.</p>
     </section>
 
-    <section id="activity" class="collectionUpdateCard" aria-label="Activity and backup">
+    <section id="activity" class="collectionUpdateCard" aria-label="Activity">
+      <h2>Activity</h2>
+      <ol id="activityList" class="tradeLookupResults"></ol>
+    </section>
+
+    <p id="collectionStatus" class="collectionStatus" aria-live="polite"></p>
+
+    <section class="collectionListWrap" aria-label="Cards by team">
+      <div id="teamList" class="collectionTeamList"></div>
+      <div id="emptyState" class="collectionEmpty" hidden>No cards match this view.</div>
+    </section>
+
+    <section class="collectionUpdateCard collectionBackupCard" aria-label="Backup and restore">
+      <h2>Backup</h2>
       <div class="collectionBackupActions">
         <button id="backupButton" type="button">Create JSON backup</button>
         <button id="shareBackupButton" class="secondaryButton" type="button">Share JSON</button>
@@ -81,15 +94,6 @@
         <span>Checking browser storage protection.</span>
       </div>
       <textarea id="backupText" rows="5" placeholder="Backup JSON appears here. Paste a backup here to restore."></textarea>
-      <h2>Activity</h2>
-      <ol id="activityList" class="tradeLookupResults"></ol>
-    </section>
-
-    <p id="collectionStatus" class="collectionStatus" aria-live="polite"></p>
-
-    <section class="collectionListWrap" aria-label="Cards by team">
-      <div id="teamList" class="collectionTeamList"></div>
-      <div id="emptyState" class="collectionEmpty" hidden>No cards match this view.</div>
     </section>
   </main>
 
@@ -101,8 +105,8 @@
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000004" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/collection_tracker.js?v=build-960000000004" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-960000000004" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000005" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/collection_tracker.js?v=build-960000000005" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-960000000005" type="module"></script>
 </body>
 </html>

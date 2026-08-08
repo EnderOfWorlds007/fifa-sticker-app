@@ -429,6 +429,13 @@
   line-height: 1.35;
 }
 
+.parsedBatchPreview[data-state="ready"] {
+  border-style: solid;
+  border-color: rgba(0, 194, 168, 0.48);
+  background: rgba(0, 194, 168, 0.08);
+  color: var(--text);
+}
+
 .collectionSearch {
   display: grid;
   gap: 6px;
