@@ -89,10 +89,14 @@ function orientationModel(photo) {
   const selected = numberOrNull(decision.selected_rotation_degrees);
   const candidate = numberOrNull(decision.candidate_rotation_degrees);
   const legacy = numberOrNull(decision.legacy_rotation_degrees ?? decision.source_crop_rotation_degrees);
-  const rotation = selected ?? candidate ?? legacy ?? 0;
+  const label = photo.orientation_label && typeof photo.orientation_label === "object" ? photo.orientation_label : null;
+  const labelRotation = ["ok", "use_rotation"].includes(String(label?.decision || "")) ? numberOrNull(label?.chosen_rotation_degrees) : null;
+  const rotation = labelRotation ?? selected ?? candidate ?? legacy ?? 0;
   return {
     photo,
     decision,
+    label,
+    labelRotation,
     rotation,
     selected,
     candidate,
@@ -106,13 +110,16 @@ function orientationModel(photo) {
 }
 
 function renderDecision(model) {
-  const isFinal = model.selected !== null && model.status !== "needs_review";
+  const isFinal = model.labelRotation !== null || (model.selected !== null && model.status !== "needs_review");
   const support = model.support === null ? "" : ` · support ${model.support.toFixed(2)}`;
   const margin = model.margin === null ? "" : ` · margin ${model.margin.toFixed(2)}`;
-  badge.textContent = `${model.photo.source_name} · ${model.status}${support}${margin}`;
+  const labelText = model.labelRotation === null ? model.status : `saved ${model.label?.decision || "choice"}`;
+  badge.textContent = `${model.photo.source_name} · ${labelText}${support}${margin}`;
   badge.className = `orientationBadge ${isFinal ? "trusted" : "review"}`;
-  headline.textContent = `Recommended: ${model.rotation} degrees`;
-  reason.textContent = model.status === "needs_review"
+  headline.textContent = `${model.labelRotation === null ? "Recommended" : "Saved choice"}: ${model.rotation} degrees`;
+  reason.textContent = model.labelRotation !== null
+    ? "This is the latest human-selected orientation for this photo."
+    : model.status === "needs_review"
     ? "Confirm this only if the page title and player cards are readable in the big image below."
     : "The backend is confident, but you can still mark it wrong if the big image is upside down or sideways.";
   status.textContent = `${model.photo.source_name} · compare the big image first`;
@@ -160,6 +167,7 @@ function renderCandidateCard(model, rotation, { featured, title }) {
 }
 
 function candidateMeta(model, rotation) {
+  if (rotation === model.labelRotation) return "Latest saved human choice.";
   if (rotation === model.selected) return "Backend selected this orientation.";
   if (rotation === model.candidate) return "Backend recommends reviewing this orientation.";
   if (rotation === model.legacy) return "Legacy pipeline orientation.";
