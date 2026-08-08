@@ -1206,14 +1206,24 @@
   border-radius: 0;
 }
 
-.albumReviewBody.albumReviewCompact .albumStageSurface,
-.albumReviewBody.albumReviewCompact .albumStage.viewRotated .albumStageSurface {
+.albumReviewBody.albumReviewCompact .albumStageSurface {
   inset: 0;
   width: 100%;
   height: 100%;
   max-width: none;
   max-height: none;
   transform: none;
+}
+
+.albumReviewBody.albumReviewCompact .albumStage.viewRotated .albumStageSurface {
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  width: calc(100dvh - var(--album-review-tray-height, 96px));
+  height: 100vw;
+  max-width: none;
+  max-height: none;
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .albumReviewBody.albumReviewCompact .albumSlotPanel {
@@ -1272,7 +1282,7 @@
 
 .albumReviewBody.albumReviewCompact .albumPhotoActions {
   display: grid;
-  grid-template-columns: 0.72fr 0.9fr 1.38fr;
+  grid-template-columns: 0.68fr 0.68fr 0.82fr 1.42fr;
   gap: 8px;
 }
 
@@ -1390,10 +1400,15 @@
   gap: 8px;
 }
 
-.albumReviewBody .albumPhotoActions,
+.albumReviewBody .albumPhotoActions {
+  display: grid;
+  grid-template-columns: 0.75fr 0.75fr 1fr 1.35fr;
+  gap: 8px;
+}
+
 .albumReviewBody .albumFlipInput div {
   display: grid;
-  grid-template-columns: 0.75fr 1fr 1.35fr;
+  grid-template-columns: 1fr auto;
   gap: 8px;
 }
 
@@ -3263,12 +3278,14 @@ body[data-overview-review="true"] .overviewPanel {
   }
 
   .albumReviewBody .albumStage.viewRotated .albumStageSurface {
-    inset: 0;
-    width: 100%;
-    height: 100%;
+    inset: auto;
+    left: 50%;
+    top: 50%;
+    width: 100dvh;
+    height: 100vw;
     max-width: none;
     max-height: none;
-    transform: none;
+    transform: translate(-50%, -50%) rotate(90deg);
   }
 
   .albumReviewBody .albumSlotPanel {
@@ -3316,7 +3333,7 @@ body[data-overview-review="true"] .overviewPanel {
 
   .albumReviewBody .albumPhotoActions {
     display: grid;
-    grid-template-columns: 0.72fr 0.9fr 1.38fr;
+    grid-template-columns: 0.68fr 0.68fr 0.82fr 1.42fr;
     gap: 8px;
   }
 
