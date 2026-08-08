@@ -9,7 +9,7 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-43db88e84718";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-7037245218dd";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -34,12 +34,12 @@ const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
+let scanInFlight = false;
 
 applyOcrBackendFromQuery();
 initializeBackendSettings();
 initializeSideSelection();
 scanButton?.addEventListener("click", () => input?.click());
-input?.addEventListener("input", scanSelectedPhotos);
 input?.addEventListener("change", scanSelectedPhotos);
 reviewImage?.addEventListener("load", () => drawPhotoReview());
 reviewStage?.addEventListener("click", selectReviewSlotAtEvent);
@@ -53,10 +53,16 @@ copyButton?.addEventListener("click", async () => {
 });
 
 async function scanSelectedPhotos() {
+  if (scanInFlight) return;
   const files = [...(input?.files || [])];
   if (!files.length) return;
-  await scanPhotos(files);
-  if (input) input.value = "";
+  scanInFlight = true;
+  try {
+    await scanPhotos(files);
+  } finally {
+    scanInFlight = false;
+    if (input) input.value = "";
+  }
 }
 
 async function scanPhotos(files) {
