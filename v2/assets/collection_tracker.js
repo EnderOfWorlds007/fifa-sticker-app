@@ -20,23 +20,23 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-417468c79c7e";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-214bd1238b00";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-417468c79c7e";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-417468c79c7e";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-417468c79c7e";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-214bd1238b00";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-214bd1238b00";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-214bd1238b00";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-417468c79c7e";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-417468c79c7e";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-214bd1238b00";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-214bd1238b00";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -123,6 +123,7 @@ const missingCount = document.querySelector("#missingCount");
 const collectedCount = document.querySelector("#collectedCount");
 const teamCount = document.querySelector("#teamCount");
 const progressCount = document.querySelector("#progressCount");
+const availableTradeCount = document.querySelector("#availableTradeCount");
 const copyMissingButton = document.querySelector("#copyMissingButton");
 const gotCardsButton = document.querySelector("#gotCardsButton");
 const tradedAwayButton = document.querySelector("#tradedAwayButton");
@@ -453,6 +454,7 @@ function render() {
   collectedCount.textContent = String(summary.collectedCount);
   teamCount.textContent = String(summary.teamsRemainingCount);
   progressCount.textContent = `${summary.progressPercent}%`;
+  availableTradeCount.textContent = String(summary.availableToTradeCount);
   status.textContent = `${visible.length} cards shown from ${summary.catalogCount} cards in ${catalogSourceLabel}.`;
 
   filterButtons.forEach((button) => {
