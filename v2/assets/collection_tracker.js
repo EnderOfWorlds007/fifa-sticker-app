@@ -20,23 +20,23 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000002";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000003";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-960000000002";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000002";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000002";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-960000000003";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000003";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000003";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000002";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000002";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000003";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000003";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -137,8 +137,12 @@ const filterButtons = [...document.querySelectorAll("[data-filter]")];
 const parsedBatchPreview = document.querySelector("#parsedBatchPreview");
 const activityList = document.querySelector("#activityList");
 const backupButton = document.querySelector("#backupButton");
+const downloadBackupButton = document.querySelector("#downloadBackupButton");
+const importBackupButton = document.querySelector("#importBackupButton");
 const restoreButton = document.querySelector("#restoreButton");
+const startLocalButton = document.querySelector("#startLocalButton");
 const backupText = document.querySelector("#backupText");
+const backupFileInput = document.querySelector("#backupFileInput");
 const storagePersistenceStatus = document.querySelector("#storagePersistenceStatus");
 
 let state = loadState();
@@ -602,6 +606,11 @@ function transactionLabel(transaction) {
 }
 
 function createBackup() {
+  backupText.value = JSON.stringify(buildCurrentBackupPayload(), null, 2);
+  status.textContent = "Backup JSON created.";
+}
+
+function buildCurrentBackupPayload() {
   let storedInventorySnapshot = {};
   let inventoryCacheMeta = {};
   try {
@@ -619,15 +628,13 @@ function createBackup() {
     liveInventorySnapshot: inventorySnapshot,
     inventoryCacheMeta,
   });
-  const payload = buildBackupPayload({
+  return buildBackupPayload({
     collectionState: state,
     ledger: loadLedger(),
     inventorySnapshot: backupSource.inventorySnapshot,
     inventoryCacheMeta: backupSource.inventoryCacheMeta,
     catalog: collectionCatalog,
   });
-  backupText.value = JSON.stringify(payload, null, 2);
-  status.textContent = "Backup JSON created.";
 }
 
 function restoreBackup() {
@@ -656,6 +663,73 @@ function restoreBackup() {
     if (error?.message && failureMessage === DEFAULT_RESTORE_FAILURE_MESSAGE) failureMessage = error.message;
     status.textContent = failureMessage;
   }
+}
+
+function downloadBackup() {
+  const payload = buildCurrentBackupPayload();
+  const text = JSON.stringify(payload, null, 2);
+  backupText.value = text;
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `fifa-sticker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  status.textContent = "Backup JSON downloaded.";
+}
+
+function emptyLocalInventorySnapshot() {
+  const timestamp = new Date().toISOString();
+  return {
+    generated_at: timestamp,
+    updated_at: timestamp,
+    source: "local-only tracker",
+    cards: {},
+    stats: {
+      unique_code_count: 0,
+      matched_card_count: 0,
+    },
+  };
+}
+
+function chooseBackupFile() {
+  backupFileInput.value = "";
+  backupFileInput.click();
+}
+
+async function importBackupFile() {
+  const [file] = backupFileInput.files || [];
+  if (!file) return;
+  try {
+    backupText.value = await file.text();
+    restoreBackup();
+  } catch {
+    status.textContent = "That backup file could not be read.";
+  }
+}
+
+function startOwnTracker() {
+  if (!window.confirm("Start a local-only tracker on this phone? Current local marks and trade activity will be cleared.")) return;
+  state = { filter: "missing", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  inventorySnapshot = emptyLocalInventorySnapshot();
+  saveState();
+  saveLedger({ version: 1, transactions: [] });
+  localStorage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(inventorySnapshot));
+  localStorage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify({
+    cachedAt: inventorySnapshot.generated_at,
+    sourceLabel: "local-only tracker",
+  }));
+  localStorage.removeItem(TRADED_AWAY_KEY);
+  searchInput.value = "";
+  updateText.value = "";
+  backupText.value = "";
+  clearGotIgnoredNotice();
+  clearTradedAwayIgnoredNotice();
+  render();
+  status.textContent = "Started a local-only tracker on this phone. Create a JSON backup after important changes.";
 }
 
 async function renderStoragePersistenceStatus() {
@@ -692,7 +766,11 @@ addIgnoredGotButton.addEventListener("click", addIgnoredGotCards);
 addIgnoredTradedAwayButton.addEventListener("click", addIgnoredTradedAwayCards);
 updateText.addEventListener("input", renderParsedPreview);
 backupButton.addEventListener("click", createBackup);
+downloadBackupButton.addEventListener("click", downloadBackup);
+importBackupButton.addEventListener("click", chooseBackupFile);
 restoreButton.addEventListener("click", restoreBackup);
+startLocalButton.addEventListener("click", startOwnTracker);
+backupFileInput.addEventListener("change", importBackupFile);
 updateText.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") markGotCards();
 });
