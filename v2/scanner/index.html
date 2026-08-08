@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
   <title>Scan Stickers</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-eb043093e810">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-ac122bda6c93">
 </head>
 <body class="appShellBody">
   <main class="shell">
@@ -52,6 +52,22 @@
       <textarea id="photoScannerResult" rows="6" readonly placeholder="Recognized codes appear here."></textarea>
       <ol id="photoScannerCodes" class="tradeLookupResults"></ol>
     </section>
+
+    <section id="photoReviewPanel" class="photoReviewPanel" hidden>
+      <div class="photoReviewHeader">
+        <h2>Photo review</h2>
+        <span id="photoReviewSummary">No photo selected</span>
+      </div>
+      <div id="photoReviewStage" class="photoReviewStage">
+        <img id="photoReviewImage" alt="">
+        <canvas id="photoReviewOverlay"></canvas>
+      </div>
+      <div id="photoReviewQueue" class="photoReviewQueue" hidden>
+        <span id="photoReviewQueueText"></span>
+        <button id="photoReviewNext" class="secondary" type="button">Review uncertain</button>
+      </div>
+      <div id="photoReviewInspector" class="photoReviewInspector" hidden></div>
+    </section>
   </main>
 
   <nav class="phoneTabBar scannerTabBar" data-app-nav aria-label="Primary">
@@ -62,7 +78,7 @@
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/v2/assets/apps.js" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-eb043093e810" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-eb043093e810" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-ac122bda6c93" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-ac122bda6c93" type="module"></script>
 </body>
 </html>
