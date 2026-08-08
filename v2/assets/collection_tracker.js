@@ -20,23 +20,23 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000003";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000004";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-960000000003";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000003";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000003";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-960000000004";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000004";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000004";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000003";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000003";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000004";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000004";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -137,6 +137,7 @@ const filterButtons = [...document.querySelectorAll("[data-filter]")];
 const parsedBatchPreview = document.querySelector("#parsedBatchPreview");
 const activityList = document.querySelector("#activityList");
 const backupButton = document.querySelector("#backupButton");
+const shareBackupButton = document.querySelector("#shareBackupButton");
 const downloadBackupButton = document.querySelector("#downloadBackupButton");
 const importBackupButton = document.querySelector("#importBackupButton");
 const restoreButton = document.querySelector("#restoreButton");
@@ -666,19 +667,59 @@ function restoreBackup() {
 }
 
 function downloadBackup() {
-  const payload = buildCurrentBackupPayload();
-  const text = JSON.stringify(payload, null, 2);
+  const { text, fileName } = currentBackupFileParts();
   backupText.value = text;
   const blob = new Blob([text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `fifa-sticker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = fileName;
   document.body.append(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
   status.textContent = "Backup JSON downloaded.";
+}
+
+function currentBackupFileParts() {
+  const text = JSON.stringify(buildCurrentBackupPayload(), null, 2);
+  return {
+    text,
+    fileName: `fifa-sticker-backup-${new Date().toISOString().slice(0, 10)}.json`,
+  };
+}
+
+async function shareBackup() {
+  const { text, fileName } = currentBackupFileParts();
+  backupText.value = text;
+  const file = new File([text], fileName, { type: "application/json" });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({
+        title: "FIFA sticker backup",
+        text: "FIFA sticker tracker backup JSON.",
+        files: [file],
+      });
+      status.textContent = "Backup shared.";
+      return;
+    }
+    if (navigator.share) {
+      await navigator.share({
+        title: "FIFA sticker backup",
+        text,
+      });
+      status.textContent = "Backup shared as text.";
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    status.textContent = "Backup JSON copied. Paste it into a message or email.";
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      status.textContent = "Backup share cancelled.";
+      return;
+    }
+    status.textContent = "Sharing is not available here. Use Download JSON or copy the generated backup text.";
+  }
 }
 
 function emptyLocalInventorySnapshot() {
@@ -766,6 +807,7 @@ addIgnoredGotButton.addEventListener("click", addIgnoredGotCards);
 addIgnoredTradedAwayButton.addEventListener("click", addIgnoredTradedAwayCards);
 updateText.addEventListener("input", renderParsedPreview);
 backupButton.addEventListener("click", createBackup);
+shareBackupButton.addEventListener("click", shareBackup);
 downloadBackupButton.addEventListener("click", downloadBackup);
 importBackupButton.addEventListener("click", chooseBackupFile);
 restoreButton.addEventListener("click", restoreBackup);
