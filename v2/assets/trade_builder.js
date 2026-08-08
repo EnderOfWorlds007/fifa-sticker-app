@@ -20,6 +20,7 @@ import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_sourc
 import {
   loadInventoryPayload,
 } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-535591427b8d";
+import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-535591427b8d";
 import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-535591427b8d";
 
 const STARTING_MISSING = {
@@ -33,7 +34,6 @@ const STARTING_MISSING = {
   COD: [1, 2, 10, 15, 16, 20], UZB: [2], GHA: [16, 20], CRO: [13], ENG: [4, 13, 19], FWC: [1, 12], CC: [1, 3],
 };
 
-const COLLECTION_KEY = "panini.collectionTracker.v1";
 const TRADE_SEED_KEY = "panini.pendingTradeSeed.v1";
 
 mountTradePasteBox('[data-trade-paste-box="trade-builder"]', {
@@ -97,6 +97,7 @@ let activeTradeStatus = null;
 let pendingIgnoredGivenLines = [];
 let pendingIgnoredReceivedLines = [];
 let collectionCatalog = null;
+let collectionState = loadCollectionState();
 
 function loadTradeSeed() {
   const match = String(location.hash || "").match(/^#trade=(.+)$/);
@@ -340,8 +341,8 @@ async function addTradeSide(side) {
 }
 
 async function loadCatalogue() {
-  if (collectionCatalog) return collectionCatalog;
-  collectionCatalog = await loadCollectionCatalog();
+  if (!collectionCatalog) collectionCatalog = await loadCollectionCatalog();
+  collectionState = await ensureImportedCollectionState({ state: collectionState });
   return collectionCatalog;
 }
 
@@ -448,16 +449,9 @@ function mergeTradeLines(existing, additions) {
 }
 
 function missingCodes() {
-  let collected = [];
-  try {
-    const parsed = JSON.parse(localStorage.getItem(COLLECTION_KEY) || "{}");
-    collected = Array.isArray(parsed.collected) ? parsed.collected : [];
-  } catch {
-    collected = [];
-  }
   const catalog = collectionCatalog || Object.entries(STARTING_MISSING)
     .flatMap(([team, numbers]) => numbers.map((number) => ({ code: `${team}${number}`, team, name: "" })));
-  const model = deriveCollectionModel({ catalog, legacyCollected: collected, ledger: loadLedger(), inventory: inventorySnapshot || {} });
+  const model = deriveCollectionModel({ catalog, legacyCollected: loadLegacyCollected(), ledger: loadLedger(), inventory: inventorySnapshot || {} });
   const missing = new Set();
   for (const card of model.cards.filter((item) => item.missing)) {
     missing.add(card.code);
@@ -573,12 +567,8 @@ function adjustedInventoryOptions() {
 }
 
 function loadLegacyCollected() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(COLLECTION_KEY) || "{}");
-    return Array.isArray(parsed.collected) ? parsed.collected : [];
-  } catch {
-    return [];
-  }
+  collectionState = collectionState || loadCollectionState();
+  return Array.isArray(collectionState.collected) ? collectionState.collected : [];
 }
 
 function renderTradeIssues(issues) {

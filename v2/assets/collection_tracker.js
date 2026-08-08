@@ -30,6 +30,12 @@ import {
 } from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-535591427b8d";
 import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-535591427b8d";
 import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-535591427b8d";
+import {
+  COLLECTION_SNAPSHOT_IMPORT_VERSION,
+  importCollectionSnapshotState,
+  loadCollectionState,
+  saveCollectionState,
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-535591427b8d";
 import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-535591427b8d";
 
 const STARTING_MISSING = {
@@ -80,7 +86,6 @@ const STARTING_MISSING = {
   CC: [1, 3],
 };
 
-const STORAGE_KEY = "panini.collectionTracker.v1";
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 
 mountTradePasteBox('[data-trade-paste-box="collection-update"]', {
@@ -145,15 +150,7 @@ let collectionCatalog = { cards, aliases: {} };
 let catalogSourceLabel = "hunt list";
 
 function loadState() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    return {
-      filter: ["missing", "all", "collected"].includes(parsed.filter) ? parsed.filter : "missing",
-      collected: Array.isArray(parsed.collected) ? parsed.collected : [],
-    };
-  } catch {
-    return { filter: "missing", collected: [] };
-  }
+  return loadCollectionState();
 }
 
 function startingMissingCards() {
@@ -185,6 +182,11 @@ async function loadCatalogue() {
     collectionCatalog = payload;
     cards = payload.cards.map(decorateCatalogCard).sort((a, b) => sortCode(a.code, b.code));
     catalogSourceLabel = `physical catalogue (${cards.length})`;
+    try {
+      await applyImportedCollectionSnapshot();
+    } catch {
+      catalogSourceLabel = `physical catalogue (${cards.length})`;
+    }
     render();
   } catch {
     catalogSourceLabel = "hunt list fallback";
@@ -192,8 +194,22 @@ async function loadCatalogue() {
   }
 }
 
+async function applyImportedCollectionSnapshot() {
+  const result = await importCollectionSnapshotState({ state });
+  state = result.state;
+  const snapshotCards = Array.isArray(result.snapshot?.cards) ? result.snapshot.cards : [];
+  if (!snapshotCards.length) return;
+
+  collectionCatalog = {
+    ...(collectionCatalog || {}),
+    cards: snapshotCards.map(({ code, name, team }) => ({ code, name, team })),
+  };
+  cards = collectionCatalog.cards.map(decorateCatalogCard).sort((a, b) => sortCode(a.code, b.code));
+  catalogSourceLabel = `imported v1 collection snapshot (${cards.length})`;
+}
+
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  saveCollectionState(state);
 }
 
 function collectedSet() {
@@ -680,7 +696,7 @@ updateText.addEventListener("keydown", (event) => {
 });
 resetButton.addEventListener("click", () => {
   if (!window.confirm("Reset all collection marks from this tracker? Traded-away activity stays recorded.")) return;
-  state = { filter: "missing", collected: [] };
+  state = { filter: "missing", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
   const ledger = loadLedger();
   saveLedger({
     ...ledger,

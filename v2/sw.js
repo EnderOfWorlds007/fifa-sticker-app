@@ -17,6 +17,7 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/app.js",
   "/fifa-sticker-app/v2/assets/inventory.js",
   "/fifa-sticker-app/v2/assets/collection_tracker.js",
+  "/fifa-sticker-app/v2/assets/collection_state.js",
   "/fifa-sticker-app/v2/assets/backup_restore.js",
   "/fifa-sticker-app/v2/assets/compare.js",
   "/fifa-sticker-app/v2/assets/trade_builder.js",
@@ -33,6 +34,7 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
   "/fifa-sticker-app/v2/assets/pwa.js",
   "/fifa-sticker-app/v2/data/trade_inventory.json",
+  "/fifa-sticker-app/v2/data/collection_inventory.json",
   "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-535591427b8d",
   "/fifa-sticker-app/v2/manifest.webmanifest",
 ];

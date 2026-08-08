@@ -13,6 +13,7 @@ import {
 } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-535591427b8d";
 import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-535591427b8d";
 import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-535591427b8d";
+import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-535591427b8d";
 import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-535591427b8d";
 
 const STARTING_MISSING = {
@@ -63,7 +64,6 @@ const STARTING_MISSING = {
   CC: [1, 3],
 };
 
-const COLLECTION_KEY = "panini.collectionTracker.v1";
 const TRADE_SEED_KEY = "panini.pendingTradeSeed.v1";
 
 mountTradePasteBox('[data-trade-paste-box="compare"]', {
@@ -99,6 +99,7 @@ let lastInventoryPayload = null;
 let lastComparedText = "";
 let compareDirectionMode = "auto";
 let collectionCatalog = null;
+let collectionState = loadCollectionState();
 let compareRequestId = 0;
 
 async function compare(mode = "offers") {
@@ -130,10 +131,19 @@ async function compare(mode = "offers") {
     const giveResult = compareParsedCodes(direction.wants, adjusted, new Set());
     const needResult = compareParsedCodes(direction.offers, { cards: {} }, missing);
     const ambiguousResult = compareParsedCodes(directed.ambiguous, adjusted, missing);
-    const result = mergeCompareResults(giveResult, needResult, ambiguousResult, direction.hasResolvedDirection);
+    const result = annotateIncomingTradeRows(
+      mergeCompareResults(giveResult, needResult, ambiguousResult, direction.hasResolvedDirection),
+    );
     const mentionCount = [...extractCodeOccurrences(value).values()].reduce((sum, count) => sum + count, 0);
+    const incomingCount = incomingTradeMatchCount(result);
     updateDirectionChooser(direction);
-    summary.textContent = `${result.canGive.length} you can give · ${result.needFromThem.length} you need · ${mentionCount} mentions parsed · ${source.label}`;
+    summary.textContent = [
+      `${result.canGive.length} you can give`,
+      `${result.needFromThem.length} you need`,
+      incomingCount ? `${incomingCount} already incoming` : "",
+      `${mentionCount} mentions parsed`,
+      source.label,
+    ].filter(Boolean).join(" · ");
     canGiveResults.replaceChildren(...rows(result.canGive, "give"));
     needFromThemResults.replaceChildren(...rows(result.needFromThem, "need"));
     otherResults.replaceChildren(...rows(result.other, "other"));
@@ -215,20 +225,13 @@ async function loadInventory() {
 }
 
 async function loadCatalogue() {
-  if (collectionCatalog) return collectionCatalog;
-  collectionCatalog = await loadCollectionCatalog();
+  if (!collectionCatalog) collectionCatalog = await loadCollectionCatalog();
+  collectionState = await ensureImportedCollectionState({ state: collectionState });
   return collectionCatalog;
 }
 
 function missingCodes(catalog, inventory) {
-  let collected = [];
-  try {
-    const parsed = JSON.parse(localStorage.getItem(COLLECTION_KEY) || "{}");
-    collected = Array.isArray(parsed.collected) ? parsed.collected : [];
-  } catch {
-    collected = [];
-  }
-  const model = deriveCollectionModel({ catalog, legacyCollected: collected, ledger: loadLedger(), inventory });
+  const model = deriveCollectionModel({ catalog, legacyCollected: loadLegacyCollected(), ledger: loadLedger(), inventory });
   const missing = new Set();
   for (const card of model.cards.filter((item) => item.missing)) {
     missing.add(card.code);
@@ -238,12 +241,8 @@ function missingCodes(catalog, inventory) {
 }
 
 function loadLegacyCollected() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(COLLECTION_KEY) || "{}");
-    return Array.isArray(parsed.collected) ? parsed.collected : [];
-  } catch {
-    return [];
-  }
+  collectionState = collectionState || loadCollectionState();
+  return Array.isArray(collectionState.collected) ? collectionState.collected : [];
 }
 
 function rows(items, type) {
@@ -256,14 +255,65 @@ function rows(items, type) {
   return items.sort((a, b) => sortCode(a.code, b.code)).map((item) => {
     const row = document.createElement("li");
     row.className = type === "other" ? "missing" : "found";
-    const detail = type === "give"
-      ? `${item.available} available${item.mentions > 1 ? ` · mentioned ${item.mentions}x` : ""}`
-      : type === "need"
-        ? `Still missing${item.mentions > 1 ? ` · mentioned ${item.mentions}x` : ""}`
-        : `Parsed but not available or needed${item.mentions > 1 ? ` · mentioned ${item.mentions}x` : ""}`;
+    const detail = rowDetail(item, type);
     row.innerHTML = `<strong>${item.code}</strong><span>${detail}</span>`;
     return row;
   });
+}
+
+function rowDetail(item, type) {
+  const parts = [];
+  if (type === "give") parts.push(`${item.available} available`);
+  else if (type === "need") parts.push(item.incomingTradeQuantity ? "Still missing, but incoming" : "Still missing");
+  else parts.push(item.incomingTradeQuantity ? "Parsed; incoming in another trade" : "Parsed but not available or needed");
+  if (item.mentions > 1) parts.push(`mentioned ${item.mentions}x`);
+  if (item.incomingTradeQuantity) parts.push(incomingTradeDetail(item));
+  return parts.join(" · ");
+}
+
+function incomingTradeDetail(item) {
+  const statuses = Object.entries(item.incomingTradeStatuses || {})
+    .filter(([, quantity]) => Number(quantity || 0) > 0)
+    .map(([status, quantity]) => `${quantity} ${status}`);
+  return statuses.length
+    ? `incoming ${item.incomingTradeQuantity} (${statuses.join(", ")})`
+    : `incoming ${item.incomingTradeQuantity}`;
+}
+
+function annotateIncomingTradeRows(result) {
+  const incoming = pendingIncomingByCode();
+  const annotate = (rows) => rows.map((row) => {
+    const match = incoming.get(row.code);
+    return match ? { ...row, incomingTradeQuantity: match.quantity, incomingTradeStatuses: match.statuses } : row;
+  });
+  return {
+    canGive: annotate(result.canGive || []),
+    needFromThem: annotate(result.needFromThem || []),
+    other: annotate(result.other || []),
+  };
+}
+
+function incomingTradeMatchCount(result) {
+  return [...(result.canGive || []), ...(result.needFromThem || []), ...(result.other || [])]
+    .filter((row) => Number(row.incomingTradeQuantity || 0) > 0)
+    .length;
+}
+
+function pendingIncomingByCode() {
+  const incoming = new Map();
+  for (const transaction of transactionSummary(loadLedger())) {
+    if (transaction.kind !== "trade" || !["draft", "reserved"].includes(transaction.status)) continue;
+    for (const line of transaction.received || []) {
+      const code = String(line.code || "").toUpperCase();
+      if (!code) continue;
+      const current = incoming.get(code) || { quantity: 0, statuses: {} };
+      const quantity = Math.max(0, Number(line.quantity || 0));
+      current.quantity += quantity;
+      current.statuses[transaction.status] = (current.statuses[transaction.status] || 0) + quantity;
+      incoming.set(code, current);
+    }
+  }
+  return incoming;
 }
 
 function replyFor(result) {
@@ -366,7 +416,7 @@ function renderPendingTrades() {
     label.textContent = transactionLabel(transaction);
     const open = document.createElement("a");
     open.className = "buttonLike secondary";
-    open.href = `/fifa-sticker-app/v2/trade/#trade=${encodeURIComponent(transaction.id)}`;
+    open.href = `/trade/#trade=${encodeURIComponent(transaction.id)}`;
     open.textContent = "Open";
     row.append(status, label, open);
     return row;
