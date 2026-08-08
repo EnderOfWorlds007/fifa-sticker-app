@@ -15,13 +15,13 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000006";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000006";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000007";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000007";
 import {
   loadInventoryPayload,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000006";
-import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000006";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000006";
+} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000007";
+import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000007";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000007";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17], RSA: [6, 10], CZE: [5, 8, 13], CAN: [4, 16], BIH: [2, 3, 9, 14, 16],
