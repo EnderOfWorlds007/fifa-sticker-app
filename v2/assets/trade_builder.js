@@ -1,8 +1,5 @@
 import {
-  adjustedInventoryPayload,
   createTradeDraft,
-  deriveCollectionCodes,
-  deriveCollectionModel,
   extractCodeOccurrences,
   loadLedger,
   partitionOutgoingLinesByAvailability,
@@ -15,13 +12,12 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000007";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000007";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-08234414dd4d";
 import {
-  loadInventoryPayload,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000007";
-import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000007";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000007";
+  buildInventoryProjection,
+  loadInventoryProjection,
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-08234414dd4d";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-08234414dd4d";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17], RSA: [6, 10], CZE: [5, 8, 13], CAN: [4, 16], BIH: [2, 3, 9, 14, 16],
@@ -92,12 +88,11 @@ const completeTradeButton = document.querySelector("#completeTradeButton");
 const cancelTradeButton = document.querySelector("#cancelTradeButton");
 
 let inventorySnapshot = null;
+let inventoryProjection = null;
 let activeTradeId = null;
 let activeTradeStatus = null;
 let pendingIgnoredGivenLines = [];
 let pendingIgnoredReceivedLines = [];
-let collectionCatalog = null;
-let collectionState = loadCollectionState();
 
 function loadTradeSeed() {
   const match = String(location.hash || "").match(/^#trade=(.+)$/);
@@ -133,9 +128,33 @@ function loadTradeSeed() {
 }
 
 async function loadInventory() {
-  if (inventorySnapshot) return inventorySnapshot;
-  inventorySnapshot = (await loadInventoryPayload()).payload;
+  inventoryProjection = await loadInventoryProjection({
+    inventoryPayload: inventorySnapshot || undefined,
+    inventorySource: inventorySnapshot ? { label: "trade seed inventory" } : undefined,
+    excludeTransactionId: activeTradeId,
+  });
+  inventorySnapshot = inventoryProjection.inventoryPayload;
   return inventorySnapshot;
+}
+
+function currentInventoryProjection() {
+  return buildInventoryProjection({
+    catalog: inventoryProjection?.catalog || fallbackCatalog(),
+    collectionState: inventoryProjection?.collectionState || { collected: [] },
+    ledger: loadLedger(),
+    inventoryPayload: inventorySnapshot || {},
+    inventorySource: inventoryProjection?.inventorySource || { label: inventorySnapshot ? "trade seed inventory" : "unloaded inventory" },
+    inventoryCacheMeta: inventoryProjection?.inventoryCacheMeta || {},
+    excludeTransactionId: activeTradeId,
+  });
+}
+
+function fallbackCatalog() {
+  return {
+    cards: Object.entries(STARTING_MISSING)
+      .flatMap(([team, numbers]) => numbers.map((number) => ({ code: `${team}${number}`, team, name: "" }))),
+    aliases: {},
+  };
 }
 
 function renderSeed(seed) {
@@ -286,7 +305,7 @@ function updateTradeControls() {
   if (inventorySnapshot) {
     const issues = tradeAvailabilityIssues(
       given,
-      adjustedInventoryPayload(inventorySnapshot || {}, loadLedger(), adjustedInventoryOptions()),
+      currentInventoryProjection().adjustedInventory,
     );
     renderTradeIssues(issues);
     updateTradeReadiness(issues);
@@ -303,7 +322,6 @@ async function addTradeSide(side) {
     return;
   }
   await loadInventory();
-  await loadCatalogue();
   let additions = side === "given" ? parsedGivenLines(occurrences) : parsedReceivedLines(occurrences);
   if (side === "given") {
     const split = splitGivenLines(additions, currentTradeLines("given"));
@@ -340,14 +358,8 @@ async function addTradeSide(side) {
       : "Added incoming cards. Review the balance, then keep adding or save.";
 }
 
-async function loadCatalogue() {
-  if (!collectionCatalog) collectionCatalog = await loadCollectionCatalog();
-  collectionState = await ensureImportedCollectionState({ state: collectionState });
-  return collectionCatalog;
-}
-
 function parsedGivenLines(occurrences) {
-  const adjusted = adjustedInventoryPayload(inventorySnapshot || {}, loadLedger(), adjustedInventoryOptions());
+  const adjusted = currentInventoryProjection().adjustedInventory;
   const cards = adjusted.cards || {};
   return [...occurrences.entries()].map(([code, mentions]) => {
     const available = Number(cards[code]?.count || 0);
@@ -369,7 +381,7 @@ function parsedReceivedLines(occurrences) {
 }
 
 function splitGivenLines(lines, existing = []) {
-  const adjusted = adjustedInventoryPayload(inventorySnapshot || {}, loadLedger(), adjustedInventoryOptions());
+  const adjusted = currentInventoryProjection().adjustedInventory;
   return partitionOutgoingLinesByAvailability({ additions: lines, existing, inventory: adjusted });
 }
 
@@ -449,9 +461,7 @@ function mergeTradeLines(existing, additions) {
 }
 
 function missingCodes() {
-  const catalog = collectionCatalog || Object.entries(STARTING_MISSING)
-    .flatMap(([team, numbers]) => numbers.map((number) => ({ code: `${team}${number}`, team, name: "" })));
-  const model = deriveCollectionModel({ catalog, legacyCollected: loadLegacyCollected(), ledger: loadLedger(), inventory: inventorySnapshot || {} });
+  const model = currentInventoryProjection().collectionModel;
   const missing = new Set();
   for (const card of model.cards.filter((item) => item.missing)) {
     missing.add(card.code);
@@ -551,24 +561,10 @@ async function transitionActiveTrade(nextStatus) {
 
 async function validateOutgoingBasket() {
   await loadInventory();
-  await loadCatalogue();
-  const adjusted = adjustedInventoryPayload(inventorySnapshot || {}, loadLedger(), adjustedInventoryOptions());
+  const adjusted = currentInventoryProjection().adjustedInventory;
   const issues = tradeAvailabilityIssues(currentTradeLines("given"), adjusted);
   renderTradeIssues(issues);
   return issues;
-}
-
-function adjustedInventoryOptions() {
-  return {
-    excludeTransactionId: activeTradeId,
-    catalog: collectionCatalog,
-    legacyCollected: loadLegacyCollected(),
-  };
-}
-
-function loadLegacyCollected() {
-  collectionState = collectionState || loadCollectionState();
-  return Array.isArray(collectionState.collected) ? collectionState.collected : [];
 }
 
 function renderTradeIssues(issues) {
@@ -661,12 +657,9 @@ cancelTradeButton.addEventListener("click", () => transitionActiveTrade("cancell
 async function initializeTradeBuilder() {
   const seed = loadTradeSeed();
   inventorySnapshot = seed.inventorySnapshot || inventorySnapshot;
-  const [inventoryResult, catalogResult] = await Promise.allSettled([
-    loadInventory(),
-    loadCatalogue(),
-  ]);
+  const [inventoryResult] = await Promise.allSettled([loadInventory()]);
   renderSeed(seed);
-  if (inventoryResult.status === "rejected" || catalogResult.status === "rejected") {
+  if (inventoryResult.status === "rejected") {
     status.textContent = activeTradeId
       ? "Trade loaded. Inventory is still unavailable, so availability checks will run when inventory loads."
       : "Trade screen ready. Inventory is still unavailable, so availability checks will run when inventory loads.";

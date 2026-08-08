@@ -1,18 +1,8 @@
 import {
   adjustedInventoryCsv,
-  adjustedInventoryPayload,
-  deriveCollectionModel,
   inventoryFreshnessSummary,
-  loadLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000007";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000007";
-import {
-  loadCachedInventoryPayload,
-  loadInventoryCacheMeta,
-  loadInventoryPayload,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000007";
-
-const COLLECTION_KEY = "panini.collectionTracker.v1";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-08234414dd4d";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-08234414dd4d";
 
 const totalCards = document.querySelector("#inventoryTotalCards");
 const uniqueCodes = document.querySelector("#inventoryUniqueCodes");
@@ -46,20 +36,12 @@ function sortCode(a, b) {
 
 async function loadInventory() {
   try {
-    const { payload, source } = await loadInventoryPayload();
-    const catalog = await loadInventoryCatalog();
-    const ledger = loadLedger();
-    const collectionState = loadCollectionState();
-    const adjustedPayload = adjustedInventoryPayload(payload, ledger, { catalog, legacyCollected: collectionState.collected });
-    collectionModel = deriveCollectionModel({
-      catalog,
-      legacyCollected: collectionState.collected,
-      ledger,
-      inventory: payload,
-    });
+    const projection = await loadInventoryProjection();
+    const adjustedPayload = projection.adjustedInventory;
+    collectionModel = projection.collectionModel;
     adjustedInventorySnapshot = adjustedPayload;
-    inventorySourceLabel = source.label;
-    inventoryCacheMeta = loadInventoryCacheMeta();
+    inventorySourceLabel = projection.inventorySource?.label || "inventory";
+    inventoryCacheMeta = projection.inventoryCacheMeta;
     const stats = adjustedPayload.stats ?? {};
     inventoryCards = Object.values(adjustedPayload.cards ?? {}).sort(sortCode);
     const total = stats.matched_card_count ?? inventoryCards.reduce((sum, card) => sum + Number(card.count || 0), 0);
@@ -70,20 +52,6 @@ async function loadInventory() {
     renderInventoryFreshness(adjustedPayload, inventoryCacheMeta);
     render();
   } catch {
-    adjustedInventorySnapshot = await loadLocalInventoryPayload();
-    inventoryCards = Object.values(adjustedInventorySnapshot?.cards ?? {}).sort(sortCode);
-    inventorySourceLabel = "browser cache";
-    inventoryCacheMeta = loadInventoryCacheMeta();
-    renderInventoryFreshness(adjustedInventorySnapshot || {}, inventoryCacheMeta);
-    if (inventoryCards.length) {
-      totalCards.textContent = String(inventoryCards.reduce((sum, card) => sum + Number(card.count || 0), 0));
-      uniqueCodes.textContent = String(inventoryCards.length);
-      photoCount.textContent = "0";
-      sessionCount.textContent = "0";
-      status.textContent = "Showing locally cached inventory from this browser.";
-      render();
-      return;
-    }
     status.textContent = "Saved inventory is unavailable.";
     list.replaceChildren();
   }
@@ -93,21 +61,6 @@ function renderInventoryFreshness(payload, cacheMeta) {
   const summary = inventoryFreshnessSummary({ sourceLabel: inventorySourceLabel, payload, cacheMeta });
   inventoryFreshness.querySelector("strong").textContent = summary.title;
   inventoryFreshness.querySelector("span").textContent = summary.detail;
-}
-
-async function loadLocalInventoryPayload() {
-  const payload = loadCachedInventoryPayload();
-  if (!payload) return null;
-  const catalog = await loadInventoryCatalog();
-  const ledger = loadLedger();
-  const collectionState = loadCollectionState();
-  collectionModel = deriveCollectionModel({
-    catalog,
-    legacyCollected: collectionState.collected,
-    ledger,
-    inventory: payload,
-  });
-  return adjustedInventoryPayload(payload, ledger, { catalog, legacyCollected: collectionState.collected });
 }
 
 function downloadAdjustedInventory() {
@@ -144,25 +97,6 @@ function render() {
     `;
     return item;
   }));
-}
-
-async function loadInventoryCatalog() {
-  try {
-    return await loadCollectionCatalog();
-  } catch {
-    return { cards: [], aliases: {} };
-  }
-}
-
-function loadCollectionState() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(COLLECTION_KEY) || "{}");
-    return {
-      collected: Array.isArray(parsed.collected) ? parsed.collected : [],
-    };
-  } catch {
-    return { collected: [] };
-  }
 }
 
 function inventoryCardDetail(card, captures) {

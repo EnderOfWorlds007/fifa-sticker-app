@@ -1,5 +1,5 @@
-const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-960000000007";
-const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-960000000007$/, "");
+const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-08234414dd4d";
+const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-08234414dd4d$/, "");
 const APP_SHELL = [
   "/fifa-sticker-app/v2/",
   "/fifa-sticker-app/v2/apps/",
@@ -17,10 +17,10 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/app.js",
   "/fifa-sticker-app/v2/assets/inventory.js",
   "/fifa-sticker-app/v2/assets/collection_tracker.js",
-  "/fifa-sticker-app/v2/assets/collection_state.js",
   "/fifa-sticker-app/v2/assets/backup_restore.js",
   "/fifa-sticker-app/v2/assets/compare.js",
   "/fifa-sticker-app/v2/assets/trade_builder.js",
+  "/fifa-sticker-app/v2/assets/inventory_projection.js",
   "/fifa-sticker-app/v2/assets/inventory_source.js",
   "/fifa-sticker-app/v2/assets/catalog_source.js",
   "/fifa-sticker-app/v2/assets/ocr_backend.js",
@@ -34,8 +34,7 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
   "/fifa-sticker-app/v2/assets/pwa.js",
   "/fifa-sticker-app/v2/data/trade_inventory.json",
-  "/fifa-sticker-app/v2/data/collection_inventory.json",
-  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-960000000007",
+  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-08234414dd4d",
   "/fifa-sticker-app/v2/manifest.webmanifest",
 ];
 

@@ -1,11 +1,9 @@
 import {
-  adjustedInventoryPayload,
   assignOutgoingVariants,
   buildBackupPayload,
   cancelTransaction,
   createTransaction,
   deriveCollectionCodes,
-  deriveCollectionModel,
   deriveCollectionSummary,
   extractCodeOccurrences as sharedExtractCodeOccurrences,
   INVENTORY_CACHE_META_KEY,
@@ -20,23 +18,26 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-4e65a6fe806d";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-08234414dd4d";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-4e65a6fe806d";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-4e65a6fe806d";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-4e65a6fe806d";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-08234414dd4d";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-08234414dd4d";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-4e65a6fe806d";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-4e65a6fe806d";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-08234414dd4d";
+import {
+  buildInventoryProjection,
+  loadInventoryProjection,
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-08234414dd4d";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-08234414dd4d";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -151,6 +152,7 @@ let state = loadState();
 let pendingIgnoredGotLines = [];
 let pendingIgnoredTradedAwayLines = [];
 let inventorySnapshot = null;
+let inventoryProjection = null;
 let cards = startingMissingCards();
 let collectionCatalog = { cards, aliases: {} };
 let catalogSourceLabel = "hunt list";
@@ -194,6 +196,7 @@ async function loadCatalogue() {
       catalogSourceLabel = `physical catalogue (${cards.length})`;
     }
     render();
+    loadSharedInventoryProjection();
   } catch {
     catalogSourceLabel = "hunt list fallback";
     status.textContent = "Full catalogue unavailable. Showing the local hunt list fallback.";
@@ -278,11 +281,8 @@ function splitReceivedLines(lines) {
 }
 
 async function loadAdjustedInventoryForOutgoing() {
-  if (!inventorySnapshot) inventorySnapshot = (await loadInventoryPayload()).payload;
-  return adjustedInventoryPayload(inventorySnapshot || {}, loadLedger(), {
-    catalog: collectionCatalog,
-    legacyCollected: state.collected,
-  });
+  const projection = await ensureInventoryProjection();
+  return projection.adjustedInventory;
 }
 
 async function splitTradedAwayLines(lines) {
@@ -428,12 +428,40 @@ function visibleCards() {
 }
 
 function currentCollectionModel() {
-  return deriveCollectionModel({
+  return currentInventoryProjection().collectionModel;
+}
+
+function currentInventoryProjection() {
+  return buildInventoryProjection({
     catalog: collectionCatalog,
-    legacyCollected: state.collected,
+    collectionState: state,
     ledger: loadLedger(),
-    inventory: inventorySnapshot || {},
+    inventoryPayload: inventorySnapshot || {},
+    inventorySource: inventoryProjection?.inventorySource || { label: inventorySnapshot ? "browser cache" : "unloaded inventory" },
+    inventoryCacheMeta: inventoryProjection?.inventoryCacheMeta || {},
   });
+}
+
+async function ensureInventoryProjection() {
+  if (!inventoryProjection) await loadSharedInventoryProjection();
+  return currentInventoryProjection();
+}
+
+async function loadSharedInventoryProjection() {
+  try {
+    const projection = await loadInventoryProjection({
+      catalog: collectionCatalog,
+      collectionState: state,
+    });
+    inventoryProjection = projection;
+    inventorySnapshot = projection.inventoryPayload;
+    state = projection.collectionState;
+    saveState();
+    render();
+  } catch {
+    inventoryProjection = currentInventoryProjection();
+  }
+  return inventoryProjection;
 }
 
 function groupedByTeam(items) {
@@ -675,8 +703,10 @@ function restoreBackup() {
     }
     state = restoreResult.collectionState;
     inventorySnapshot = restoreResult.inventorySnapshot;
+    inventoryProjection = null;
     try {
       render();
+      loadSharedInventoryProjection();
       status.textContent = "Backup restored on this phone.";
     } catch {
       status.textContent = RESTORE_RENDER_FAILURE_MESSAGE;
@@ -777,6 +807,7 @@ function startOwnTracker() {
   if (!window.confirm("Start a local-only tracker on this phone? Current local marks and trade activity will be cleared.")) return;
   state = { filter: "missing", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
   inventorySnapshot = emptyLocalInventorySnapshot();
+  inventoryProjection = null;
   saveState();
   saveLedger({ version: 1, transactions: [] });
   localStorage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(inventorySnapshot));
@@ -851,7 +882,9 @@ resetButton.addEventListener("click", () => {
   });
   saveState();
   searchInput.value = "";
+  inventoryProjection = null;
   render();
+  loadSharedInventoryProjection();
 });
 
 render();
