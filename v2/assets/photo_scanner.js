@@ -9,7 +9,15 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-7037245218dd";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-5d967922a1d0";
+import {
+  createTransaction,
+  deriveCollectionCodes,
+  loadLedger,
+  saveLedger,
+  sortCode,
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5d967922a1d0";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-5d967922a1d0";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -18,6 +26,9 @@ const copyButton = document.querySelector("#photoScannerCopyButton");
 const status = document.querySelector("#photoScannerStatus");
 const result = document.querySelector("#photoScannerResult");
 const codesList = document.querySelector("#photoScannerCodes");
+const collectionActions = document.querySelector("#photoCollectionActions");
+const collectionSummary = document.querySelector("#photoCollectionSummary");
+const addCollectionButton = document.querySelector("#photoAddCollectionButton");
 const reviewPanel = document.querySelector("#photoReviewPanel");
 const reviewSummary = document.querySelector("#photoReviewSummary");
 const reviewStage = document.querySelector("#photoReviewStage");
@@ -28,12 +39,16 @@ const reviewInspector = document.querySelector("#photoReviewInspector");
 const reviewQueue = document.querySelector("#photoReviewQueue");
 const reviewQueueText = document.querySelector("#photoReviewQueueText");
 const reviewNextButton = document.querySelector("#photoReviewNext");
+const reviewAllCorrectButton = document.querySelector("#photoReviewAllCorrect");
+const toast = document.querySelector("#photoScannerToast");
 const backendUrlInput = document.querySelector("[data-ocr-backend-url]");
 const backendTokenInput = document.querySelector("[data-ocr-backend-token]");
 const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
+let latestScanCodes = [];
+let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
 let scanInFlight = false;
 
 applyOcrBackendFromQuery();
@@ -45,11 +60,18 @@ reviewImage?.addEventListener("load", () => drawPhotoReview());
 reviewStage?.addEventListener("click", selectReviewSlotAtEvent);
 reviewInspector?.addEventListener("submit", saveInspectorCode);
 reviewNextButton?.addEventListener("click", selectNextReviewSlot);
+reviewAllCorrectButton?.addEventListener("click", saveAllReviewSlotsCorrect);
+addCollectionButton?.addEventListener("click", addScanToCollection);
 window.addEventListener("resize", () => drawPhotoReview());
 copyButton?.addEventListener("click", async () => {
-  if (!result.value) return;
-  await navigator.clipboard?.writeText(result.value);
+  const text = copyTextForCodes(latestScanCodes);
+  if (!text) return;
+  await navigator.clipboard?.writeText(text);
   status.textContent = "Codes copied.";
+  const originalText = copyButton.textContent;
+  copyButton.textContent = "Copied";
+  showToast("Codes copied.");
+  window.setTimeout(() => { copyButton.textContent = originalText || "Copy codes"; }, 1600);
 });
 
 async function scanSelectedPhotos() {
@@ -77,6 +99,9 @@ async function scanPhotos(files) {
   scanButton.disabled = true;
   copyButton.disabled = true;
   result.value = "";
+  latestScanCodes = [];
+  latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
+  renderCollectionActions();
   codesList.replaceChildren(emptyRow("Scanning..."));
   scanButton.classList.add("scanning");
   scanButton.setAttribute("aria-busy", "true");
@@ -120,10 +145,9 @@ function setScanProgress(message) {
 
 function renderResults(payloads, options = {}) {
   const codes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
-  const text = payloads
-    .map((payload) => String(payload?.grouped_text || (Array.isArray(payload?.codes) ? payload.codes.join(", ") : "")).trim())
-    .filter(Boolean)
-    .join("\n");
+  latestScanCodes = normalizeCodeList(codes);
+  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  const text = copyTextForCodes(latestScanCodes);
   result.value = text;
   copyButton.disabled = !text;
   const failedCount = Math.max(0, Number(options.requestedCount || payloads.length) - payloads.length);
@@ -133,7 +157,8 @@ function renderResults(payloads, options = {}) {
     : options.lastError instanceof Error
       ? options.lastError.message
       : "No cards recognized in those photos.";
-  codesList.replaceChildren(...(codes.length ? codes.map(codeRow) : [emptyRow("No recognized codes.")]));
+  renderCollectionActions();
+  codesList.replaceChildren(...(latestScanCodes.length ? latestScanCodes.map(codeRow) : [emptyRow("No recognized codes.")]));
   renderPhotoReview(payloads[0] || null);
 }
 
@@ -173,6 +198,7 @@ function normalizeReviewSlots(slots, payload = {}) {
       id: String(slot.id || `slot-${index + 1}`),
       code: String(slot.code || "").toUpperCase(),
       original_code: String(slot.code || "").toUpperCase(),
+      code_candidates: normalizedCodeCandidates(slot),
       upload_id: String(payload?.upload_id || payload?.ocr?.upload_id || ""),
       job_id: String(payload?.job_id || ""),
       requested_side: String(payload?.ocr?.side || side?.value || photoOcrSide()),
@@ -273,6 +299,18 @@ function renderInspector() {
   const form = document.createElement("form");
   form.className = "photoReviewInspectorForm";
   form.dataset.slotId = slot.id;
+  const choices = document.createElement("div");
+  choices.className = "photoReviewChoices";
+  for (const candidate of slot.code_candidates) {
+    const choice = document.createElement("button");
+    choice.type = "button";
+    choice.textContent = candidate.code;
+    choice.addEventListener("click", () => {
+      const field = form.elements.code;
+      if (field) field.value = candidate.code;
+    });
+    choices.append(choice);
+  }
   const input = document.createElement("input");
   input.name = "code";
   input.placeholder = "BEL19";
@@ -284,7 +322,9 @@ function renderInspector() {
   save.textContent = "Set";
   const meta = document.createElement("p");
   meta.textContent = `${slotStatus(slot)} · ${formatConfidence(slot.confidence)} · ${slot.geometry_status || "geometry unknown"}`;
-  reviewInspector.replaceChildren(inspectorTitle(slot.code || "Unknown card"), meta, form);
+  reviewInspector.replaceChildren(inspectorTitle(slot.code || "Unknown card"), meta);
+  if (choices.childElementCount) reviewInspector.append(choices);
+  reviewInspector.append(form);
   form.append(input, save);
 }
 
@@ -310,8 +350,10 @@ async function saveInspectorCode(event) {
     renderInspector();
     drawPhotoReview();
     status.textContent = slot.code ? `Saved correction ${slot.code}.` : "Saved unreadable card review.";
+    showToast(slot.code ? `Saved ${slot.code}.` : "Saved unreadable card.");
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : "Review save failed.";
+    showToast(status.textContent);
   } finally {
     if (saveButton) {
       saveButton.disabled = false;
@@ -338,28 +380,100 @@ async function persistReviewLabel(slot, correctedCode) {
   });
 }
 
-function updateResultFromReviewSlots() {
-  const codes = photoReviewState.slots.filter((slot) => slot.code && slotStatus(slot) === "matched").map((slot) => slot.code);
-  result.value = groupCodes(codes);
-  copyButton.disabled = !result.value;
-  codesList.replaceChildren(...(codes.length ? codes.map(codeRow) : [emptyRow("No recognized codes.")]));
+async function saveAllReviewSlotsCorrect() {
+  const slots = photoReviewState.slots.filter((slot) => slot.code);
+  if (!slots.length) return;
+  if (reviewAllCorrectButton) {
+    reviewAllCorrectButton.disabled = true;
+    reviewAllCorrectButton.textContent = "Saving...";
+  }
+  try {
+    for (const slot of slots) {
+      if (slot.saved_review && slot.review_status === "matched") continue;
+      await persistReviewLabel(slot, slot.code);
+      slot.review_status = "matched";
+      slot.needs_user_help = false;
+      slot.saved_review = true;
+    }
+    updateResultFromReviewSlots();
+    renderReviewQueue();
+    renderInspector();
+    drawPhotoReview();
+    status.textContent = `Saved ${slots.length} correct card${slots.length === 1 ? "" : "s"}.`;
+    showToast("All cards marked correct.");
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "Could not save all cards.";
+    showToast(status.textContent);
+  } finally {
+    if (reviewAllCorrectButton) {
+      reviewAllCorrectButton.textContent = "All correct";
+      reviewAllCorrectButton.disabled = !photoReviewState.slots.some((slot) => slot.code);
+    }
+  }
 }
 
-function groupCodes(codes) {
-  const groups = new Map();
-  for (const code of codes) {
-    const match = String(code).match(/^([A-Z]{2,4})(\d+[A-Z]?)$/);
-    const key = match ? match[1] : "Cards";
-    const value = match ? match[2] : code;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(value);
+function updateResultFromReviewSlots() {
+  const codes = photoReviewState.slots.filter((slot) => slot.code && slotStatus(slot) === "matched").map((slot) => slot.code);
+  latestScanCodes = normalizeCodeList(codes);
+  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  result.value = copyTextForCodes(latestScanCodes);
+  copyButton.disabled = !result.value;
+  renderCollectionActions();
+  codesList.replaceChildren(...(latestScanCodes.length ? latestScanCodes.map(codeRow) : [emptyRow("No recognized codes.")]));
+}
+
+function normalizeCodeList(codes) {
+  return codes.map((code) => String(code || "").trim().toUpperCase()).filter(Boolean);
+}
+
+function copyTextForCodes(codes) {
+  return normalizeCodeList(codes).join("\n");
+}
+
+function splitCollectionCodes(codes) {
+  const owned = deriveCollectionCodes(loadCollectionState().collected, loadLedger());
+  const newCodes = [];
+  const inventoryCodes = [];
+  for (const code of normalizeCodeList(codes)) {
+    if (owned.has(code) || newCodes.includes(code)) inventoryCodes.push(code);
+    else newCodes.push(code);
   }
-  return [...groups.entries()].map(([team, values]) => `${team}: ${values.join(", ")}`).join("\n");
+  return { newCodes: newCodes.sort(sortCode), inventoryCodes: inventoryCodes.sort(sortCode) };
+}
+
+function renderCollectionActions() {
+  if (!collectionActions || !collectionSummary || !addCollectionButton) return;
+  const total = latestScanCodes.length;
+  if (!total) {
+    collectionActions.hidden = true;
+    addCollectionButton.disabled = true;
+    collectionSummary.textContent = "";
+    return;
+  }
+  const newCount = latestCollectionSplit.newCodes.length;
+  const inventoryCount = latestCollectionSplit.inventoryCodes.length;
+  collectionActions.hidden = false;
+  addCollectionButton.disabled = false;
+  collectionSummary.textContent = `${newCount} new for album · ${inventoryCount} already owned / inventory`;
+}
+
+function addScanToCollection() {
+  const codes = normalizeCodeList(latestScanCodes);
+  if (!codes.length) return;
+  const quantities = new Map();
+  for (const code of codes) quantities.set(code, (quantities.get(code) || 0) + 1);
+  const received = [...quantities.entries()].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => sortCode(a.code, b.code));
+  saveLedger(createTransaction(loadLedger(), { kind: "received", received, given: [] }));
+  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  renderCollectionActions();
+  status.textContent = `Added ${codes.length} scanned card${codes.length === 1 ? "" : "s"} to collection activity.`;
+  showToast("Scan added to collection.");
 }
 
 function renderReviewQueue() {
   const reviewSlots = photoReviewState.slots.filter((slot) => slotNeedsReview(slot));
   if (!reviewQueue || !reviewQueueText || !reviewNextButton) return;
+  if (reviewAllCorrectButton) reviewAllCorrectButton.disabled = !photoReviewState.slots.some((slot) => slot.code);
   reviewQueue.hidden = reviewSlots.length === 0;
   reviewQueueText.textContent = `${reviewSlots.length} uncertain match${reviewSlots.length === 1 ? "" : "es"} to review`;
   reviewNextButton.disabled = reviewSlots.length === 0;
@@ -394,6 +508,37 @@ function formatConfidence(value) {
   return value ? `${Math.round(value * 100)}% confidence` : "confidence unknown";
 }
 
+function normalizedCodeCandidates(slot) {
+  const rawCandidates = [
+    slot.code,
+    ...(slot.code_candidates || []),
+    ...(slot.candidates || []),
+    ...(slot.alternatives || []),
+    ...(slot.ocr_candidates || []),
+  ];
+  const seen = new Set();
+  return rawCandidates
+    .map((candidate) => typeof candidate === "string" ? { code: candidate } : candidate)
+    .map((candidate) => ({
+      code: String(candidate?.code || candidate?.label || candidate?.text || "").trim().toUpperCase(),
+      score: Number(candidate?.score ?? candidate?.confidence ?? 0),
+    }))
+    .filter((candidate) => {
+      if (!candidate.code || seen.has(candidate.code)) return false;
+      seen.add(candidate.code);
+      return true;
+    })
+    .slice(0, 6);
+}
+
+function showToast(message) {
+  if (!toast) return;
+  toast.textContent = message;
+  toast.hidden = false;
+  window.clearTimeout(showToast.timeout);
+  showToast.timeout = window.setTimeout(() => { toast.hidden = true; }, 2200);
+}
+
 function inspectorTitle(text) {
   const node = document.createElement("strong");
   node.textContent = text;
@@ -420,8 +565,9 @@ function pointInPolygon(point, polygon) {
 
 function codeRow(code) {
   const row = document.createElement("li");
-  row.className = "found";
-  row.innerHTML = `<strong>${code}</strong><span>Recognized</span>`;
+  const isNew = latestCollectionSplit.newCodes.includes(code);
+  row.className = isNew ? "found newForAlbum" : "found inventoryDuplicate";
+  row.innerHTML = `<strong>${code}</strong><span>${isNew ? "New for album" : "Already owned / inventory"}</span>`;
   return row;
 }
 

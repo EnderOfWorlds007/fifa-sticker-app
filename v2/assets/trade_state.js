@@ -1111,10 +1111,19 @@ function normalizeCardCode(value) {
 }
 
 function normalizedParserText(value) {
-  return String(value || "")
+  return decodePossiblyEncodedText(String(value || ""))
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase();
+}
+
+function decodePossiblyEncodedText(value) {
+  if (!/%[0-9A-Fa-f]{2}/.test(value)) return value;
+  try {
+    return decodeURIComponent(value.replace(/\+/g, "%20"));
+  } catch {
+    return value;
+  }
 }
 
 function collectVoiceCodeOccurrences(value) {

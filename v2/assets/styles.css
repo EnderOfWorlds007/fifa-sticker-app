@@ -835,6 +835,39 @@
   font-size: 13px;
 }
 
+.photoReviewHeader div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photoReviewHeader button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.photoCollectionActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(0, 194, 168, 0.36);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(0, 194, 168, 0.08);
+}
+
+.photoCollectionActions[hidden] {
+  display: none;
+}
+
+.photoCollectionActions span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .photoReviewStage {
   position: relative;
   min-height: 320px;
@@ -902,6 +935,43 @@
   text-transform: uppercase;
 }
 
+.photoReviewChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.photoReviewChoices button {
+  min-height: 34px;
+  border: 1px solid rgba(0, 194, 168, 0.48);
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: rgba(0, 194, 168, 0.12);
+  color: var(--text);
+  font-weight: 850;
+}
+
+.photoScannerToast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  z-index: 20;
+  transform: translateX(-50%);
+  width: min(92vw, 420px);
+  border: 1px solid rgba(0, 194, 168, 0.58);
+  border-radius: 8px;
+  padding: 11px 14px;
+  background: rgba(11, 17, 20, 0.96);
+  color: var(--text);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  text-align: center;
+  font-weight: 850;
+}
+
+.photoScannerToast[hidden] {
+  display: none;
+}
+
 @keyframes photoScanSpin {
   to {
     transform: rotate(360deg);
@@ -948,6 +1018,15 @@
 
 .tradeLookupResults li.missing {
   border-left-color: #d16666;
+}
+
+.tradeLookupResults li.newForAlbum {
+  border-color: rgba(0, 194, 168, 0.65);
+  background: rgba(0, 194, 168, 0.12);
+}
+
+.tradeLookupResults li.inventoryDuplicate {
+  border-color: rgba(125, 138, 148, 0.38);
 }
 
 .tradeLookupResults span {
