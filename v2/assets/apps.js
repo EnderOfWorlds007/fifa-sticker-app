@@ -1,9 +1,3 @@
-const config = window.PANINI_CONFIG || {};
-const recognitionBaseUrl = String(config.recognitionBaseUrl || "").replace(/\/$/, "");
-const scannerLinks = document.querySelectorAll("[data-scan-link]");
-
-if (recognitionBaseUrl) {
-  for (const scannerLink of scannerLinks) {
-    scannerLink.href = `${recognitionBaseUrl}/scanner`;
-  }
-}
+// Scan links stay on the static v2 app. The configured recognition backend is
+// only used by OCR API calls from the scanner page.
+export {};
