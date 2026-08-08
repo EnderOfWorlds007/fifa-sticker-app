@@ -2,7 +2,8 @@ import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-535
 
 export const COLLECTION_KEY = "panini.collectionTracker.v1";
 export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-535591427b8d";
-export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 1;
+export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 2;
+const PUBLIC_V1_COLLECTION_KEY = "panini.collectionTracker.v2";
 
 export function loadCollectionState(storage = globalThis.localStorage) {
   try {
@@ -37,9 +38,10 @@ export async function importCollectionSnapshotState({
       .filter((card) => card?.owned)
       .map((card) => String(card.code || "").toUpperCase())
       .filter(Boolean);
+    const publicV1Collected = loadPublicV1Collected(storage);
     nextState = {
       ...nextState,
-      collected: [...new Set([...nextState.collected, ...importedOwned])].sort(sortCode),
+      collected: [...new Set([...nextState.collected, ...importedOwned, ...publicV1Collected])].sort(sortCode),
       hasLocalState: true,
       importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION,
     };
@@ -56,6 +58,17 @@ export async function ensureImportedCollectionState(options = {}) {
     return result.state;
   } catch {
     return options.state || loadCollectionState(options.storage);
+  }
+}
+
+function loadPublicV1Collected(storage) {
+  try {
+    const parsed = JSON.parse(storage.getItem(PUBLIC_V1_COLLECTION_KEY) || "{}");
+    return Array.isArray(parsed.collected)
+      ? parsed.collected.map((code) => String(code || "").trim().replace(/[\s_-]/g, "").toUpperCase()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
   }
 }
 
