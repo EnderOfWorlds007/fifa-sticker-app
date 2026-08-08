@@ -6,8 +6,9 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
+  scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-960000000007";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-eb043093e810";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -25,21 +26,25 @@ const backendStatus = document.querySelector("[data-ocr-backend-status]");
 applyOcrBackendFromQuery();
 initializeBackendSettings();
 initializeSideSelection();
-scanButton?.addEventListener("click", () => scanPhoto());
-input?.addEventListener("change", () => {
-  if (input.files?.[0]) scanPhoto();
-});
+scanButton?.addEventListener("click", () => input?.click());
+input?.addEventListener("input", scanSelectedPhotos);
+input?.addEventListener("change", scanSelectedPhotos);
 copyButton?.addEventListener("click", async () => {
   if (!result.value) return;
   await navigator.clipboard?.writeText(result.value);
   status.textContent = "Codes copied.";
 });
 
-async function scanPhoto() {
-  const file = input?.files?.[0];
-  if (!file) {
-    status.textContent = "Choose a photo first. The picker should open now.";
-    input?.click();
+async function scanSelectedPhotos() {
+  const files = [...(input?.files || [])];
+  if (!files.length) return;
+  await scanPhotos(files);
+  if (input) input.value = "";
+}
+
+async function scanPhotos(files) {
+  if (scannerMode() !== "back-card") {
+    status.textContent = "This scanner route is not configured for card backs.";
     return;
   }
   if (!recognitionBaseUrl()) {
@@ -50,29 +55,56 @@ async function scanPhoto() {
   copyButton.disabled = true;
   result.value = "";
   codesList.replaceChildren(emptyRow("Scanning..."));
-  status.textContent = "Uploading photo...";
+  scanButton.classList.add("scanning");
+  scanButton.setAttribute("aria-busy", "true");
+  const selected = [...files];
+  const recognizedPayloads = [];
+  let lastError = null;
   try {
-    const job = await createPhotoCodeJob(file, { side: side.value || photoOcrSide() });
-    const payload = await waitForPhotoCodeJob(job.job_id, {
-      onStatus: (message) => { status.textContent = message; },
-    });
-    renderResult(payload.result || payload);
+    for (let index = 0; index < selected.length; index += 1) {
+      setScanProgress(`Scanning... ${index + 1}/${selected.length}`);
+      try {
+        const job = await createPhotoCodeJob(selected[index], { side: side.value || photoOcrSide() });
+        const payload = await waitForPhotoCodeJob(job.job_id, {
+          onStatus: (message) => { setScanProgress(message); },
+        });
+        recognizedPayloads.push(payload.result || payload);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    renderResults(recognizedPayloads, { requestedCount: selected.length, lastError });
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
     codesList.replaceChildren(emptyRow("No result."));
   } finally {
     scanButton.disabled = false;
+    scanButton.classList.remove("scanning");
+    scanButton.setAttribute("aria-busy", "false");
+    scanButton.textContent = "Use Photos";
   }
 }
 
-function renderResult(payload) {
-  const codes = Array.isArray(payload?.codes) ? payload.codes : [];
-  const text = String(payload?.grouped_text || codes.join(", "));
+function setScanProgress(message) {
+  scanButton.textContent = message;
+  status.textContent = message;
+}
+
+function renderResults(payloads, options = {}) {
+  const codes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
+  const text = payloads
+    .map((payload) => String(payload?.grouped_text || (Array.isArray(payload?.codes) ? payload.codes.join(", ") : "")).trim())
+    .filter(Boolean)
+    .join("\n");
   result.value = text;
   copyButton.disabled = !text;
+  const failedCount = Math.max(0, Number(options.requestedCount || payloads.length) - payloads.length);
+  const failureText = failedCount ? ` ${failedCount} photo${failedCount === 1 ? "" : "s"} could not be read.` : "";
   status.textContent = codes.length
-    ? `${codes.length} cards recognized.`
-    : "No cards recognized in that photo.";
+    ? `${codes.length} cards recognized.${failureText}`
+    : options.lastError instanceof Error
+      ? options.lastError.message
+      : "No cards recognized in those photos.";
   codesList.replaceChildren(...(codes.length ? codes.map(codeRow) : [emptyRow("No recognized codes.")]));
 }
 
@@ -101,6 +133,9 @@ function initializeBackendSettings() {
 function initializeSideSelection() {
   if (!side) return;
   side.value = photoOcrSide();
+  if (scannerMode() === "back-card") {
+    side.dataset.configuredMode = "back-card";
+  }
 }
 
 function saveBackendSettings() {
@@ -127,6 +162,11 @@ async function testBackend() {
     const payload = await response.json();
     const auth = payload.ocr_auth_required ? "token required" : "no token required";
     const sideText = payload.expected_side || photoOcrSide();
+    const selectedSide = side?.value || photoOcrSide();
+    if (payload.expected_side && payload.expected_side !== selectedSide) {
+      updateBackendStatus(`Backend is ${payload.expected_side} OCR, but this page is set to ${selectedSide}.`, { mirror: true });
+      return;
+    }
     updateBackendStatus(`Backend ready: ${sideText} OCR, ${auth}.`, { mirror: true });
   } catch {
     updateBackendStatus("Could not reach that backend.", { mirror: true });

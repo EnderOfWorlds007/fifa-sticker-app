@@ -60,6 +60,11 @@ export function photoOcrSide() {
   return configured === "front" ? "front" : "back";
 }
 
+export function scannerMode() {
+  const configured = String(config.scannerMode || "back-card").trim().toLowerCase();
+  return configured === "album-pages" ? "album-pages" : "back-card";
+}
+
 export function ocrToken() {
   return String(persistedValue(OCR_TOKEN_KEY) || "");
 }
