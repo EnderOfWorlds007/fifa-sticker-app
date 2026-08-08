@@ -547,7 +547,6 @@ function openProcessingDebug() {
       const card = document.createElement("article");
       const heading = document.createElement("div");
       const title = document.createElement("h2");
-      const outcome = document.createElement("p");
       const serializedOutcome = typeof step.outcome === "string" ? step.outcome : JSON.stringify(step.outcome || {}, null, 2);
       title.textContent = `${String(index + 1).padStart(2, "0")} ${step.title || "Step"}`;
       heading.className = "albumDebugStepHeader";
@@ -559,7 +558,6 @@ function openProcessingDebug() {
         copyButton.addEventListener("click", () => copyProcessingText(copyButton, serializedOutcome));
         heading.append(copyButton);
       }
-      outcome.textContent = serializedOutcome;
       card.append(heading);
       if (step.kind === "image" && step.url) {
         const image = document.createElement("img");
@@ -575,18 +573,35 @@ function openProcessingDebug() {
             image.replaceWith(error);
           });
         card.append(image);
-        card.append(outcome);
+        if (serializedOutcome) card.append(collapsedProcessingText(serializedOutcome, "Show details"));
       } else if (step.kind === "json") {
         const pre = document.createElement("pre");
         pre.textContent = serializedOutcome;
-        card.append(pre);
-      } else {
+        const details = collapsedProcessingText("", "Show JSON");
+        details.append(pre);
+        card.append(details);
+      } else if (serializedOutcome) {
+        const outcome = document.createElement("p");
+        outcome.textContent = serializedOutcome;
         card.append(outcome);
       }
       return card;
     }),
   );
   debugPanel.hidden = false;
+}
+
+function collapsedProcessingText(text, label) {
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = label;
+  details.append(summary);
+  if (text) {
+    const outcome = document.createElement("p");
+    outcome.textContent = text;
+    details.append(outcome);
+  }
+  return details;
 }
 
 async function copyProcessingText(button, text) {
