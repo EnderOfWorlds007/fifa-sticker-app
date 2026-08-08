@@ -469,6 +469,7 @@ export function deriveCollectionModel({ catalog, legacyCollected, ledger, invent
   const completedReceived = completedReceivedTotals(ledger, aliases);
   const completedGiven = completedGivenTotals(ledger, aliases);
   const reservedGiven = reservedGivenTotals(ledger, aliases);
+  const looseReceived = completedLooseReceivedAdjustments(ledger, aliases, legacyCollected);
   for (const code of Array.isArray(legacyCollected) ? legacyCollected : []) {
     const normalized = canonicalCardCode(code, aliases);
     if (normalized) ownership.set(normalized, Math.max(1, ownership.get(normalized) || 0));
@@ -482,6 +483,8 @@ export function deriveCollectionModel({ catalog, legacyCollected, ledger, invent
     const reserved = reservedGiven.get(card.code) || 0;
     const completedOut = completedGiven.get(card.code) || 0;
     const inventoryCount = inventoryCounts.get(card.code) || 0;
+    const looseReceivedCount = looseReceived.get(card.code)?.total || 0;
+    const tradeStock = inventoryCount + looseReceivedCount;
     const collection = {
       targetQuantity: 1,
       acquiredQuantity: owned,
@@ -494,11 +497,12 @@ export function deriveCollectionModel({ catalog, legacyCollected, ledger, invent
     };
     const inventoryModel = {
       scannerBaselineQuantity: inventoryCount,
+      looseReceivedQuantity: looseReceivedCount,
       completedGivenQuantity: completedOut,
       reservedQuantity: reserved,
-      onHandQuantity: Math.max(0, inventoryCount - completedOut),
-      availableToTradeQuantity: Math.max(0, inventoryCount - completedOut - reserved),
-      overdrawQuantity: Math.max(0, completedOut + reserved - inventoryCount),
+      onHandQuantity: Math.max(0, tradeStock - completedOut),
+      availableToTradeQuantity: Math.max(0, tradeStock - completedOut - reserved),
+      overdrawQuantity: Math.max(0, completedOut + reserved - tradeStock),
     };
     byCode[card.code] = {
       ...card,
