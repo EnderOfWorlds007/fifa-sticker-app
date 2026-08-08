@@ -1,8 +1,8 @@
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-535591427b8d";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000001";
 
 export const COLLECTION_KEY = "panini.collectionTracker.v1";
-export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-535591427b8d";
-export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 2;
+export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-960000000001";
+export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 3;
 const PUBLIC_V1_COLLECTION_KEY = "panini.collectionTracker.v2";
 
 export function loadCollectionState(storage = globalThis.localStorage) {
