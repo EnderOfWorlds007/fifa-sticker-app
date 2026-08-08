@@ -6,9 +6,10 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
+  savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-ac122bda6c93";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-43db88e84718";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -86,7 +87,10 @@ async function scanPhotos(files) {
         const payload = await waitForPhotoCodeJob(job.job_id, {
           onStatus: (message) => { setScanProgress(message); },
         });
-        recognizedPayloads.push(payload.result || payload);
+        const resultPayload = payload.result || payload;
+        resultPayload.upload_id ||= payload.upload_id || job.upload_id || "";
+        resultPayload.job_id ||= payload.job_id || job.job_id || "";
+        recognizedPayloads.push(resultPayload);
       } catch (error) {
         lastError = error;
       }
@@ -140,7 +144,7 @@ function showPhotoReviewImage(imageUrl) {
 
 function renderPhotoReview(payload) {
   const overview = payload?.overview_map || payload?.overview?.map || payload?.scanner_overview || null;
-  const slots = normalizeReviewSlots(overview?.slots || payload?.slots || []);
+  const slots = normalizeReviewSlots(overview?.slots || payload?.slots || [], payload);
   photoReviewState.slots = slots;
   const firstReviewSlot = slots.find((slot) => slotNeedsReview(slot));
   photoReviewState.selectedSlotId = firstReviewSlot?.id || slots[0]?.id || "";
@@ -156,12 +160,16 @@ function renderPhotoReview(payload) {
   drawPhotoReview();
 }
 
-function normalizeReviewSlots(slots) {
+function normalizeReviewSlots(slots, payload = {}) {
   return slots
     .map((slot, index) => ({
       ...slot,
       id: String(slot.id || `slot-${index + 1}`),
       code: String(slot.code || "").toUpperCase(),
+      original_code: String(slot.code || "").toUpperCase(),
+      upload_id: String(payload?.upload_id || payload?.ocr?.upload_id || ""),
+      job_id: String(payload?.job_id || ""),
+      requested_side: String(payload?.ocr?.side || side?.value || photoOcrSide()),
       confidence: Number(slot.confidence ?? slot.best_score ?? 0),
       normalized_polygon: normalizedPolygon(slot.normalized_polygon || slot.polygon),
       normalized_code_anchor_box: normalizedPolygon(slot.normalized_code_anchor_box),
@@ -274,18 +282,54 @@ function renderInspector() {
   form.append(input, save);
 }
 
-function saveInspectorCode(event) {
+async function saveInspectorCode(event) {
   event.preventDefault();
   const slot = selectedSlot();
   const input = event.target?.elements?.code;
   if (!slot || !input) return;
-  slot.code = String(input.value || "").trim().toUpperCase();
-  slot.review_status = slot.code ? "matched" : "unreadable";
-  slot.needs_user_help = !slot.code;
-  updateResultFromReviewSlots();
-  renderReviewQueue();
-  renderInspector();
-  drawPhotoReview();
+  const correctedCode = String(input.value || "").trim().toUpperCase();
+  const saveButton = event.target.querySelector("button[type='submit']");
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+  }
+  try {
+    await persistReviewLabel(slot, correctedCode);
+    slot.code = correctedCode;
+    slot.review_status = slot.code ? "matched" : "unreadable";
+    slot.needs_user_help = !slot.code;
+    slot.saved_review = true;
+    updateResultFromReviewSlots();
+    renderReviewQueue();
+    renderInspector();
+    drawPhotoReview();
+    status.textContent = slot.code ? `Saved correction ${slot.code}.` : "Saved unreadable card review.";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "Review save failed.";
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = "Set";
+    }
+  }
+}
+
+async function persistReviewLabel(slot, correctedCode) {
+  if (!slot.upload_id) throw new Error("Review cannot be saved because this scan has no upload id.");
+  await savePhotoCodeReviewLabel({
+    upload_id: slot.upload_id,
+    job_id: slot.job_id || "",
+    slot_id: slot.id,
+    decision: correctedCode ? "set_code" : "unreadable",
+    corrected_code: correctedCode,
+    original_code: slot.original_code || "",
+    requested_side: slot.requested_side || side?.value || photoOcrSide(),
+    confidence: slot.confidence || null,
+    review_status: slotStatus(slot),
+    geometry_status: slot.geometry_status || "",
+    normalized_polygon: slot.normalized_polygon || [],
+    normalized_code_anchor_box: slot.normalized_code_anchor_box || [],
+  });
 }
 
 function updateResultFromReviewSlots() {
