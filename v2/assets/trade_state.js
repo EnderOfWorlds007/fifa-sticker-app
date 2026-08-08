@@ -193,10 +193,10 @@ export function extractCodeOccurrences(value) {
     add(match[1], match[2], match[3], match[4]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /^\s*([A-Z]{2,3})\s*:\s*([1-9][0-9S\s,;/&+().X-]*)/gm;
+  const groupedPattern = /(?:^|[\n,;:])\s*([A-Z]{2,3})\s*:\s*([1-9][0-9S\s,/&+().X-]*)(?=$|[\n;])/gm;
   const groupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
   for (const match of upper.matchAll(groupedPattern)) {
-    const start = match.index;
+    const start = match.index + match[0].indexOf(match[1]);
     if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
     for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3]);
   }
@@ -225,7 +225,7 @@ export function extractDirectedCodeOccurrences(value) {
       continue;
     }
     const direction = explicitDirection !== "ambiguous" ? explicitDirection : carryDirection || "ambiguous";
-    carryDirection = explicitDirection !== "ambiguous" ? explicitDirection : null;
+    if (explicitDirection !== "ambiguous") carryDirection = explicitDirection;
     const target = direction === "want" ? wants : direction === "offer" ? offers : ambiguous;
     for (const [code, quantity] of occurrences.entries()) {
       target.set(code, (target.get(code) || 0) + quantity);

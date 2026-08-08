@@ -10,11 +10,11 @@ import {
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000005";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000005";
-import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000005";
-import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000005";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000005";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-960000000006";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-960000000006";
+import { loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-960000000006";
+import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-960000000006";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000006";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -73,11 +73,14 @@ mountTradePasteBox('[data-trade-paste-box="compare"]', {
   autofocus: true,
   placeholder: "Example: I need ENG13 and can offer MEX7, CZE 5, FRA-19.",
   capabilities: { photo: true, voice: true },
+  onClear: () => {
+    summary.textContent = "Paste a list, then choose how to compare it.";
+    clearResults();
+  },
 });
 
 const text = document.querySelector("#compareText");
 const buildTradeButton = document.querySelector("#buildTradeButton");
-const clearButton = document.querySelector("#clearCompareButton");
 const summary = document.querySelector("#compareSummary");
 const tradeBuildHint = document.querySelector("#tradeBuildHint");
 const compareDirectionHint = document.querySelector("#compareDirectionHint");
@@ -128,9 +131,9 @@ async function compare(mode = "offers") {
     const missing = missingCodes(catalog, payload);
     const directed = extractDirectedCodeOccurrences(value);
     const direction = resolveCompareDirection(directed, compareDirectionMode);
-    const giveResult = compareParsedCodes(direction.wants, adjusted, new Set());
-    const needResult = compareParsedCodes(direction.offers, { cards: {} }, missing);
-    const ambiguousResult = compareParsedCodes(directed.ambiguous, adjusted, missing);
+    const giveResult = withOtherReason(compareParsedCodes(direction.wants, adjusted, new Set()), "notAvailable");
+    const needResult = withOtherReason(compareParsedCodes(direction.offers, { cards: {} }, missing), "notNeeded");
+    const ambiguousResult = withOtherReason(compareParsedCodes(directed.ambiguous, adjusted, missing), "notUseful");
     const result = annotateIncomingTradeRows(
       mergeCompareResults(giveResult, needResult, ambiguousResult, direction.hasResolvedDirection),
     );
@@ -265,10 +268,24 @@ function rowDetail(item, type) {
   const parts = [];
   if (type === "give") parts.push(`${item.available} available`);
   else if (type === "need") parts.push(item.incomingTradeQuantity ? "Still missing, but incoming" : "Still missing");
-  else parts.push(item.incomingTradeQuantity ? "Parsed; incoming in another trade" : "Parsed but not available or needed");
+  else parts.push(otherRowDetail(item));
   if (item.mentions > 1) parts.push(`mentioned ${item.mentions}x`);
   if (item.incomingTradeQuantity) parts.push(incomingTradeDetail(item));
   return parts.join(" · ");
+}
+
+function otherRowDetail(item) {
+  if (item.incomingTradeQuantity) return "Incoming in another trade";
+  if (item.otherReason === "notNeeded") return "They offer it, but you do not need it";
+  if (item.otherReason === "notAvailable") return "They need it, but you have no tradeable copy";
+  return "Parsed, but it is not needed or available to trade";
+}
+
+function withOtherReason(result, reason) {
+  return {
+    ...result,
+    other: (result.other || []).map((row) => ({ ...row, otherReason: reason })),
+  };
 }
 
 function incomingTradeDetail(item) {
@@ -382,7 +399,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-960000000005");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-960000000006");
 }
 
 function reservedQuantity(code) {
@@ -429,12 +446,6 @@ function transactionLabel(transaction) {
   return `Receive ${received}, give ${given}`;
 }
 
-clearButton.addEventListener("click", () => {
-  text.value = "";
-  summary.textContent = "Paste a list, then choose how to compare it.";
-  clearResults();
-  text.focus();
-});
 ambiguousAsWantsButton.addEventListener("click", () => {
   compare("wants");
 });
