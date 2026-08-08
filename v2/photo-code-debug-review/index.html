@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Code Deep Dive</title>
+  <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-1">
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body.debugReviewBody {
+      margin: 0;
+      background: #07100f;
+      color: #f4f7f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .debugShell {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 100dvh;
+    }
+    .debugTop {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(7, 16, 15, 0.94);
+      position: sticky;
+      top: 0;
+      z-index: 4;
+    }
+    .debugTitleRow,
+    .debugControls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+    .debugMeta {
+      margin: 3px 0 0;
+      color: #9aa4b2;
+      font-size: 13px;
+    }
+    select,
+    input,
+    button {
+      min-height: 42px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 8px;
+      background: #172026;
+      color: #f8fafc;
+      font: inherit;
+      font-weight: 700;
+    }
+    select,
+    input {
+      min-width: 0;
+      padding: 0 10px;
+    }
+    button {
+      padding: 0 14px;
+    }
+    .debugToken {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+    .debugToken[hidden],
+    #changeToken[hidden] {
+      display: none;
+    }
+    .debugToken input {
+      width: 100%;
+    }
+    .debugMain {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 240px 400px;
+      min-height: 0;
+    }
+    .debugStageWrap {
+      position: relative;
+      min-height: 0;
+      background: #020706;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: calc(100dvh - 134px);
+      touch-action: manipulation;
+    }
+    .debugLoading {
+      position: absolute;
+      inset: 16px;
+      display: grid;
+      place-items: center;
+      color: #cbd5e1;
+      pointer-events: none;
+      font-weight: 800;
+    }
+    .debugPanel {
+      border-left: 1px solid rgba(148, 163, 184, 0.28);
+      background: #0d1519;
+      overflow: auto;
+      max-height: calc(100dvh - 134px);
+      padding: 14px;
+    }
+    .slotList {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+      background: #091211;
+      max-height: calc(100dvh - 134px);
+      overflow: auto;
+    }
+    .slotListButton {
+      display: grid;
+      gap: 3px;
+      min-height: 54px;
+      padding: 8px;
+      text-align: left;
+      border-color: rgba(148, 163, 184, 0.24);
+    }
+    .slotListButton.selected {
+      border-color: #5eead4;
+      box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.4);
+    }
+    .slotListButton span {
+      font-size: 15px;
+      font-weight: 900;
+    }
+    .slotListButton small {
+      color: #9aa4b2;
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .debugPanel h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+    .debugSummary {
+      margin: 0 0 12px;
+      color: #cbd5e1;
+      line-height: 1.35;
+    }
+    .debugBadges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 14px;
+    }
+    .debugBadge {
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 999px;
+      padding: 5px 8px;
+      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.72);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .debugChecks {
+      display: grid;
+      gap: 8px;
+    }
+    .debugSections {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .debugSection {
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 8px;
+      padding: 10px;
+      background: rgba(2, 6, 23, 0.5);
+    }
+    .debugSection h3 {
+      margin: 0 0 8px;
+      color: #e5e7eb;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+    .debugSection dl {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+    }
+    .debugSection dl div {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+    .debugSection dt {
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .debugSection dd {
+      margin: 0;
+      color: #dbeafe;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .debugCheck {
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 8px;
+      padding: 9px;
+      background: rgba(15, 23, 42, 0.54);
+    }
+    .debugCheck strong {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .debugCheck p {
+      margin: 0;
+      color: #a8b3c1;
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .state-pass { color: #34d399; }
+    .state-warn { color: #fbbf24; }
+    .state-fail { color: #fb7185; }
+    .state-info { color: #93c5fd; }
+    details {
+      margin-top: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 8px;
+      padding: 10px;
+      background: rgba(15, 23, 42, 0.54);
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 800;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    @media (max-width: 860px) {
+      .debugMain {
+        grid-template-columns: 1fr;
+      }
+      .debugControls {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .debugPanel {
+        border-left: 0;
+        border-top: 1px solid rgba(148, 163, 184, 0.28);
+        max-height: none;
+      }
+      .slotList {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        max-height: none;
+      }
+      canvas {
+        height: 58dvh;
+      }
+    }
+  </style>
+</head>
+<body class="debugReviewBody">
+  <main class="debugShell">
+    <header class="debugTop">
+      <div class="debugTitleRow">
+        <div>
+          <h1>Photo Code Deep Dive</h1>
+          <p id="debugStatus" class="debugMeta">Loading latest upload...</p>
+        </div>
+        <a href="/fifa-sticker-app/v2/apps/" class="pillReviewLink">Apps</a>
+      </div>
+      <div id="tokenPanel" class="debugToken" hidden>
+        <input id="tokenInput" type="password" autocomplete="off" placeholder="Access token">
+        <button id="saveToken" type="button">Load</button>
+      </div>
+      <div class="debugControls">
+        <select id="uploadSelect" aria-label="Photo upload"></select>
+        <button id="reloadButton" type="button">Reload</button>
+        <button id="changeToken" type="button" hidden>Change token</button>
+      </div>
+    </header>
+
+    <section class="debugMain">
+      <div class="debugStageWrap">
+        <canvas id="photoCanvas"></canvas>
+        <div id="loadingState" class="debugLoading">No photo loaded</div>
+      </div>
+      <nav id="slotList" class="slotList" aria-label="Detected cards"></nav>
+      <aside id="slotPanel" class="debugPanel">
+        <h2>No card selected</h2>
+        <p class="debugSummary">Tap an overlay to inspect how the card status and geometry were calculated.</p>
+      </aside>
+    </section>
+  </main>
+  <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-1" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-1" type="module"></script>
+</body>
+</html>
