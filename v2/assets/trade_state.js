@@ -1239,11 +1239,18 @@ function normalizeCatalogCards(catalog) {
   for (const row of rows) {
     const code = normalizeCardCode(row?.code);
     if (!code || byCode.has(code)) continue;
+    const match = code.match(/^([A-Z]+)(\d+)(S)?$/);
+    const team = String(row?.team || "").trim() || (match ? match[1] : "Other");
+    const name = String(row?.name || "").trim();
+    const number = String(row?.number || "").trim() || (code === "00" ? "00" : match ? `${Number(match[2])}${match[3] || ""}` : code);
+    const label = String(row?.label || "").trim() || [code, name].filter(Boolean).join(" · ");
     byCode.set(code, {
       ...row,
       code,
-      team: String(row?.team || "").trim(),
-      name: String(row?.name || "").trim(),
+      team,
+      name,
+      number,
+      label,
     });
   }
   return [...byCode.values()].sort((a, b) => sortCode(a.code, b.code));
