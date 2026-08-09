@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-3";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-4";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -283,9 +283,6 @@ function renderPanel(slot) {
     <div class="debugChecks">
       ${(debug.checks || []).map(renderCheck).join("")}
     </div>
-    <div class="debugSnapshots">
-      ${SNAPSHOTS.map(renderSnapshotShell).join("")}
-    </div>
     <div class="debugSections">
       ${sections.map(renderDebugSection).join("")}
     </div>
@@ -305,10 +302,10 @@ function renderPanel(slot) {
   requestAnimationFrame(() => drawSnapshots(slot));
 }
 
-function renderSnapshotShell(snapshot) {
+function renderSnapshotShell(snapshot, { embedded = false } = {}) {
   return `
-    <section class="debugSnapshot">
-      <h3>${escapeHtml(snapshot.title)}</h3>
+    <section class="debugSnapshot${embedded ? " embedded" : ""}">
+      ${embedded ? "" : `<h3>${escapeHtml(snapshot.title)}</h3>`}
       <canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>
       <p>${escapeHtml(snapshot.description)}</p>
     </section>
@@ -443,6 +440,7 @@ function debugSections(slot) {
   return [
     {
       title: "Identity",
+      snapshot: "full",
       rows: [
         ["Code", slot.code],
         ["Name", slot.name],
@@ -457,6 +455,7 @@ function debugSections(slot) {
     },
     {
       title: "Pill / Text Anchor",
+      snapshot: "pill",
       rows: [
         ["Rotation", formatRotation(slot.code_anchor_rotation)],
         ["Direction source", slot.code_anchor_source],
@@ -469,6 +468,7 @@ function debugSections(slot) {
     },
     {
       title: "Card Geometry",
+      snapshot: "card",
       rows: [
         ["Geometry status", slot.geometry_status],
         ["Resolved", yesNo(slot.geometry_resolved)],
@@ -478,6 +478,7 @@ function debugSections(slot) {
     },
     {
       title: "Visual Support",
+      snapshot: "orientation",
       rows: [
         ["Back insignia", slot.back_insignia_type],
         ["Insignia confidence", formatNumber(slot.back_insignia_confidence)],
@@ -495,6 +496,7 @@ function renderDebugSection(section) {
   return `
     <section class="debugSection">
       <h3>${escapeHtml(section.title)}</h3>
+      ${section.snapshot ? renderSnapshotShell(snapshotById(section.snapshot), { embedded: true }) : ""}
       <dl>
         ${section.rows.map(([label, value]) => `
           <div>
@@ -505,6 +507,10 @@ function renderDebugSection(section) {
       </dl>
     </section>
   `;
+}
+
+function snapshotById(id) {
+  return SNAPSHOTS.find((snapshot) => snapshot.id === id) || SNAPSHOTS[0];
 }
 
 function renderCheck(check) {
