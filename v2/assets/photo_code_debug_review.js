@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-2";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-3";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
