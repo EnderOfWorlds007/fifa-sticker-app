@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-12";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-13";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -46,6 +46,11 @@ const SNAPSHOTS = [
     id: "orientation",
     title: "04 Orientation / Anchors",
     description: "Card-zone view annotated with rotation source, expected top-right check, and geometry state.",
+  },
+  {
+    id: "landmarks",
+    title: "05 Physical Landmarks",
+    description: "Card-zone view annotated with the four physical anchors: code text, FIFA header, legal copy, and Panini box.",
   },
 ];
 
@@ -359,6 +364,9 @@ function drawSnapshot(canvasEl, slot, kind) {
   if (hasOcrTextBox(slot)) {
     drawSnapshotPolygon(snapshotCtx, slot.normalized_code_text_box, transform, "#60a5fa", 2.5, [4, 4]);
   }
+  if (kind === "landmarks") {
+    drawPhysicalLandmarkPoints(snapshotCtx, slot, transform);
+  }
 
   if (kind === "orientation") {
     drawSnapshotLabel(snapshotCtx, [
@@ -371,6 +379,12 @@ function drawSnapshot(canvasEl, slot, kind) {
       `${slot.code || slot.id || "card"} pill/OCR`,
       `rotation ${formatRotation(slot.code_anchor_rotation)} · source ${displayValue(slot.code_anchor_source)}`,
     ]);
+  } else if (kind === "landmarks") {
+    const landmarkDebug = slot.back_landmark_debug || {};
+    drawSnapshotLabel(snapshotCtx, [
+      `${slot.code || slot.id || "card"} physical landmarks`,
+      `${landmarkDebug.ran ? "ran" : "skipped"} · ${displayValue(landmarkDebug.reason)}`,
+    ]);
   } else {
     drawSnapshotLabel(snapshotCtx, [
       `${slot.code || slot.id || "card"} · ${displayValue(slot.review_status)} · ${displayValue(slot.geometry_status)}`,
@@ -381,6 +395,16 @@ function drawSnapshot(canvasEl, slot, kind) {
 
 function snapshotCrop(slot, kind) {
   if (kind === "full") return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
+  if (kind === "landmarks") {
+    const landmarkPoints = (slot.back_landmark_debug?.landmarks || [])
+      .flatMap((item) => [item.expected_normalized_point, item.observed_normalized_point])
+      .filter((point) => Array.isArray(point) && point.length === 2);
+    return paddedSourceBounds([
+      ...(slot.normalized_polygon || []),
+      ...(slot.normalized_code_anchor_box || []),
+      ...landmarkPoints,
+    ], 0.24);
+  }
   const points = kind === "pill"
     ? [
         ...(slot.normalized_code_anchor_box || []),
@@ -424,6 +448,44 @@ function drawSnapshotPolygon(snapshotCtx, points, transform, color, lineWidth = 
   for (const point of canvasPoints.slice(1)) snapshotCtx.lineTo(point.x, point.y);
   snapshotCtx.closePath();
   snapshotCtx.stroke();
+  snapshotCtx.restore();
+}
+
+function drawPhysicalLandmarkPoints(snapshotCtx, slot, transform) {
+  const landmarks = slot.back_landmark_debug?.landmarks || [];
+  for (const landmark of landmarks) {
+    if (Array.isArray(landmark.expected_normalized_point)) {
+      drawSnapshotPoint(snapshotCtx, landmark.expected_normalized_point, transform, "#f97316", `${landmark.name} expected`);
+    }
+    if (Array.isArray(landmark.observed_normalized_point)) {
+      drawSnapshotPoint(snapshotCtx, landmark.observed_normalized_point, transform, "#e879f9", `${landmark.name} observed`);
+    }
+  }
+}
+
+function drawSnapshotPoint(snapshotCtx, point, transform, color, label) {
+  const canvasPoint = transform(point);
+  snapshotCtx.save();
+  snapshotCtx.strokeStyle = color;
+  snapshotCtx.fillStyle = "rgba(0, 0, 0, 0.76)";
+  snapshotCtx.lineWidth = 3;
+  snapshotCtx.beginPath();
+  snapshotCtx.arc(canvasPoint.x, canvasPoint.y, 8, 0, Math.PI * 2);
+  snapshotCtx.stroke();
+  snapshotCtx.beginPath();
+  snapshotCtx.moveTo(canvasPoint.x - 12, canvasPoint.y);
+  snapshotCtx.lineTo(canvasPoint.x + 12, canvasPoint.y);
+  snapshotCtx.moveTo(canvasPoint.x, canvasPoint.y - 12);
+  snapshotCtx.lineTo(canvasPoint.x, canvasPoint.y + 12);
+  snapshotCtx.stroke();
+  snapshotCtx.font = "700 16px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+  const text = String(label);
+  const textWidth = snapshotCtx.measureText(text).width;
+  const x = Math.min(snapshotCtx.canvas.width - textWidth - 14, Math.max(6, canvasPoint.x + 11));
+  const y = Math.min(snapshotCtx.canvas.height - 26, Math.max(6, canvasPoint.y - 18));
+  snapshotCtx.fillRect(x - 5, y - 3, textWidth + 10, 23);
+  snapshotCtx.fillStyle = color;
+  snapshotCtx.fillText(text, x, y);
   snapshotCtx.restore();
 }
 
@@ -507,8 +569,8 @@ function algorithmSteps(slot) {
       ],
     },
     {
-      title: "Check the four anchors",
-      fork: "This is the main fork: does the selected pill land where a real back-card code should land?",
+      title: "Check code-pill placement",
+      fork: "This fork checks whether the selected pill lands where a real back-card code should land.",
       decision: anchorForkDecision(slot, anchorCornerCheck, topRightBandCheck),
       checks: [anchorCornerCheck, topRightBandCheck].filter(Boolean),
       snapshot: "pill",
@@ -518,6 +580,14 @@ function algorithmSteps(slot) {
         ["local center", formatJsonInline(slot.normalized_code_anchor_local_center)],
       ],
       after: renderAnchorLogic(slot),
+    },
+    {
+      title: "Check physical card landmarks",
+      fork: "After code geometry exists, the backend looks for the other stable printed anchors: FIFA header, legal copy, and Panini box. These support or explain the full-card outline.",
+      decision: physicalLandmarkDecision(slot),
+      snapshot: "landmarks",
+      rows: physicalLandmarkRows(slot),
+      after: renderPhysicalLandmarkLogic(slot),
     },
     {
       title: "Look for supporting card evidence",
@@ -751,6 +821,10 @@ function renderOverlayLegend(slot = null) {
   if (!slot || hasOcrTextBox(slot)) {
     entries.push('<span><i class="legendText"></i>blue OCR text</span>');
   }
+  if (!slot || (slot.back_landmark_debug?.landmarks || []).length) {
+    entries.push('<span><i class="legendExpected"></i>orange expected landmark</span>');
+    entries.push('<span><i class="legendObserved"></i>purple observed landmark</span>');
+  }
   if (!entries.length) return "";
   return `
     <div class="overlayLegend" aria-label="Overlay legend">
@@ -768,6 +842,7 @@ function renderSnapshotExplanation(kind, slot = null) {
     card: `Shows the card geometry decision. ${boundaryText}`,
     pill: "Shows the OCR anchor. Green is the dark code pill used for position/orientation; blue is the tighter text box used to read the code.",
     orientation: "Shows the same evidence with the rotation and top-right checks attached, so a weak orientation decision is visible.",
+    landmarks: "Shows physical card-landmark evidence. Orange crosshairs are expected positions from the current card polygon; purple crosshairs are observed printed landmarks when projection is valid.",
   };
   return `
     <details class="debugExplain">
@@ -871,6 +946,78 @@ function renderStepExplanation(title, slot, snapshot) {
   return `<p>This step shows the backend evidence and the decision derived from it.</p>`;
 }
 
+function physicalLandmarkDecision(slot) {
+  const debug = slot.back_landmark_debug;
+  if (!debug) return "not attached to saved result";
+  if (!debug.ran) return debug.reason || "skipped";
+  const detected = (debug.landmarks || []).filter((item) => item.detected).length;
+  return `${debug.projection_applied ? "projected" : "not projected"} · ${detected}/4 detected`;
+}
+
+function physicalLandmarkRows(slot) {
+  const debug = slot.back_landmark_debug || {};
+  const score = debug.score || {};
+  return [
+    ["ran", yesNo(debug.ran)],
+    ["reason", debug.reason],
+    ["crop size", formatJsonInline(debug.crop_size)],
+    ["score", formatNumber(score.confidence)],
+    ["score rotation", formatRotation(score.rotation)],
+    ["threshold", formatNumber(debug.threshold)],
+    ["projection applied", yesNo(debug.projection_applied)],
+  ];
+}
+
+function renderPhysicalLandmarkLogic(slot) {
+  const debug = slot.back_landmark_debug;
+  if (!debug) {
+    return `<p class="debugMuted">No physical landmark trace was attached to this saved result. Reprocess the photo after backend deployment.</p>`;
+  }
+  const landmarks = debug.landmarks || [];
+  return `
+    <div class="anchorLogic">
+      <h4>Physical card anchors</h4>
+      <p class="debugMuted">Expected points come from the current card polygon and fixed millimetre coordinates. Observed points come from the printed-landmark detector only when that detector ran and agreed with OCR direction.</p>
+      ${renderKeyValueList([
+        ["stage", debug.stage],
+        ["reason", debug.reason],
+        ["header score", formatNumber(debug.score?.header_score)],
+        ["legal score", formatNumber(debug.score?.legal_score)],
+        ["panini score", formatNumber(debug.score?.panini_score)],
+      ])}
+      <details class="anchorList" open>
+        <summary>Landmarks (${landmarks.length})</summary>
+        ${landmarks.map(renderPhysicalLandmarkCard).join("")}
+      </details>
+    </div>
+  `;
+}
+
+function renderPhysicalLandmarkCard(landmark) {
+  return `
+    <section class="anchorCard">
+      <h5>${escapeHtml(landmarkTitle(landmark.name))}</h5>
+      ${renderKeyValueList([
+        ["corner owner", landmark.corner],
+        ["source", landmark.source],
+        ["detected", yesNo(landmark.detected)],
+        ["expected point", formatJsonInline(landmark.expected_normalized_point)],
+        ["observed point", formatJsonInline(landmark.observed_normalized_point)],
+      ])}
+    </section>
+  `;
+}
+
+function landmarkTitle(name) {
+  const titles = {
+    code_text: "Code pill/text",
+    header: "FIFA World Cup 2026 header",
+    legal: "Legal/copyright paragraph",
+    panini: "Panini footer box",
+  };
+  return titles[name] || displayValue(name);
+}
+
 function renderSelectedAnchorSummary(slot) {
   const anchor = slot.anchor_debug?.selected_code_anchor;
   if (!anchor) return `<p>No structured anchor debug was attached to this saved result. Reprocess the photo to get anchor details.</p>`;
@@ -899,7 +1046,7 @@ function renderAnchorLogic(slot) {
   ];
   return `
     <div class="anchorLogic">
-      <h4>Four anchor checks</h4>
+      <h4>Code-pill placement checks</h4>
       ${anchor ? renderAnchorCard("Selected anchor", anchor) : ""}
       <ol>
         ${checks.map(([name, value, score]) => `
