@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-10";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-11";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -297,10 +297,13 @@ function renderPanel(slot) {
 }
 
 function renderSnapshotShell(snapshot, { embedded = false, compact = false, slot = null, showTitle = false } = {}) {
+  const imageMarkup = slot && image?.complete && image.naturalWidth
+    ? renderSnapshotDataImage(slot, snapshot.id)
+    : `<canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>`;
   return `
     <section class="debugSnapshot${embedded ? " embedded" : ""}${compact ? " compact" : ""}">
       ${embedded && !showTitle ? "" : `<h3>${escapeHtml(snapshot.title)}</h3>`}
-      <canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>
+      ${imageMarkup}
       ${renderOverlayLegend(slot)}
       ${renderSnapshotExplanation(snapshot.id, slot)}
       <p>${escapeHtml(snapshot.description)}</p>
@@ -719,16 +722,22 @@ function renderCheck(check, slot) {
 
 function renderSnapshotImage(slot, kind) {
   const snapshot = snapshotById(kind);
+  const imageMarkup = renderSnapshotDataImage(slot, snapshot.id);
+  return `
+    <figure class="debugSnapshot embedded compact">
+      ${imageMarkup}
+      ${renderOverlayLegend(slot)}
+    </figure>
+  `;
+}
+
+function renderSnapshotDataImage(slot, kind) {
+  const snapshot = snapshotById(kind);
   const canvasEl = document.createElement("canvas");
   canvasEl.width = 900;
   canvasEl.height = 540;
   drawSnapshot(canvasEl, slot, snapshot.id);
-  return `
-    <figure class="debugSnapshot embedded compact">
-      <img src="${canvasEl.toDataURL("image/jpeg", 0.86)}" alt="${escapeHtml(snapshot.description)}">
-      ${renderOverlayLegend(slot)}
-    </figure>
-  `;
+  return `<img src="${canvasEl.toDataURL("image/jpeg", 0.86)}" alt="${escapeHtml(snapshot.description)}">`;
 }
 
 function renderOverlayLegend(slot = null) {
