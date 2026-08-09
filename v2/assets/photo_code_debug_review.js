@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-1";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-2";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -26,6 +26,28 @@ let image = new Image();
 let imageObjectUrl = null;
 let drawRect = { x: 0, y: 0, width: 1, height: 1 };
 let activeToken = "";
+const SNAPSHOTS = [
+  {
+    id: "full",
+    title: "01 Big Photo",
+    description: "Full captured photo with the selected card, pill anchor, and OCR text box highlighted.",
+  },
+  {
+    id: "card",
+    title: "02 Card Zone",
+    description: "Zoom around the selected card overlay. This is the main geometry decision area.",
+  },
+  {
+    id: "pill",
+    title: "03 Pill And OCR",
+    description: "Tight crop around the code pill and OCR text box used for identity and direction.",
+  },
+  {
+    id: "orientation",
+    title: "04 Orientation / Anchors",
+    description: "Card-zone view annotated with rotation source, expected top-right check, and geometry state.",
+  },
+];
 
 applyOcrBackendFromQuery();
 activeToken = savedToken();
@@ -85,12 +107,13 @@ async function loadReview(uploadKey) {
     loadingState.textContent = "No uploads";
     return;
   }
-  selectedSlotId = null;
   await loadImage(payload.selected.image_url);
   const overview = payload.selected.overview || {};
+  const firstSlot = overview.slots?.[0] || null;
+  selectedSlotId = firstSlot?.id || null;
   statusEl.textContent = `${payload.selected.image || "photo"} · ${overview.matched_count ?? 0}/${overview.slot_count ?? 0} matched`;
   renderSlotList();
-  renderPanel(null);
+  renderPanel(firstSlot);
   draw();
 }
 
@@ -134,6 +157,8 @@ function draw() {
 
   const slots = payload.selected.overview?.slots || [];
   for (const slot of slots) drawSlot(slot, slot.id === selectedSlotId);
+  const selected = slots.find((slot) => slot.id === selectedSlotId);
+  if (selected) drawSnapshots(selected);
   loadingState.textContent = "";
 }
 
@@ -258,6 +283,9 @@ function renderPanel(slot) {
     <div class="debugChecks">
       ${(debug.checks || []).map(renderCheck).join("")}
     </div>
+    <div class="debugSnapshots">
+      ${SNAPSHOTS.map(renderSnapshotShell).join("")}
+    </div>
     <div class="debugSections">
       ${sections.map(renderDebugSection).join("")}
     </div>
@@ -274,6 +302,141 @@ function renderPanel(slot) {
   panel.querySelector("#copyRaw")?.addEventListener("click", () => {
     navigator.clipboard?.writeText(JSON.stringify(debug.raw || slot, null, 2));
   });
+  requestAnimationFrame(() => drawSnapshots(slot));
+}
+
+function renderSnapshotShell(snapshot) {
+  return `
+    <section class="debugSnapshot">
+      <h3>${escapeHtml(snapshot.title)}</h3>
+      <canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>
+      <p>${escapeHtml(snapshot.description)}</p>
+    </section>
+  `;
+}
+
+function drawSnapshots(slot) {
+  if (!slot || !image.complete || !image.naturalWidth) return;
+  for (const canvasEl of panel.querySelectorAll("[data-snapshot]")) {
+    drawSnapshot(canvasEl, slot, canvasEl.dataset.snapshot);
+  }
+}
+
+function drawSnapshot(canvasEl, slot, kind) {
+  const snapshotCtx = canvasEl.getContext("2d");
+  const crop = snapshotCrop(slot, kind);
+  const scale = Math.min(canvasEl.width / crop.width, canvasEl.height / crop.height);
+  const width = crop.width * scale;
+  const height = crop.height * scale;
+  const offsetX = (canvasEl.width - width) / 2;
+  const offsetY = (canvasEl.height - height) / 2;
+
+  snapshotCtx.save();
+  snapshotCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  snapshotCtx.fillStyle = "#020706";
+  snapshotCtx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+  snapshotCtx.drawImage(image, crop.x, crop.y, crop.width, crop.height, offsetX, offsetY, width, height);
+  snapshotCtx.strokeStyle = "rgba(148, 163, 184, 0.42)";
+  snapshotCtx.lineWidth = 1;
+  snapshotCtx.strokeRect(offsetX, offsetY, width, height);
+
+  const transform = ([x, y]) => ({
+    x: offsetX + ((x * image.naturalWidth - crop.x) * scale),
+    y: offsetY + ((y * image.naturalHeight - crop.y) * scale),
+  });
+
+  if (kind === "full") {
+    for (const other of payload?.selected?.overview?.slots || []) {
+      if (other.id === slot.id) continue;
+      drawSnapshotPolygon(snapshotCtx, other.normalized_polygon, transform, "rgba(148, 163, 184, 0.45)", 1.25, [5, 5]);
+    }
+  }
+
+  drawSnapshotPolygon(snapshotCtx, slot.normalized_polygon, transform, "#facc15", kind === "full" ? 3 : 4);
+  drawSnapshotPolygon(snapshotCtx, slot.normalized_code_anchor_box, transform, "#34d399", 3, [7, 4]);
+  drawSnapshotPolygon(snapshotCtx, slot.normalized_code_text_box, transform, "#60a5fa", 2.5, [4, 4]);
+
+  if (kind === "orientation") {
+    drawSnapshotLabel(snapshotCtx, [
+      `${slot.code || slot.id || "card"} · rotation ${formatRotation(slot.code_anchor_rotation)}`,
+      `source ${displayValue(slot.code_anchor_source)}`,
+      `top-right ${yesNo(slot.code_anchor_top_right)} · geometry ${displayValue(slot.geometry_status)}`,
+    ]);
+  } else if (kind === "pill") {
+    drawSnapshotLabel(snapshotCtx, [
+      `${slot.code || slot.id || "card"} pill/OCR`,
+      `rotation ${formatRotation(slot.code_anchor_rotation)} · source ${displayValue(slot.code_anchor_source)}`,
+    ]);
+  } else {
+    drawSnapshotLabel(snapshotCtx, [
+      `${slot.code || slot.id || "card"} · ${displayValue(slot.review_status)} · ${displayValue(slot.geometry_status)}`,
+    ]);
+  }
+  snapshotCtx.restore();
+}
+
+function snapshotCrop(slot, kind) {
+  if (kind === "full") return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
+  const points = kind === "pill"
+    ? [
+        ...(slot.normalized_code_anchor_box || []),
+        ...(slot.normalized_code_text_box || []),
+      ]
+    : [
+        ...(slot.normalized_polygon || []),
+        ...(slot.normalized_code_anchor_box || []),
+        ...(slot.normalized_code_text_box || []),
+      ];
+  return paddedSourceBounds(points.length ? points : slot.normalized_polygon, kind === "pill" ? 0.65 : 0.22);
+}
+
+function paddedSourceBounds(points = [], paddingRatio = 0.2) {
+  const source = points.length ? points : [[0, 0], [1, 1]];
+  const xs = source.map(([x]) => x * image.naturalWidth);
+  const ys = source.map(([, y]) => y * image.naturalHeight);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const baseWidth = Math.max(20, maxX - minX);
+  const baseHeight = Math.max(20, maxY - minY);
+  const pad = Math.max(baseWidth, baseHeight) * paddingRatio;
+  const x = clamp(minX - pad, 0, image.naturalWidth - 1);
+  const y = clamp(minY - pad, 0, image.naturalHeight - 1);
+  const right = clamp(maxX + pad, x + 1, image.naturalWidth);
+  const bottom = clamp(maxY + pad, y + 1, image.naturalHeight);
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+function drawSnapshotPolygon(snapshotCtx, points, transform, color, lineWidth = 2, dash = []) {
+  if (!Array.isArray(points) || points.length < 4) return;
+  const canvasPoints = points.map(transform);
+  snapshotCtx.save();
+  snapshotCtx.strokeStyle = color;
+  snapshotCtx.lineWidth = lineWidth;
+  snapshotCtx.setLineDash(dash);
+  snapshotCtx.beginPath();
+  snapshotCtx.moveTo(canvasPoints[0].x, canvasPoints[0].y);
+  for (const point of canvasPoints.slice(1)) snapshotCtx.lineTo(point.x, point.y);
+  snapshotCtx.closePath();
+  snapshotCtx.stroke();
+  snapshotCtx.restore();
+}
+
+function drawSnapshotLabel(snapshotCtx, lines) {
+  snapshotCtx.save();
+  snapshotCtx.font = "700 22px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+  snapshotCtx.textBaseline = "top";
+  const padding = 12;
+  const lineHeight = 28;
+  const widths = lines.map((line) => snapshotCtx.measureText(String(line)).width);
+  const boxWidth = Math.min(snapshotCtx.canvas.width - 20, Math.max(...widths, 160) + padding * 2);
+  const boxHeight = lines.length * lineHeight + padding * 2;
+  snapshotCtx.fillStyle = "rgba(0, 0, 0, 0.72)";
+  snapshotCtx.fillRect(10, 10, boxWidth, boxHeight);
+  snapshotCtx.fillStyle = "#f8fafc";
+  lines.forEach((line, index) => snapshotCtx.fillText(String(line), 10 + padding, 10 + padding + index * lineHeight));
+  snapshotCtx.restore();
 }
 
 function debugSections(slot) {
@@ -474,6 +637,10 @@ function formatJsonInline(value) {
 function displayValue(value) {
   if (value === null || value === undefined || value === "") return "-";
   return value;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function escapeHtml(value) {

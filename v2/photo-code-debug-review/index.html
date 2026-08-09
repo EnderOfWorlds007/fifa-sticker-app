@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo Code Deep Dive</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-1">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-2">
   <style>
     :root {
       color-scheme: dark;
@@ -171,6 +171,38 @@
       display: grid;
       gap: 8px;
     }
+    .debugSnapshots {
+      display: grid;
+      gap: 10px;
+      margin: 12px 0 14px;
+    }
+    .debugSnapshot {
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.5);
+      overflow: hidden;
+    }
+    .debugSnapshot h3 {
+      margin: 0;
+      padding: 9px 10px 0;
+      color: #e5e7eb;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+    .debugSnapshot canvas {
+      width: 100%;
+      height: auto;
+      max-height: 360px;
+      object-fit: contain;
+      background: #020706;
+    }
+    .debugSnapshot p {
+      margin: 0;
+      padding: 0 10px 10px;
+      color: #a8b3c1;
+      font-size: 12px;
+      line-height: 1.35;
+    }
     .debugSections {
       display: grid;
       gap: 10px;
@@ -309,7 +341,7 @@
     </section>
   </main>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-1" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-1" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-2" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-2" type="module"></script>
 </body>
 </html>
