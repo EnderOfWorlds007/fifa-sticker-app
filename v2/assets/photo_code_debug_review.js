@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-7";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-8";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -163,7 +163,7 @@ function draw() {
 }
 
 function drawSlot(slot, selected) {
-  const drawAsCodeOnly = slot.geometry_status !== "resolved" && slot.normalized_code_anchor_box?.length >= 4;
+  const drawAsCodeOnly = !hasCardBoundary(slot) && hasPillMarker(slot);
   const primary = drawAsCodeOnly ? slot.normalized_code_anchor_box : slot.normalized_polygon;
   const points = toCanvasPoints(primary);
   if (points.length < 4) return;
@@ -181,7 +181,7 @@ function drawSlot(slot, selected) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  if (!drawAsCodeOnly && slot.normalized_code_anchor_box?.length >= 4) {
+  if (!drawAsCodeOnly && hasPillMarker(slot)) {
     ctx.strokeStyle = slot.code_anchor_top_right === false ? "#fb7185" : "#5eead4";
     ctx.lineWidth = selected ? 2.5 : 1.5;
     ctx.setLineDash([5, 4]);
@@ -189,7 +189,7 @@ function drawSlot(slot, selected) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  if (slot.normalized_code_text_box?.length >= 4) {
+  if (hasOcrTextBox(slot)) {
     ctx.strokeStyle = "#60a5fa";
     ctx.lineWidth = selected ? 2 : 1.25;
     ctx.setLineDash([3, 3]);
@@ -217,7 +217,7 @@ function handleCanvasClick(event) {
   const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
   const slots = [...(payload.selected.overview?.slots || [])].reverse();
   const hit = slots.find((slot) => {
-    const source = slot.geometry_status !== "resolved" && slot.normalized_code_anchor_box?.length >= 4
+    const source = !hasCardBoundary(slot) && hasPillMarker(slot)
       ? slot.normalized_code_anchor_box
       : slot.normalized_polygon;
     return pointInPolygon(point, toCanvasPoints(source));
@@ -284,7 +284,7 @@ function renderPanel(slot) {
       ${(debug.checks || []).map((check) => renderCheck(check, slot)).join("")}
     </div>
     <div class="debugSections">
-      ${sections.map(renderDebugSection).join("")}
+      ${sections.map((section) => renderDebugSection(section, slot)).join("")}
     </div>
     <details>
       <summary>Raw slot JSON</summary>
@@ -302,13 +302,13 @@ function renderPanel(slot) {
   requestAnimationFrame(() => drawSnapshots(slot));
 }
 
-function renderSnapshotShell(snapshot, { embedded = false, compact = false } = {}) {
+function renderSnapshotShell(snapshot, { embedded = false, compact = false, slot = null } = {}) {
   return `
     <section class="debugSnapshot${embedded ? " embedded" : ""}${compact ? " compact" : ""}">
       ${embedded ? "" : `<h3>${escapeHtml(snapshot.title)}</h3>`}
       <canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>
-      ${renderOverlayLegend()}
-      ${renderSnapshotExplanation(snapshot.id)}
+      ${renderOverlayLegend(slot)}
+      ${renderSnapshotExplanation(snapshot.id, slot)}
       <p>${escapeHtml(snapshot.description)}</p>
     </section>
   `;
@@ -347,13 +347,21 @@ function drawSnapshot(canvasEl, slot, kind) {
   if (kind === "full") {
     for (const other of payload?.selected?.overview?.slots || []) {
       if (other.id === slot.id) continue;
-      drawSnapshotPolygon(snapshotCtx, other.normalized_polygon, transform, "rgba(148, 163, 184, 0.45)", 1.25, [5, 5]);
+      if (hasCardBoundary(other)) {
+        drawSnapshotPolygon(snapshotCtx, other.normalized_polygon, transform, "rgba(148, 163, 184, 0.45)", 1.25, [5, 5]);
+      }
     }
   }
 
-  drawSnapshotPolygon(snapshotCtx, slot.normalized_polygon, transform, "#facc15", kind === "full" ? 3 : 4);
-  drawSnapshotPolygon(snapshotCtx, slot.normalized_code_anchor_box, transform, "#34d399", 3, [7, 4]);
-  drawSnapshotPolygon(snapshotCtx, slot.normalized_code_text_box, transform, "#60a5fa", 2.5, [4, 4]);
+  if (hasCardBoundary(slot)) {
+    drawSnapshotPolygon(snapshotCtx, slot.normalized_polygon, transform, "#facc15", kind === "full" ? 3 : 4);
+  }
+  if (hasPillMarker(slot)) {
+    drawSnapshotPolygon(snapshotCtx, slot.normalized_code_anchor_box, transform, "#34d399", 3, [7, 4]);
+  }
+  if (hasOcrTextBox(slot)) {
+    drawSnapshotPolygon(snapshotCtx, slot.normalized_code_text_box, transform, "#60a5fa", 2.5, [4, 4]);
+  }
 
   if (kind === "orientation") {
     drawSnapshotLabel(snapshotCtx, [
@@ -494,11 +502,11 @@ function debugSections(slot) {
   ];
 }
 
-function renderDebugSection(section) {
+function renderDebugSection(section, slot) {
   return `
     <section class="debugSection">
       <h3>${escapeHtml(section.title)}</h3>
-      ${section.snapshot ? renderSnapshotShell(snapshotById(section.snapshot), { embedded: true }) : ""}
+      ${section.snapshot ? renderSnapshotShell(snapshotById(section.snapshot), { embedded: true, slot }) : ""}
       <dl>
         ${section.rows.map(([label, value]) => `
           <div>
@@ -540,25 +548,37 @@ function renderSnapshotImage(slot, kind) {
   return `
     <figure class="debugSnapshot embedded compact">
       <img src="${canvasEl.toDataURL("image/jpeg", 0.86)}" alt="${escapeHtml(snapshot.description)}">
-      ${renderOverlayLegend()}
+      ${renderOverlayLegend(slot)}
     </figure>
   `;
 }
 
-function renderOverlayLegend() {
+function renderOverlayLegend(slot = null) {
+  const entries = [];
+  if (!slot || hasCardBoundary(slot)) {
+    entries.push('<span><i class="legendCard"></i>yellow card boundary</span>');
+  }
+  if (!slot || hasPillMarker(slot)) {
+    entries.push('<span><i class="legendPill"></i>green pill marker</span>');
+  }
+  if (!slot || hasOcrTextBox(slot)) {
+    entries.push('<span><i class="legendText"></i>blue OCR text</span>');
+  }
+  if (!entries.length) return "";
   return `
     <div class="overlayLegend" aria-label="Overlay legend">
-      <span><i class="legendCard"></i>yellow card boundary</span>
-      <span><i class="legendPill"></i>green pill marker</span>
-      <span><i class="legendText"></i>blue OCR text</span>
+      ${entries.join("")}
     </div>
   `;
 }
 
-function renderSnapshotExplanation(kind) {
+function renderSnapshotExplanation(kind, slot = null) {
+  const boundaryText = !slot || hasCardBoundary(slot)
+    ? "Yellow is the computed full-card boundary."
+    : "No yellow card boundary is shown because the backend did not resolve full-card geometry for this slot.";
   const descriptions = {
-    full: "Shows the full photo context. Gray dashed boxes are other detected cards; yellow is the selected card boundary; green and blue are the selected code pill evidence.",
-    card: "Shows the card geometry decision. The yellow rectangle is the card boundary the backend would draw if geometry is trusted.",
+    full: `Shows the full photo context. Gray dashed boxes are other cards with resolved geometry. ${boundaryText} Green and blue appear only when pill/OCR boxes were computed.`,
+    card: `Shows the card geometry decision. ${boundaryText}`,
     pill: "Shows the OCR anchor. Green is the dark code pill used for position/orientation; blue is the tighter text box used to read the code.",
     orientation: "Shows the same evidence with the rotation and top-right checks attached, so a weak orientation decision is visible.",
   };
@@ -568,6 +588,20 @@ function renderSnapshotExplanation(kind) {
       <p>${escapeHtml(descriptions[kind] || "Shows the visual evidence used by this debug step.")}</p>
     </details>
   `;
+}
+
+function hasCardBoundary(slot) {
+  return Boolean((slot?.geometry_resolved === true || slot?.geometry_status === "resolved")
+    && Array.isArray(slot?.normalized_polygon)
+    && slot.normalized_polygon.length >= 4);
+}
+
+function hasPillMarker(slot) {
+  return Boolean(Array.isArray(slot?.normalized_code_anchor_box) && slot.normalized_code_anchor_box.length >= 4);
+}
+
+function hasOcrTextBox(slot) {
+  return Boolean(Array.isArray(slot?.normalized_code_text_box) && slot.normalized_code_text_box.length >= 4);
 }
 
 function renderCheckExplanation(check, slot, snapshot) {
