@@ -10,6 +10,10 @@ test("photo code debug reviewer runs from v2 pages and reuses scanner OCR auth",
 
   assert.match(html, /\/fifa-sticker-app\/v2\/assets\/site_config\.js/);
   assert.match(html, /\/fifa-sticker-app\/v2\/assets\/photo_code_debug_review\.js/);
+  assert.match(html, /#photoCanvas\s*\{/);
+  assert.match(html, /\.debugTop\s*\{[\s\S]*?position:\s*static;/);
+  assert.match(html, /\.debugStageWrap\s*\{[\s\S]*?min-height:\s*70dvh;/);
+  assert.match(html, /#photoCanvas\s*\{[\s\S]*?height:\s*70dvh;[\s\S]*?min-height:\s*520px;/);
   assert.doesNotMatch(html, /src="\/assets\/photo_code_debug_review\.js/);
   assert.doesNotMatch(html, /OCR bearer token/);
 
@@ -29,7 +33,7 @@ test("photo code debug reviewer runs from v2 pages and reuses scanner OCR auth",
   assert.match(js, /normalized_code_text_box/);
   assert.doesNotMatch(js, /const OCR_TOKEN_KEY =/);
 
-  assert.match(sw, /fifa-card-apps-fifa-sticker-app-v2-build-photo-debug-2/);
+  assert.match(sw, /fifa-card-apps-fifa-sticker-app-v2-build-photo-debug-3/);
   assert.match(sw, /\/fifa-sticker-app\/v2\/photo-code-debug-review\//);
   assert.match(sw, /\/fifa-sticker-app\/v2\/assets\/photo_code_debug_review\.js/);
 });

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo Code Deep Dive</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-2">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-3">
   <style>
     :root {
       color-scheme: dark;
@@ -90,7 +90,7 @@
       background: #020706;
       overflow: hidden;
     }
-    canvas {
+    #photoCanvas {
       display: block;
       width: 100%;
       height: calc(100dvh - 134px);
@@ -190,6 +190,7 @@
       text-transform: uppercase;
     }
     .debugSnapshot canvas {
+      display: block;
       width: 100%;
       height: auto;
       max-height: 360px;
@@ -285,12 +286,23 @@
       line-height: 1.35;
     }
     @media (max-width: 860px) {
+      .debugShell {
+        display: block;
+      }
+      .debugTop {
+        position: static;
+      }
       .debugMain {
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
       }
       .debugControls {
         display: grid;
         grid-template-columns: 1fr;
+      }
+      .debugStageWrap {
+        min-height: 70dvh;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.28);
       }
       .debugPanel {
         border-left: 0;
@@ -301,8 +313,9 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         max-height: none;
       }
-      canvas {
-        height: 58dvh;
+      #photoCanvas {
+        height: 70dvh;
+        min-height: 520px;
       }
     }
   </style>
@@ -341,7 +354,7 @@
     </section>
   </main>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-2" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-2" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-3" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-3" type="module"></script>
 </body>
 </html>
