@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-8";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-9";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -273,19 +273,13 @@ function renderPanel(slot) {
     slot.source,
     `conf ${formatNumber(slot.confidence)}`,
   ].filter(Boolean);
-  const sections = debugSections(slot);
   panel.innerHTML = `
     <h2>${escapeHtml(slot.code || "Unknown")} ${escapeHtml(slot.name || "")}</h2>
     <p class="debugSummary">${escapeHtml(debug.summary || "")}</p>
     <div class="debugBadges">
       ${badges.map((badge) => `<span class="debugBadge">${escapeHtml(badge)}</span>`).join("")}
     </div>
-    <div class="debugChecks">
-      ${(debug.checks || []).map((check) => renderCheck(check, slot)).join("")}
-    </div>
-    <div class="debugSections">
-      ${sections.map((section) => renderDebugSection(section, slot)).join("")}
-    </div>
+    ${renderAlgorithmTrace(slot)}
     <details>
       <summary>Raw slot JSON</summary>
       <button type="button" id="copyRaw">Copy</button>
@@ -444,6 +438,188 @@ function drawSnapshotLabel(snapshotCtx, lines) {
   snapshotCtx.fillStyle = "#f8fafc";
   lines.forEach((line, index) => snapshotCtx.fillText(String(line), 10 + padding, 10 + padding + index * lineHeight));
   snapshotCtx.restore();
+}
+
+function renderAlgorithmTrace(slot) {
+  const steps = algorithmSteps(slot);
+  return `
+    <section class="algorithmTrace" aria-label="Algorithm trace">
+      <h3>Algorithm trace</h3>
+      ${steps.map((step, index) => renderAlgorithmStep(step, index + 1, slot)).join("")}
+    </section>
+  `;
+}
+
+function algorithmSteps(slot) {
+  const identityCheck = findCheck(slot, "identity");
+  const textDirectionCheck = findCheck(slot, "text direction");
+  const anchorCornerCheck = findCheck(slot, "anchor corner");
+  const topRightBandCheck = findCheck(slot, "top-right band");
+  const insigniaCheck = findCheck(slot, "insignia");
+  const edgeCheck = findCheck(slot, "edge");
+  const geometryCheck = findCheck(slot, "geometry");
+  const renderingFacts = [
+    ["yellow card boundary", hasCardBoundary(slot) ? "shown: full-card geometry resolved" : "hidden: full-card geometry not resolved"],
+    ["green pill marker", hasPillMarker(slot) ? "shown: pill box computed" : "hidden: pill box missing"],
+    ["blue OCR text", hasOcrTextBox(slot) ? "shown: OCR text box computed" : "hidden: OCR text box missing"],
+  ];
+
+  return [
+    {
+      title: "Start from the photo",
+      fork: "The backend starts with the full capture and the selected code candidate.",
+      decision: `candidate ${displayValue(slot.code || slot.id)} from ${displayValue(slot.source)}`,
+      snapshot: "full",
+      rows: [
+        ["code", slot.code],
+        ["name", slot.name],
+        ["team", slot.team],
+        ["source", slot.source],
+        ["recognition attempts", slot.recognition_attempts],
+      ],
+    },
+    {
+      title: "Read and match the code",
+      fork: "If OCR/code matching is weak, the card identity is not trusted. If it passes, later geometry checks decide how much overlay to draw.",
+      decision: identityCheck?.state || slot.review_status,
+      check: identityCheck,
+      snapshot: "pill",
+      rows: [
+        ["review status", slot.review_status],
+        ["state", slot.state],
+        ["confidence", formatNumber(slot.confidence)],
+        ["match score", formatNumber(slot.match_score)],
+      ],
+    },
+    {
+      title: "Infer text direction",
+      fork: "The pill text direction proposes a rotation. Weak direction evidence should not force a card boundary by itself.",
+      decision: textDirectionCheck?.state || formatRotation(slot.code_anchor_rotation),
+      check: textDirectionCheck,
+      snapshot: "orientation",
+      rows: [
+        ["rotation", formatRotation(slot.code_anchor_rotation)],
+        ["direction source", slot.code_anchor_source],
+        ["selected anchor", selectedAnchorDirection(slot)],
+      ],
+    },
+    {
+      title: "Check the four anchors",
+      fork: "This is the main fork: does the selected pill land where a real back-card code should land?",
+      decision: anchorForkDecision(slot, anchorCornerCheck, topRightBandCheck),
+      checks: [anchorCornerCheck, topRightBandCheck].filter(Boolean),
+      snapshot: "pill",
+      rows: [
+        ["expected corner", yesNo(slot.code_anchor_expected_corner)],
+        ["top-right band", yesNo(slot.code_anchor_top_right)],
+        ["local center", formatJsonInline(slot.normalized_code_anchor_local_center)],
+      ],
+      after: renderAnchorLogic(slot),
+    },
+    {
+      title: "Look for supporting card evidence",
+      fork: "The backend checks whether the surrounding image looks like a real card back and whether edges support a full-card rectangle.",
+      decision: visualSupportDecision(slot, insigniaCheck, edgeCheck),
+      checks: [insigniaCheck, edgeCheck].filter(Boolean),
+      snapshot: "card",
+      rows: [
+        ["back insignia", slot.back_insignia_type],
+        ["insignia confidence", formatNumber(slot.back_insignia_confidence)],
+        ["edge support", formatNumber(slot.edge_support_score)],
+        ["supported edge sides", slot.edge_segment_supported_sides],
+        ["adjacent edge sides", yesNo(slot.edge_adjacent_segment_sides)],
+      ],
+    },
+    {
+      title: "Decide geometry level",
+      fork: "If the previous evidence is coherent, the backend resolves a full-card polygon. Otherwise it keeps only safer evidence such as the code pill.",
+      decision: geometryCheck?.state || slot.geometry_status,
+      check: geometryCheck,
+      snapshot: "card",
+      rows: [
+        ["geometry status", slot.geometry_status],
+        ["resolved", yesNo(slot.geometry_resolved)],
+        ["polygon source", slot.source],
+        ["overlay polygon", formatJsonInline(hasCardBoundary(slot) ? slot.normalized_polygon : null)],
+      ],
+    },
+    {
+      title: "Render only computed overlays",
+      fork: "The frontend now draws each graphical hint only if that specific backend result exists.",
+      decision: hasCardBoundary(slot) ? "draw full card + evidence" : "draw evidence only",
+      snapshot: "card",
+      rows: renderingFacts,
+    },
+  ];
+}
+
+function renderAlgorithmStep(step, number, slot) {
+  const checkBlocks = [step.check, ...(step.checks || [])].filter(Boolean).map((check) => renderCheckDetail(check, slot)).join("");
+  return `
+    <article class="algorithmStep">
+      <header>
+        <span class="stepNumber">${number}</span>
+        <div>
+          <h4>${escapeHtml(step.title)}</h4>
+          <p>${escapeHtml(step.fork)}</p>
+        </div>
+      </header>
+      <div class="stepDecision">
+        <strong>Decision</strong>
+        <span>${escapeHtml(displayValue(step.decision))}</span>
+      </div>
+      ${step.snapshot ? renderSnapshotShell(snapshotById(step.snapshot), { embedded: true, slot }) : ""}
+      ${renderKeyValueList(step.rows || [])}
+      ${step.after || ""}
+      ${checkBlocks ? `
+        <details class="backendChecks">
+          <summary>Backend check details</summary>
+          ${checkBlocks}
+        </details>
+      ` : ""}
+    </article>
+  `;
+}
+
+function renderCheckDetail(check, slot) {
+  const snapshot = checkSnapshotKind(check);
+  return `
+    <div class="debugCheck compactCheck">
+      <strong>
+        <span>${escapeHtml(check.label)}</span>
+        <span class="state-${escapeHtml(check.state)}">${escapeHtml(check.state)}</span>
+      </strong>
+      ${renderCheckExplanation(check, slot, snapshot)}
+      <p>${escapeHtml(check.detail)}</p>
+    </div>
+  `;
+}
+
+function findCheck(slot, needle) {
+  const checks = slot.debug?.checks || [];
+  const lowerNeedle = needle.toLowerCase();
+  return checks.find((check) => `${check.label || ""} ${check.detail || ""}`.toLowerCase().includes(lowerNeedle));
+}
+
+function selectedAnchorDirection(slot) {
+  const anchor = slot.anchor_debug?.selected_code_anchor;
+  if (!anchor) return slot.code_anchor_source;
+  const direction = anchor.direction || {};
+  return `${displayValue(direction.label || direction.rotation_claim || anchor.rotation)} · score ${displayValue(formatNumber(direction.score))}`;
+}
+
+function anchorForkDecision(slot, anchorCornerCheck, topRightBandCheck) {
+  if (anchorCornerCheck?.state === "pass" && topRightBandCheck?.state === "pass") return "anchor placement trusted";
+  if (slot.code_anchor_expected_corner === false || slot.code_anchor_top_right === false) return "anchor placement rejected";
+  return [anchorCornerCheck?.state, topRightBandCheck?.state].filter(Boolean).join(" / ") || "anchor evidence incomplete";
+}
+
+function visualSupportDecision(slot, insigniaCheck, edgeCheck) {
+  const states = [insigniaCheck?.state, edgeCheck?.state].filter(Boolean);
+  if (!states.length) return "visual support not attached";
+  if (states.every((state) => state === "pass")) return "visual support passes";
+  if (states.includes("fail")) return "visual support rejects full geometry";
+  return `visual support ${states.join(" / ")}`;
 }
 
 function debugSections(slot) {
