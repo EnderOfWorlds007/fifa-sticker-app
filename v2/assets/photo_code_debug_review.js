@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-5";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-6";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -281,7 +281,7 @@ function renderPanel(slot) {
       ${badges.map((badge) => `<span class="debugBadge">${escapeHtml(badge)}</span>`).join("")}
     </div>
     <div class="debugChecks">
-      ${(debug.checks || []).map(renderCheck).join("")}
+      ${(debug.checks || []).map((check) => renderCheck(check, slot)).join("")}
     </div>
     <div class="debugSections">
       ${sections.map(renderDebugSection).join("")}
@@ -513,17 +513,31 @@ function snapshotById(id) {
   return SNAPSHOTS.find((snapshot) => snapshot.id === id) || SNAPSHOTS[0];
 }
 
-function renderCheck(check) {
+function renderCheck(check, slot) {
   const snapshot = checkSnapshotKind(check);
+  const imageSnippet = snapshot ? renderSnapshotImage(slot, snapshot) : "";
   return `
     <div class="debugCheck">
       <strong>
         <span>${escapeHtml(check.label)}</span>
         <span class="state-${escapeHtml(check.state)}">${escapeHtml(check.state)}</span>
       </strong>
-      ${snapshot ? renderSnapshotShell(snapshotById(snapshot), { embedded: true, compact: true }) : ""}
+      ${imageSnippet}
       <p>${escapeHtml(check.detail)}</p>
     </div>
+  `;
+}
+
+function renderSnapshotImage(slot, kind) {
+  const snapshot = snapshotById(kind);
+  const canvasEl = document.createElement("canvas");
+  canvasEl.width = 900;
+  canvasEl.height = 540;
+  drawSnapshot(canvasEl, slot, snapshot.id);
+  return `
+    <figure class="debugSnapshot embedded compact">
+      <img src="${canvasEl.toDataURL("image/jpeg", 0.86)}" alt="${escapeHtml(snapshot.description)}">
+    </figure>
   `;
 }
 
