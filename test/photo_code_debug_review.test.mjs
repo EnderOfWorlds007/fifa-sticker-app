@@ -36,10 +36,13 @@ test("photo code debug reviewer runs from v2 pages and reuses scanner OCR auth",
   assert.match(js, /snapshot:\s*"pill"/);
   assert.match(js, /snapshot:\s*"card"/);
   assert.match(js, /snapshot:\s*"orientation"/);
-  assert.match(js, /renderSnapshotShell\(snapshotById\(section\.snapshot\), \{ embedded:\s*true \}\)/);
+  assert.match(js, /renderSnapshotShell\(snapshotById\(section\.snapshot\), \{ embedded:\s*true,\s*slot \}\)/);
   assert.match(js, /function renderSnapshotImage\(slot, kind\)/);
   assert.match(js, /canvasEl\.toDataURL\("image\/jpeg", 0\.86\)/);
-  assert.match(js, /function renderOverlayLegend\(\)/);
+  assert.match(js, /function renderOverlayLegend\(slot = null\)/);
+  assert.match(js, /function hasCardBoundary\(slot\)/);
+  assert.match(js, /if \(hasCardBoundary\(slot\)\) \{/);
+  assert.match(js, /No yellow card boundary is shown/);
   assert.match(js, /function renderCheckExplanation\(check, slot, snapshot\)/);
   assert.match(js, /function renderAnchorLogic\(slot\)/);
   assert.match(js, /selected_code_anchor/);
@@ -49,7 +52,7 @@ test("photo code debug reviewer runs from v2 pages and reuses scanner OCR auth",
   assert.match(js, /normalized_code_text_box/);
   assert.doesNotMatch(js, /const OCR_TOKEN_KEY =/);
 
-  assert.match(sw, /fifa-card-apps-fifa-sticker-app-v2-build-photo-debug-7/);
+  assert.match(sw, /fifa-card-apps-fifa-sticker-app-v2-build-photo-debug-8/);
   assert.match(sw, /\/fifa-sticker-app\/v2\/photo-code-debug-review\//);
   assert.match(sw, /\/fifa-sticker-app\/v2\/assets\/photo_code_debug_review\.js/);
 });
