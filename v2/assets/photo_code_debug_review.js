@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-9";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-10";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -296,10 +296,10 @@ function renderPanel(slot) {
   requestAnimationFrame(() => drawSnapshots(slot));
 }
 
-function renderSnapshotShell(snapshot, { embedded = false, compact = false, slot = null } = {}) {
+function renderSnapshotShell(snapshot, { embedded = false, compact = false, slot = null, showTitle = false } = {}) {
   return `
     <section class="debugSnapshot${embedded ? " embedded" : ""}${compact ? " compact" : ""}">
-      ${embedded ? "" : `<h3>${escapeHtml(snapshot.title)}</h3>`}
+      ${embedded && !showTitle ? "" : `<h3>${escapeHtml(snapshot.title)}</h3>`}
       <canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>
       ${renderOverlayLegend(slot)}
       ${renderSnapshotExplanation(snapshot.id, slot)}
@@ -564,11 +564,11 @@ function renderAlgorithmStep(step, number, slot) {
           <p>${escapeHtml(step.fork)}</p>
         </div>
       </header>
+      ${step.snapshot ? renderSnapshotShell(snapshotById(step.snapshot), { embedded: true, slot, showTitle: true }) : ""}
       <div class="stepDecision">
         <strong>Decision</strong>
         <span>${escapeHtml(displayValue(step.decision))}</span>
       </div>
-      ${step.snapshot ? renderSnapshotShell(snapshotById(step.snapshot), { embedded: true, slot }) : ""}
       ${renderKeyValueList(step.rows || [])}
       ${step.after || ""}
       ${checkBlocks ? `
@@ -583,12 +583,14 @@ function renderAlgorithmStep(step, number, slot) {
 
 function renderCheckDetail(check, slot) {
   const snapshot = checkSnapshotKind(check);
+  const imageSnippet = snapshot ? renderSnapshotImage(slot, snapshot) : "";
   return `
     <div class="debugCheck compactCheck">
       <strong>
         <span>${escapeHtml(check.label)}</span>
         <span class="state-${escapeHtml(check.state)}">${escapeHtml(check.state)}</span>
       </strong>
+      ${imageSnippet}
       ${renderCheckExplanation(check, slot, snapshot)}
       <p>${escapeHtml(check.detail)}</p>
     </div>
