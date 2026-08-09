@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-6";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-7";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -307,6 +307,8 @@ function renderSnapshotShell(snapshot, { embedded = false, compact = false } = {
     <section class="debugSnapshot${embedded ? " embedded" : ""}${compact ? " compact" : ""}">
       ${embedded ? "" : `<h3>${escapeHtml(snapshot.title)}</h3>`}
       <canvas data-snapshot="${escapeHtml(snapshot.id)}" width="900" height="540"></canvas>
+      ${renderOverlayLegend()}
+      ${renderSnapshotExplanation(snapshot.id)}
       <p>${escapeHtml(snapshot.description)}</p>
     </section>
   `;
@@ -523,6 +525,7 @@ function renderCheck(check, slot) {
         <span class="state-${escapeHtml(check.state)}">${escapeHtml(check.state)}</span>
       </strong>
       ${imageSnippet}
+      ${renderCheckExplanation(check, slot, snapshot)}
       <p>${escapeHtml(check.detail)}</p>
     </div>
   `;
@@ -537,7 +540,188 @@ function renderSnapshotImage(slot, kind) {
   return `
     <figure class="debugSnapshot embedded compact">
       <img src="${canvasEl.toDataURL("image/jpeg", 0.86)}" alt="${escapeHtml(snapshot.description)}">
+      ${renderOverlayLegend()}
     </figure>
+  `;
+}
+
+function renderOverlayLegend() {
+  return `
+    <div class="overlayLegend" aria-label="Overlay legend">
+      <span><i class="legendCard"></i>yellow card boundary</span>
+      <span><i class="legendPill"></i>green pill marker</span>
+      <span><i class="legendText"></i>blue OCR text</span>
+    </div>
+  `;
+}
+
+function renderSnapshotExplanation(kind) {
+  const descriptions = {
+    full: "Shows the full photo context. Gray dashed boxes are other detected cards; yellow is the selected card boundary; green and blue are the selected code pill evidence.",
+    card: "Shows the card geometry decision. The yellow rectangle is the card boundary the backend would draw if geometry is trusted.",
+    pill: "Shows the OCR anchor. Green is the dark code pill used for position/orientation; blue is the tighter text box used to read the code.",
+    orientation: "Shows the same evidence with the rotation and top-right checks attached, so a weak orientation decision is visible.",
+  };
+  return `
+    <details class="debugExplain">
+      <summary>What this image means</summary>
+      <p>${escapeHtml(descriptions[kind] || "Shows the visual evidence used by this debug step.")}</p>
+    </details>
+  `;
+}
+
+function renderCheckExplanation(check, slot, snapshot) {
+  const title = String(check.label || "");
+  const text = `${title} ${check.detail || ""}`.toLowerCase();
+  const anchorBlock = text.includes("anchor") || text.includes("band") || text.includes("text direction")
+    ? renderAnchorLogic(slot)
+    : "";
+  return `
+    <details class="debugExplain">
+      <summary>What this step means</summary>
+      ${renderStepExplanation(title, slot, snapshot)}
+      ${anchorBlock}
+    </details>
+  `;
+}
+
+function renderStepExplanation(title, slot, snapshot) {
+  const lower = title.toLowerCase();
+  if (lower.includes("identity")) {
+    return `
+      <p>The backend decided whether this card identity is usable. It combines OCR/code matching, review labels, and confidence.</p>
+      ${renderKeyValueList([
+        ["decision", slot.review_status],
+        ["state", slot.state],
+        ["confidence", formatNumber(slot.confidence)],
+        ["match score", formatNumber(slot.match_score)],
+      ])}
+    `;
+  }
+  if (lower.includes("geometry")) {
+    return `
+      <p>The backend decided whether it trusts a full-card outline. If this is <code>code_only</code>, the code is kept but only the pill marker should be drawn.</p>
+      ${renderKeyValueList([
+        ["geometry status", slot.geometry_status],
+        ["resolved", yesNo(slot.geometry_resolved)],
+        ["source", slot.source],
+        ["image used", snapshotById(snapshot || "card").title],
+      ])}
+    `;
+  }
+  if (lower.includes("anchor corner")) {
+    return `
+      <p>This checks whether the selected pill sits in the expected corner of the reconstructed card. For normal back cards, the code pill should land at the card top-right.</p>
+      ${renderSelectedAnchorSummary(slot)}
+    `;
+  }
+  if (lower.includes("top-right band")) {
+    return `
+      <p>This is a stricter calibrated check. It asks whether the pill center is inside the narrow top-right band learned for the physical back-card layout.</p>
+      ${renderSelectedAnchorSummary(slot)}
+    `;
+  }
+  if (lower.includes("text direction")) {
+    return `
+      <p>This explains the orientation classifier vote. A low score means the rotation claim is weak and should not beat geometry by itself.</p>
+      ${renderSelectedAnchorSummary(slot)}
+    `;
+  }
+  if (lower.includes("insignia")) {
+    return `
+      <p>This checks the center graphic on the card back. It helps distinguish real card backs from wrong crops or background texture.</p>
+      ${renderKeyValueList([
+        ["insignia type", slot.back_insignia_type],
+        ["confidence", formatNumber(slot.back_insignia_confidence)],
+        ["scores", formatJsonInline(slot.back_insignia_scores)],
+      ])}
+    `;
+  }
+  if (lower.includes("edge")) {
+    return `
+      <p>This checks whether image edges support the proposed card boundary. Low edge support means the yellow card outline is probably speculative.</p>
+      ${renderKeyValueList([
+        ["edge score", formatNumber(slot.edge_support_score)],
+        ["supported sides", slot.edge_segment_supported_sides],
+        ["adjacent sides", yesNo(slot.edge_adjacent_segment_sides)],
+      ])}
+    `;
+  }
+  return `<p>This step shows the backend evidence and the decision derived from it.</p>`;
+}
+
+function renderSelectedAnchorSummary(slot) {
+  const anchor = slot.anchor_debug?.selected_code_anchor;
+  if (!anchor) return `<p>No structured anchor debug was attached to this saved result. Reprocess the photo to get anchor details.</p>`;
+  const direction = anchor.direction || {};
+  return renderKeyValueList([
+    ["rotation claim", formatRotation(anchor.rotation)],
+    ["direction score", formatNumber(direction.score)],
+    ["direction label", direction.label],
+    ["local center", formatJsonInline(anchor.local_center)],
+    ["expected corner", yesNo(anchor.expected_corner)],
+    ["top-right in card", yesNo(anchor.top_right_in_card)],
+    ["calibrated band", yesNo(anchor.calibrated_top_right_band)],
+  ]);
+}
+
+function renderAnchorLogic(slot) {
+  const anchor = slot.anchor_debug?.selected_code_anchor;
+  const observed = slot.anchor_debug?.observed_code_anchors || [];
+  const nearby = slot.anchor_debug?.nearby_code_anchors || [];
+  if (!anchor && !observed.length && !nearby.length) return "";
+  const checks = [
+    ["1 direction", anchor?.direction?.rotation_claim ?? anchor?.rotation, anchor?.direction?.score],
+    ["2 expected corner", anchor?.expected_corner, null],
+    ["3 top-right position", anchor?.top_right_in_card, null],
+    ["4 calibrated band", anchor?.calibrated_top_right_band, null],
+  ];
+  return `
+    <div class="anchorLogic">
+      <h4>Four anchor checks</h4>
+      <ol>
+        ${checks.map(([name, value, score]) => `
+          <li>
+            <strong>${escapeHtml(name)}</strong>
+            <span>${escapeHtml(displayValue(value))}${score == null ? "" : ` · score ${escapeHtml(formatNumber(score))}`}</span>
+          </li>
+        `).join("")}
+      </ol>
+      ${renderAnchorList("Observed anchors", observed)}
+      ${renderAnchorList("Nearby anchors", nearby)}
+    </div>
+  `;
+}
+
+function renderAnchorList(title, anchors) {
+  if (!anchors.length) return `<p class="debugMuted">${escapeHtml(title)}: none attached.</p>`;
+  return `
+    <details class="anchorList">
+      <summary>${escapeHtml(title)} (${anchors.length})</summary>
+      ${anchors.map((anchor) => renderKeyValueList([
+        ["code", anchor.code],
+        ["rotation", formatRotation(anchor.rotation)],
+        ["direction", anchor.direction?.label],
+        ["score", formatNumber(anchor.direction?.score ?? anchor.confidence)],
+        ["expected corner", yesNo(anchor.expected_corner ?? anchor.expected_corner_in_this_slot)],
+        ["top-right", yesNo(anchor.top_right_in_card ?? anchor.top_right_in_this_slot)],
+        ["calibrated band", yesNo(anchor.calibrated_top_right_band ?? anchor.calibrated_top_right_band_in_this_slot)],
+        ["local center", formatJsonInline(anchor.local_center ?? anchor.local_center_in_this_slot)],
+      ])).join("")}
+    </details>
+  `;
+}
+
+function renderKeyValueList(rows) {
+  return `
+    <dl class="explainFacts">
+      ${rows.map(([label, value]) => `
+        <div>
+          <dt>${escapeHtml(label)}</dt>
+          <dd>${escapeHtml(displayValue(value))}</dd>
+        </div>
+      `).join("")}
+    </dl>
   `;
 }
 
