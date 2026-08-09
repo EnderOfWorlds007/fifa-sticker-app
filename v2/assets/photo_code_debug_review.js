@@ -4,7 +4,7 @@ import {
   recognitionBaseUrl,
   recognitionUrl,
   saveOcrBackendSettings,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-11";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-photo-code-debug-12";
 
 const statusEl = document.querySelector("#debugStatus");
 const tokenPanel = document.querySelector("#tokenPanel");
@@ -900,6 +900,7 @@ function renderAnchorLogic(slot) {
   return `
     <div class="anchorLogic">
       <h4>Four anchor checks</h4>
+      ${anchor ? renderAnchorCard("Selected anchor", anchor) : ""}
       <ol>
         ${checks.map(([name, value, score]) => `
           <li>
@@ -919,7 +920,17 @@ function renderAnchorList(title, anchors) {
   return `
     <details class="anchorList">
       <summary>${escapeHtml(title)} (${anchors.length})</summary>
-      ${anchors.map((anchor) => renderKeyValueList([
+      ${anchors.map((anchor, index) => renderAnchorCard(`${title.slice(0, -1)} ${index + 1}`, anchor)).join("")}
+    </details>
+  `;
+}
+
+function renderAnchorCard(title, anchor) {
+  return `
+    <section class="anchorCard">
+      <h5>${escapeHtml(title)}</h5>
+      ${renderAnchorImage(anchor)}
+      ${renderKeyValueList([
         ["code", anchor.code],
         ["rotation", formatRotation(anchor.rotation)],
         ["direction", anchor.direction?.label],
@@ -928,9 +939,57 @@ function renderAnchorList(title, anchors) {
         ["top-right", yesNo(anchor.top_right_in_card ?? anchor.top_right_in_this_slot)],
         ["calibrated band", yesNo(anchor.calibrated_top_right_band ?? anchor.calibrated_top_right_band_in_this_slot)],
         ["local center", formatJsonInline(anchor.local_center ?? anchor.local_center_in_this_slot)],
-      ])).join("")}
-    </details>
+      ])}
+    </section>
   `;
+}
+
+function renderAnchorImage(anchor) {
+  const box = anchor.normalized_box;
+  if (!image?.complete || !image.naturalWidth || !Array.isArray(box) || box.length < 4) {
+    return `<p class="debugMuted">Anchor image unavailable for this saved record.</p>`;
+  }
+  const canvasEl = document.createElement("canvas");
+  canvasEl.width = 720;
+  canvasEl.height = 360;
+  drawAnchorSnapshot(canvasEl, anchor);
+  return `
+    <figure class="anchorImage">
+      <img src="${canvasEl.toDataURL("image/jpeg", 0.88)}" alt="${escapeHtml(displayValue(anchor.code))} anchor crop">
+      <figcaption>${escapeHtml(anchor.source || anchor.direction?.raw || "anchor evidence")}</figcaption>
+    </figure>
+  `;
+}
+
+function drawAnchorSnapshot(canvasEl, anchor) {
+  const snapshotCtx = canvasEl.getContext("2d");
+  const points = [
+    ...(anchor.normalized_box || []),
+    ...(anchor.normalized_text_box || []),
+  ];
+  const crop = paddedSourceBounds(points.length ? points : anchor.normalized_box, 1.4);
+  const scale = Math.min(canvasEl.width / crop.width, canvasEl.height / crop.height);
+  const width = crop.width * scale;
+  const height = crop.height * scale;
+  const offsetX = (canvasEl.width - width) / 2;
+  const offsetY = (canvasEl.height - height) / 2;
+  const transform = ([x, y]) => ({
+    x: offsetX + ((x * image.naturalWidth - crop.x) * scale),
+    y: offsetY + ((y * image.naturalHeight - crop.y) * scale),
+  });
+
+  snapshotCtx.save();
+  snapshotCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  snapshotCtx.fillStyle = "#020706";
+  snapshotCtx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+  snapshotCtx.drawImage(image, crop.x, crop.y, crop.width, crop.height, offsetX, offsetY, width, height);
+  drawSnapshotPolygon(snapshotCtx, anchor.normalized_box, transform, "#34d399", 4, [8, 5]);
+  drawSnapshotPolygon(snapshotCtx, anchor.normalized_text_box, transform, "#60a5fa", 3, [4, 4]);
+  drawSnapshotLabel(snapshotCtx, [
+    `${anchor.code || "anchor"} · rotation ${formatRotation(anchor.rotation)}`,
+    `score ${formatNumber(anchor.direction?.score ?? anchor.confidence)} · ${anchor.direction?.label || "direction"}`,
+  ]);
+  snapshotCtx.restore();
 }
 
 function renderKeyValueList(rows) {
