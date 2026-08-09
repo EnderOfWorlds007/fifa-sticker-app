@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo Code Deep Dive</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-11">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-photo-code-debug-12">
   <style>
     :root {
       color-scheme: dark;
@@ -407,6 +407,44 @@
       padding: 7px;
       background: rgba(15, 23, 42, 0.48);
     }
+    .anchorCard {
+      display: grid;
+      gap: 7px;
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 7px;
+      background: rgba(2, 6, 23, 0.42);
+    }
+    .anchorCard h5 {
+      margin: 0;
+      color: #e5e7eb;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .anchorImage {
+      margin: 0;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 7px;
+      overflow: hidden;
+      background: #020706;
+    }
+    .anchorImage img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 180px;
+      object-fit: contain;
+      background: #020706;
+    }
+    .anchorImage figcaption {
+      padding: 6px 8px;
+      border-top: 1px solid rgba(148, 163, 184, 0.18);
+      color: #a8b3c1;
+      font-size: 11px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
     .debugSections {
       display: grid;
       gap: 10px;
@@ -557,7 +595,7 @@
     </section>
   </main>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-11" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-11" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_code_debug_review.js?v=build-photo-code-debug-12" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-photo-code-debug-12" type="module"></script>
 </body>
 </html>
