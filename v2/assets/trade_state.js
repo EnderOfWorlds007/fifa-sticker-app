@@ -193,7 +193,7 @@ export function extractCodeOccurrences(value) {
     add(match[1], match[2], match[3], match[4]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /(?:^|[\n,;:])\s*([A-Z]{2,3})\s*:\s*([1-9][0-9S\s,/&+().X-]*)(?=$|[\n;])/gm;
+  const groupedPattern = /(?:^|[\n,;:])\s*([A-Z]{2,3})(?:\s+[^:\d\n]+)?\s*:\s*([1-9][0-9S\s,/&+().X-]*)(?=$|[\n;])/gm;
   const groupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index + match[0].indexOf(match[1]);
