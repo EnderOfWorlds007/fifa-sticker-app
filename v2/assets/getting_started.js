@@ -6,8 +6,13 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-960000000007";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-960000000007";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-e1a56523a373";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-e1a56523a373";
+import {
+  collectionSnapshotInventorySummary,
+  fetchCollectionSnapshot,
+  importCollectionSnapshotState,
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-e1a56523a373";
 
 const status = document.querySelector("#gettingStartedStatus");
 const albumPhotoButton = document.querySelector("#albumPhotoButton");
@@ -19,6 +24,11 @@ const backendTokenInput = document.querySelector("[data-ocr-backend-token]");
 const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
+const v1ImportSummary = document.querySelector("#v1ImportSummary");
+const previewV1ImportButton = document.querySelector("#previewV1ImportButton");
+const applyV1ImportButton = document.querySelector("#applyV1ImportButton");
+
+let v1ImportSnapshot = null;
 
 applyOcrBackendFromQuery();
 const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', {
@@ -35,8 +45,11 @@ const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', 
 });
 
 initializeBackendSettings();
+previewV1Import();
 albumPhotoButton?.addEventListener("click", () => albumPhotoInput?.click());
 albumPhotoInput?.addEventListener("change", () => scanAlbumPhotos());
+previewV1ImportButton?.addEventListener("click", () => previewV1Import());
+applyV1ImportButton?.addEventListener("click", () => applyV1Import());
 copyButton?.addEventListener("click", async () => {
   const text = pasteBox?.textarea?.value || "";
   if (!text) return;
@@ -77,6 +90,54 @@ async function scanAlbumPhotos() {
     albumPhotoButton.disabled = false;
     albumPhotoButton.setAttribute("aria-busy", "false");
     albumPhotoInput.value = "";
+  }
+}
+
+async function previewV1Import() {
+  if (!v1ImportSummary) return;
+  if (previewV1ImportButton) previewV1ImportButton.disabled = true;
+  v1ImportSummary.textContent = "Checking saved V1 collection snapshot.";
+  try {
+    v1ImportSnapshot = await fetchCollectionSnapshot();
+    if (!v1ImportSnapshot) {
+      v1ImportSummary.textContent = "No V1 collection snapshot is available to import.";
+      if (applyV1ImportButton) applyV1ImportButton.disabled = true;
+      return;
+    }
+    const summary = collectionSnapshotInventorySummary(v1ImportSnapshot);
+    v1ImportSummary.textContent = [
+      `${summary.albumOwnedCount} album cards`,
+      `${summary.missingCount} still needed`,
+      `${summary.tradeableCardCount} tradeable loose cards`,
+      `${summary.tradeableUniqueCount} tradeable codes`,
+    ].join(" · ");
+    if (applyV1ImportButton) applyV1ImportButton.disabled = false;
+  } catch {
+    v1ImportSummary.textContent = "Could not load the V1 collection snapshot.";
+    if (applyV1ImportButton) applyV1ImportButton.disabled = true;
+  } finally {
+    if (previewV1ImportButton) previewV1ImportButton.disabled = false;
+  }
+}
+
+async function applyV1Import() {
+  if (!v1ImportSummary) return;
+  if (applyV1ImportButton) applyV1ImportButton.disabled = true;
+  v1ImportSummary.textContent = "Importing V1 inventory into this browser.";
+  try {
+    const result = await importCollectionSnapshotState({ forceInventoryImport: true });
+    const summary = result.summary || collectionSnapshotInventorySummary(v1ImportSnapshot);
+    v1ImportSummary.textContent = [
+      "Imported",
+      `${summary.albumOwnedCount} album cards`,
+      `${summary.tradeableCardCount} tradeable loose cards`,
+      "Collection and Compare now use this inventory",
+    ].join(" · ");
+    setStatus("V1 inventory imported. You can create a JSON backup from Collection.");
+  } catch {
+    v1ImportSummary.textContent = "Import failed. No local inventory was changed.";
+  } finally {
+    if (applyV1ImportButton) applyV1ImportButton.disabled = false;
   }
 }
 
@@ -180,7 +241,12 @@ async function testBackend() {
   try {
     const response = await fetch(recognitionUrl("/readyz"), { cache: "no-store" });
     if (!response.ok) throw new Error(`Backend check failed (${response.status}).`);
-    updateBackendStatus("Backend ready.");
+    const payload = await response.json();
+    if (payload.album_page_jobs === false) {
+      updateBackendStatus("Backend is reachable, but album-page scanning is not enabled.");
+      return;
+    }
+    updateBackendStatus("Backend ready for album pages.");
   } catch {
     updateBackendStatus("Could not reach that backend.");
   } finally {

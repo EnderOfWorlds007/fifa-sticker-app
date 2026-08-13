@@ -18,26 +18,27 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-08234414dd4d";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e1a56523a373";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-08234414dd4d";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-08234414dd4d";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-e1a56523a373";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-e1a56523a373";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-08234414dd4d";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-e1a56523a373";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-08234414dd4d";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-08234414dd4d";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-e1a56523a373";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-e1a56523a373";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-e1a56523a373";
 
 const STARTING_MISSING = {
   MEX: [7, 12, 15, 17],
@@ -815,6 +816,7 @@ function startOwnTracker() {
     cachedAt: inventorySnapshot.generated_at,
     sourceLabel: "local-only tracker",
   }));
+  ensureActiveProfileId();
   localStorage.removeItem(TRADED_AWAY_KEY);
   searchInput.value = "";
   updateText.value = "";

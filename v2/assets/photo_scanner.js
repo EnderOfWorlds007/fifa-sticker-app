@@ -9,15 +9,16 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-5d967922a1d0";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-e1a56523a373";
 import {
   createTransaction,
   deriveCollectionCodes,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5d967922a1d0";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-5d967922a1d0";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e1a56523a373";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-e1a56523a373";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-e1a56523a373";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -464,6 +465,7 @@ function addScanToCollection() {
   for (const code of codes) quantities.set(code, (quantities.get(code) || 0) + 1);
   const received = [...quantities.entries()].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => sortCode(a.code, b.code));
   saveLedger(createTransaction(loadLedger(), { kind: "received", received, given: [] }));
+  ensureActiveProfileId();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   renderCollectionActions();
   status.textContent = `Added ${codes.length} scanned card${codes.length === 1 ? "" : "s"} to collection activity.`;
