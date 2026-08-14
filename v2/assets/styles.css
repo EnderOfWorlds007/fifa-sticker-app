@@ -204,7 +204,7 @@
 }
 
 .appSwitcher {
-  display: flex;
+  display: none !important;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
@@ -318,6 +318,10 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.collectionNav {
+  display: none !important;
 }
 
 .collectionNav a {
