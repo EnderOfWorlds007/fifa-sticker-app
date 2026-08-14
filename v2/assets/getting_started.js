@@ -147,7 +147,7 @@ function renderAlbumResult(result, filename) {
   card.className = "albumParseCard";
   const template = result.template || {};
   const title = template.team || template.page_label || filename || "Album page";
-  const imageUrl = result.focused_image_url ? recognitionUrl(result.focused_image_url) : "";
+  const imageUrl = result.focused_image_url || "";
   const slots = Array.isArray(result.slots) ? result.slots : [];
   const counts = countSlotStates(slots);
   const changes = albumPageInventoryChanges(result);
@@ -158,7 +158,7 @@ function renderAlbumResult(result, filename) {
         <p>${counts.filled} filled · ${counts.empty} empty · ${counts.unknown} review</p>
       </div>
     </div>
-    ${imageUrl ? `<img class="albumParseImage" src="${escapeAttribute(imageUrl)}" alt="">` : ""}
+    ${imageUrl ? `<div class="albumParseImageFrame"><img class="albumParseImage" alt=""><span class="albumParseImageStatus">Loading photo...</span></div>` : ""}
     <pre class="albumParseSummary"></pre>
     <div class="tradeLookupActions albumInventoryActions">
       <button class="secondaryButton" data-apply-album-result type="button"${changes.length ? "" : " disabled"}>Apply to inventory</button>
@@ -171,6 +171,38 @@ function renderAlbumResult(result, filename) {
   const list = card.querySelector(".albumSlotList");
   list.replaceChildren(...slots.map(slotRow));
   albumParseList.prepend(card);
+  if (imageUrl) loadAlbumResultImage(card, imageUrl);
+}
+
+async function loadAlbumResultImage(card, path) {
+  const image = card.querySelector(".albumParseImage");
+  const statusNode = card.querySelector(".albumParseImageStatus");
+  if (!image) return;
+  try {
+    const response = await fetch(backendAssetUrl(path), withBackendAuth({ cache: "no-store" }));
+    if (!response.ok) throw new Error(`Image load failed (${response.status})`);
+    const objectUrl = URL.createObjectURL(await response.blob());
+    image.addEventListener("load", () => {
+      URL.revokeObjectURL(objectUrl);
+      if (statusNode) statusNode.remove();
+    }, { once: true });
+    image.src = objectUrl;
+  } catch {
+    if (statusNode) statusNode.textContent = "Could not load photo preview.";
+  }
+}
+
+function backendAssetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(String(path))) return path;
+  return recognitionUrl(path);
+}
+
+function withBackendAuth(options = {}) {
+  const headers = new Headers(options.headers || {});
+  const token = ocrToken();
+  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  return { ...options, headers };
 }
 
 function applyAlbumResult(result, button, card) {

@@ -1151,13 +1151,29 @@
   color: var(--muted);
 }
 
+.albumParseImageFrame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #060808;
+  overflow: hidden;
+}
+
 .albumParseImage {
   width: 100%;
   max-height: 52dvh;
   object-fit: contain;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #060808;
+}
+
+.albumParseImageStatus {
+  position: absolute;
+  inset: auto 12px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .albumParseSummary {
