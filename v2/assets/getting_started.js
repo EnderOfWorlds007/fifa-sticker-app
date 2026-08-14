@@ -6,17 +6,18 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a38557dee9e6";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-932283f24986";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-a38557dee9e6";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-a38557dee9e6";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-932283f24986";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-932283f24986";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");
 const albumPhotoButton = document.querySelector("#albumPhotoButton");
 const albumPhotoInput = document.querySelector("#albumPhotoInput");
+const albumPhotoStatus = document.querySelector("#albumPhotoStatus");
 const albumParseList = document.querySelector("#albumParseList");
 const copyButton = document.querySelector("#copyGettingStartedText");
 const backendUrlInput = document.querySelector("[data-ocr-backend-url]");
@@ -24,6 +25,8 @@ const backendTokenInput = document.querySelector("[data-ocr-backend-token]");
 const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
+let albumScanRunning = false;
+let lastAlbumSelectionSignature = "";
 
 applyOcrBackendFromQuery();
 const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', {
@@ -41,8 +44,12 @@ const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', 
 
 placeScanActionsBeforeVoice();
 initializeBackendSettings();
-albumPhotoButton?.addEventListener("click", () => albumPhotoInput?.click());
-albumPhotoInput?.addEventListener("change", () => scanAlbumPhotos());
+albumPhotoButton?.addEventListener("click", () => {
+  lastAlbumSelectionSignature = "";
+  albumPhotoInput?.click();
+});
+albumPhotoInput?.addEventListener("input", handleAlbumPhotoSelection);
+albumPhotoInput?.addEventListener("change", handleAlbumPhotoSelection);
 copyButton?.addEventListener("click", async () => {
   const text = pasteBox?.textarea?.value || "";
   if (!text) return;
@@ -50,39 +57,62 @@ copyButton?.addEventListener("click", async () => {
   setStatus("Text copied.");
 });
 
-async function scanAlbumPhotos() {
+function handleAlbumPhotoSelection() {
   const files = [...(albumPhotoInput?.files || [])];
   if (!files.length) return;
+  const signature = files.map((file) => `${file.name}:${file.size}:${file.lastModified}`).join("|");
+  if (!signature || signature === lastAlbumSelectionSignature) return;
+  lastAlbumSelectionSignature = signature;
+  if (albumScanRunning) return;
+  albumScanRunning = true;
+  scanAlbumPhotos(files).finally(() => {
+    albumScanRunning = false;
+    if (albumPhotoInput) albumPhotoInput.value = "";
+  });
+}
+
+async function scanAlbumPhotos(files) {
+  const selected = [...(files || [])];
+  if (!selected.length) return;
   if (!recognitionBaseUrl()) {
-    setStatus("Add the laptop OCR backend URL before scanning album pages.");
+    showAlbumScanMessage("Album scan", "Add the laptop OCR backend URL before scanning album pages.");
     return;
   }
-  albumPhotoButton.disabled = true;
-  albumPhotoButton.setAttribute("aria-busy", "true");
+  const summaries = [];
+  let failureCount = 0;
+  let lastError = null;
+  setAlbumScanProgress(`Preparing album photos...`);
   try {
-    const summaries = [];
-    for (let index = 0; index < files.length; index += 1) {
-      setStatus(`Preparing album photo ${index + 1}/${files.length}...`);
-      const uploadFile = await albumUploadFile(files[index]);
-      setStatus(`Uploading album photo ${index + 1}/${files.length}...`);
-      const job = await createAlbumPageJob(uploadFile);
-      const payload = job.status === "done"
-        ? job
-        : await waitForAlbumPageJob(job.job_id, {
-          onStatus: (message) => setStatus(`${message} ${index + 1}/${files.length}`),
-        });
-      const result = payload.result || payload;
-      summaries.push(String(result.summary_text || "").trim());
-      renderAlbumResult(result, files[index].name);
+    for (let index = 0; index < selected.length; index += 1) {
+      setAlbumScanProgress(`Scanning album page... ${index + 1}/${selected.length}`);
+      try {
+        const uploadFile = await albumUploadFile(selected[index]);
+        const job = await createAlbumPageJob(uploadFile);
+        const payload = job.status === "done"
+          ? job
+          : await waitForAlbumPageJob(job.job_id, {
+            onStatus: (message) => setAlbumScanProgress(`${message} ${index + 1}/${selected.length}`),
+          });
+        const result = payload.result || payload;
+        summaries.push(String(result.summary_text || "").trim());
+        renderAlbumResult(result, selected[index].name);
+      } catch (error) {
+        failureCount += 1;
+        lastError = error;
+      }
     }
     appendText(summaries.filter(Boolean).join("\n\n"));
-    setStatus(`Parsed ${files.length} album photo${files.length === 1 ? "" : "s"}.`);
+    if (!summaries.length) {
+      showAlbumScanMessage("Album scan", albumScanErrorMessage(lastError));
+      return;
+    }
+    const success = `Parsed ${summaries.length}/${selected.length} album photo${selected.length === 1 ? "" : "s"}.`;
+    const failures = failureCount ? ` ${failureCount} photo${failureCount === 1 ? "" : "s"} could not be read.` : "";
+    showAlbumScanMessage("Album scan", `${success}${failures}`);
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : "Album page scan failed.");
+    showAlbumScanMessage("Album scan", albumScanErrorMessage(error));
   } finally {
-    albumPhotoButton.disabled = false;
-    albumPhotoButton.setAttribute("aria-busy", "false");
-    albumPhotoInput.value = "";
+    resetAlbumScanButton();
   }
 }
 
@@ -234,13 +264,57 @@ function placeScanActionsBeforeVoice() {
   const voiceBlock = pasteBox.root.querySelector(".liveTranscriptPanel, .pasteCapabilityActions");
   if (voiceBlock) {
     pasteBox.root.insertBefore(scanActions, voiceBlock);
+    if (albumPhotoStatus) pasteBox.root.insertBefore(albumPhotoStatus, voiceBlock);
     return;
   }
   pasteBox.root.append(scanActions);
+  if (albumPhotoStatus) pasteBox.root.append(albumPhotoStatus);
 }
 
 function setStatus(message) {
   if (status) status.textContent = message;
+}
+
+function setAlbumScanProgress(message) {
+  if (albumPhotoButton) {
+    albumPhotoButton.disabled = true;
+    albumPhotoButton.classList.add("scanning");
+    albumPhotoButton.setAttribute("aria-busy", "true");
+    albumPhotoButton.textContent = message;
+  }
+  if (copyButton) copyButton.disabled = true;
+  const scanCardsButton = document.querySelector("#scanCardsButton");
+  scanCardsButton?.setAttribute("aria-disabled", "true");
+  showAlbumScanMessage("Album scan", message, { busy: true });
+}
+
+function resetAlbumScanButton() {
+  if (albumPhotoButton) {
+    albumPhotoButton.disabled = false;
+    albumPhotoButton.classList.remove("scanning");
+    albumPhotoButton.setAttribute("aria-busy", "false");
+    albumPhotoButton.textContent = "Scan album pages";
+  }
+  if (copyButton) copyButton.disabled = false;
+  const scanCardsButton = document.querySelector("#scanCardsButton");
+  scanCardsButton?.removeAttribute("aria-disabled");
+  if (albumPhotoStatus) albumPhotoStatus.setAttribute("aria-busy", "false");
+}
+
+function showAlbumScanMessage(label, text, { busy = false } = {}) {
+  setStatus(text);
+  if (!albumPhotoStatus) return;
+  albumPhotoStatus.hidden = false;
+  albumPhotoStatus.setAttribute("aria-busy", String(busy));
+  albumPhotoStatus.innerHTML = `<span class="pasteCapabilityStatusLabel">${escapeHtml(label)}</span><span class="pasteCapabilityStatusText">${escapeHtml(text)}</span>`;
+}
+
+function albumScanErrorMessage(error) {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("(404)")) {
+    return "Album scanning reached the laptop backend, but that backend does not expose album-page scanning yet. Restart/update the backend, then try again.";
+  }
+  return message || "Album page scan failed.";
 }
 
 function escapeHtml(value) {
