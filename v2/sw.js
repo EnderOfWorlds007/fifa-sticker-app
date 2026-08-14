@@ -1,12 +1,10 @@
-const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-profile-gate-1";
-const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-photo-debug-13|build-profile-gate-1$/, "");
+const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-a38557dee9e6";
+const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-a38557dee9e6$/, "");
 const APP_SHELL = [
   "/fifa-sticker-app/v2/",
   "/fifa-sticker-app/v2/apps/",
   "/fifa-sticker-app/v2/getting-started/",
   "/fifa-sticker-app/v2/review-album-pages/",
-  "/fifa-sticker-app/v2/review-album-orientation/",
-  "/fifa-sticker-app/v2/photo-code-debug-review/",
   "/fifa-sticker-app/v2/scanner/",
   "/fifa-sticker-app/v2/inventory/",
   "/fifa-sticker-app/v2/collection/",
@@ -27,6 +25,7 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/inventory_source.js",
   "/fifa-sticker-app/v2/assets/catalog_source.js",
   "/fifa-sticker-app/v2/assets/ocr_backend.js",
+  "/fifa-sticker-app/v2/assets/album_inventory_state.js",
   "/fifa-sticker-app/v2/assets/trade_paste_box.js",
   "/fifa-sticker-app/v2/assets/trades.js",
   "/fifa-sticker-app/v2/assets/trade_state.js",
@@ -35,13 +34,11 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/v2_profile.js",
   "/fifa-sticker-app/v2/assets/getting_started.js",
   "/fifa-sticker-app/v2/assets/review_album_pages.js",
-  "/fifa-sticker-app/v2/assets/review_album_orientation.js",
-  "/fifa-sticker-app/v2/assets/photo_code_debug_review.js",
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
   "/fifa-sticker-app/v2/assets/pwa.js",
   "/fifa-sticker-app/v2/data/trade_inventory.json",
-  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-08234414dd4d",
-  "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-08234414dd4d",
+  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-a38557dee9e6",
+  "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-a38557dee9e6",
   "/fifa-sticker-app/v2/manifest.webmanifest",
 ];
 
@@ -80,11 +77,7 @@ function shouldPreferNetwork(url) {
     || url.pathname.endsWith(".js")
     || url.pathname.endsWith(".css")
     || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-pages/")
-    || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-pages")
-    || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-orientation/")
-    || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-orientation")
-    || url.pathname.endsWith("/fifa-sticker-app/v2/photo-code-debug-review/")
-    || url.pathname.endsWith("/fifa-sticker-app/v2/photo-code-debug-review");
+    || url.pathname.endsWith("/fifa-sticker-app/v2/review-album-pages");
 }
 
 async function networkFirst(request) {

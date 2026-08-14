@@ -2,10 +2,10 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-08234414dd4d";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a38557dee9e6";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-08234414dd4d";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a38557dee9e6";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -38,7 +38,6 @@ export function mountTradePasteBox(target, options) {
     notices,
     capabilities = {},
     onTextAcquired,
-    onClear,
   } = options;
   const enabledCapabilities = {
     photo: capabilities.photo === true,
@@ -73,7 +72,6 @@ export function mountTradePasteBox(target, options) {
 
   const actionRow = document.createElement("div");
   actionRow.className = "tradeLookupActions";
-  actionRow.append(buildClearButton(textarea, onClear));
   for (const action of actions) {
     const button = document.createElement("button");
     button.id = action.id;
@@ -90,20 +88,6 @@ export function mountTradePasteBox(target, options) {
   for (const noticeConfig of notices || (notice ? [notice] : [])) root.append(buildNotice(noticeConfig));
 
   return { root, textarea, actionRow, capabilityStatus, voiceTranscriptStatus };
-}
-
-function buildClearButton(textarea, onClear) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "secondaryButton";
-  button.textContent = "Clear";
-  button.addEventListener("click", () => {
-    textarea.value = "";
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    if (typeof onClear === "function") onClear({ textarea });
-    textarea.focus();
-  });
-  return button;
 }
 
 function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options = {}) {

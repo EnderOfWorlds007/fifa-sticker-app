@@ -6,15 +6,15 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-e1a56523a373";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-e1a56523a373";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a38557dee9e6";
 import {
-  collectionSnapshotInventorySummary,
-  fetchCollectionSnapshot,
-  importCollectionSnapshotState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-e1a56523a373";
+  albumPageInventoryChanges,
+  applyAlbumPageResultToInventory,
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-a38557dee9e6";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-a38557dee9e6";
 
 const status = document.querySelector("#gettingStartedStatus");
+const scanActions = document.querySelector(".gettingStartedScanActions");
 const albumPhotoButton = document.querySelector("#albumPhotoButton");
 const albumPhotoInput = document.querySelector("#albumPhotoInput");
 const albumParseList = document.querySelector("#albumParseList");
@@ -24,11 +24,6 @@ const backendTokenInput = document.querySelector("[data-ocr-backend-token]");
 const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
-const v1ImportSummary = document.querySelector("#v1ImportSummary");
-const previewV1ImportButton = document.querySelector("#previewV1ImportButton");
-const applyV1ImportButton = document.querySelector("#applyV1ImportButton");
-
-let v1ImportSnapshot = null;
 
 applyOcrBackendFromQuery();
 const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', {
@@ -36,7 +31,7 @@ const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', 
   textareaId: "gettingStartedText",
   rows: 8,
   autofocus: true,
-  placeholder: "Paste notes, dictate what you have, or scan album pages. Album scans append filled / empty / needs-review slots here.",
+  placeholder: "Paste a card list, dictate card codes, scan album pages, or scan loose card backs. Recognized cards are added here before you save them.",
   capabilities: { voice: true },
   hint: {
     id: "gettingStartedHint",
@@ -44,12 +39,10 @@ const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', 
   },
 });
 
+placeScanActionsBeforeVoice();
 initializeBackendSettings();
-previewV1Import();
 albumPhotoButton?.addEventListener("click", () => albumPhotoInput?.click());
 albumPhotoInput?.addEventListener("change", () => scanAlbumPhotos());
-previewV1ImportButton?.addEventListener("click", () => previewV1Import());
-applyV1ImportButton?.addEventListener("click", () => applyV1Import());
 copyButton?.addEventListener("click", async () => {
   const text = pasteBox?.textarea?.value || "";
   if (!text) return;
@@ -93,54 +86,6 @@ async function scanAlbumPhotos() {
   }
 }
 
-async function previewV1Import() {
-  if (!v1ImportSummary) return;
-  if (previewV1ImportButton) previewV1ImportButton.disabled = true;
-  v1ImportSummary.textContent = "Checking saved V1 collection snapshot.";
-  try {
-    v1ImportSnapshot = await fetchCollectionSnapshot();
-    if (!v1ImportSnapshot) {
-      v1ImportSummary.textContent = "No V1 collection snapshot is available to import.";
-      if (applyV1ImportButton) applyV1ImportButton.disabled = true;
-      return;
-    }
-    const summary = collectionSnapshotInventorySummary(v1ImportSnapshot);
-    v1ImportSummary.textContent = [
-      `${summary.albumOwnedCount} album cards`,
-      `${summary.missingCount} still needed`,
-      `${summary.tradeableCardCount} tradeable loose cards`,
-      `${summary.tradeableUniqueCount} tradeable codes`,
-    ].join(" · ");
-    if (applyV1ImportButton) applyV1ImportButton.disabled = false;
-  } catch {
-    v1ImportSummary.textContent = "Could not load the V1 collection snapshot.";
-    if (applyV1ImportButton) applyV1ImportButton.disabled = true;
-  } finally {
-    if (previewV1ImportButton) previewV1ImportButton.disabled = false;
-  }
-}
-
-async function applyV1Import() {
-  if (!v1ImportSummary) return;
-  if (applyV1ImportButton) applyV1ImportButton.disabled = true;
-  v1ImportSummary.textContent = "Importing V1 inventory into this browser.";
-  try {
-    const result = await importCollectionSnapshotState({ forceInventoryImport: true });
-    const summary = result.summary || collectionSnapshotInventorySummary(v1ImportSnapshot);
-    v1ImportSummary.textContent = [
-      "Imported",
-      `${summary.albumOwnedCount} album cards`,
-      `${summary.tradeableCardCount} tradeable loose cards`,
-      "Collection and Compare now use this inventory",
-    ].join(" · ");
-    setStatus("V1 inventory imported. You can create a JSON backup from Collection.");
-  } catch {
-    v1ImportSummary.textContent = "Import failed. No local inventory was changed.";
-  } finally {
-    if (applyV1ImportButton) applyV1ImportButton.disabled = false;
-  }
-}
-
 async function albumUploadFile(file) {
   if (!file || !window.createImageBitmap || !document.createElement) return file;
   try {
@@ -172,6 +117,7 @@ function renderAlbumResult(result, filename) {
   const imageUrl = result.focused_image_url ? recognitionUrl(result.focused_image_url) : "";
   const slots = Array.isArray(result.slots) ? result.slots : [];
   const counts = countSlotStates(slots);
+  const changes = albumPageInventoryChanges(result);
   card.innerHTML = `
     <div class="albumParseHeader">
       <div>
@@ -181,12 +127,36 @@ function renderAlbumResult(result, filename) {
     </div>
     ${imageUrl ? `<img class="albumParseImage" src="${escapeAttribute(imageUrl)}" alt="">` : ""}
     <pre class="albumParseSummary"></pre>
+    <div class="tradeLookupActions albumInventoryActions">
+      <button class="secondaryButton" data-apply-album-result type="button"${changes.length ? "" : " disabled"}>Apply to inventory</button>
+      <span class="hint" data-album-inventory-status>${changes.length} ready · ${counts.unknown} review</span>
+    </div>
     <ol class="albumSlotList"></ol>
   `;
   card.querySelector(".albumParseSummary").textContent = result.summary_text || "";
+  card.querySelector("[data-apply-album-result]")?.addEventListener("click", (event) => applyAlbumResult(result, event.currentTarget, card));
   const list = card.querySelector(".albumSlotList");
   list.replaceChildren(...slots.map(slotRow));
   albumParseList.prepend(card);
+}
+
+function applyAlbumResult(result, button, card) {
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const applied = applyAlbumPageResultToInventory(result);
+    const statusNode = card?.querySelector("[data-album-inventory-status]");
+    const message = applied.applied
+      ? `Saved ${applied.filled} in album · ${applied.empty} empty · ${applied.skipped} skipped`
+      : `Nothing saved · ${applied.skipped} needs review`;
+    if (statusNode) statusNode.textContent = message;
+    setStatus(`${message}. Collection and Compare now use this inventory.`);
+  } catch {
+    button.disabled = false;
+    const statusNode = card?.querySelector("[data-album-inventory-status]");
+    if (statusNode) statusNode.textContent = "Could not save album page.";
+    setStatus("Could not save album page to inventory.");
+  }
 }
 
 function slotRow(slot) {
@@ -257,6 +227,16 @@ async function testBackend() {
 function updateBackendStatus(message) {
   if (!backendStatus) return;
   backendStatus.textContent = message || (recognitionBaseUrl() ? `Using ${recognitionBaseUrl()}` : "Recognition backend is not configured.");
+}
+
+function placeScanActionsBeforeVoice() {
+  if (!scanActions || !pasteBox?.root) return;
+  const voiceBlock = pasteBox.root.querySelector(".liveTranscriptPanel, .pasteCapabilityActions");
+  if (voiceBlock) {
+    pasteBox.root.insertBefore(scanActions, voiceBlock);
+    return;
+  }
+  pasteBox.root.append(scanActions);
 }
 
 function setStatus(message) {

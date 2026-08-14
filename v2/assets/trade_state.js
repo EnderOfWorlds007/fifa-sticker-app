@@ -193,7 +193,7 @@ export function extractCodeOccurrences(value) {
     add(match[1], match[2], match[3], match[4]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /(?:^|[\n,;:])\s*([A-Z]{2,3})(?:\s+[^:\d\n]+)?\s*:\s*([1-9][0-9S\s,/&+().X-]*)(?=$|[\n;])/gm;
+  const groupedPattern = /(?:^|[\n,;:])\s*([A-Z]{2,3})\s*:\s*([1-9][0-9S\s,/&+().X-]*)(?=$|[\n;])/gm;
   const groupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index + match[0].indexOf(match[1]);
@@ -465,17 +465,24 @@ export function deriveCollectionSummary(trackedCards, legacyCollected, ledger) {
 export function deriveCollectionModel({ catalog, legacyCollected, ledger, inventory } = {}) {
   const cards = normalizeCatalogCards(catalog);
   const aliases = normalizeCatalogAliases(catalog);
-  const ownership = completedReceivedTotals(ledger, aliases);
   const completedReceived = completedReceivedTotals(ledger, aliases);
   const completedGiven = completedGivenTotals(ledger, aliases);
   const reservedGiven = reservedGivenTotals(ledger, aliases);
-  const looseReceived = completedLooseReceivedAdjustments(ledger, aliases, legacyCollected);
+  const inventoryCards = inventory?.cards && typeof inventory.cards === "object" ? inventory.cards : {};
+  const inventoryAlbumCounts = canonicalInventoryAlbumCounts(inventoryCards, aliases);
+  const albumBaselineCodes = [...inventoryAlbumCounts.entries()]
+    .filter(([, quantity]) => quantity > 0)
+    .map(([code]) => code);
+  const ownership = new Map(inventoryAlbumCounts);
+  for (const [code, quantity] of completedReceived.entries()) {
+    ownership.set(code, (ownership.get(code) || 0) + quantity);
+  }
+  const looseReceived = completedLooseReceivedAdjustments(ledger, aliases, [...(legacyCollected || []), ...albumBaselineCodes]);
   for (const code of Array.isArray(legacyCollected) ? legacyCollected : []) {
     const normalized = canonicalCardCode(code, aliases);
     if (normalized) ownership.set(normalized, Math.max(1, ownership.get(normalized) || 0));
   }
 
-  const inventoryCards = inventory?.cards && typeof inventory.cards === "object" ? inventory.cards : {};
   const inventoryCounts = canonicalInventoryCounts(inventoryCards, aliases);
   const byCode = {};
   for (const card of cards) {
@@ -483,6 +490,7 @@ export function deriveCollectionModel({ catalog, legacyCollected, ledger, invent
     const reserved = reservedGiven.get(card.code) || 0;
     const completedOut = completedGiven.get(card.code) || 0;
     const inventoryCount = inventoryCounts.get(card.code) || 0;
+    const albumBaselineCount = inventoryAlbumCounts.get(card.code) || 0;
     const looseReceivedCount = looseReceived.get(card.code)?.total || 0;
     const tradeStock = inventoryCount + looseReceivedCount;
     const collection = {
@@ -494,6 +502,7 @@ export function deriveCollectionModel({ catalog, legacyCollected, ledger, invent
       manuallyCollected: Array.isArray(legacyCollected)
         ? legacyCollected.some((code) => canonicalCardCode(code, aliases) === card.code)
         : false,
+      baselineAlbumQuantity: albumBaselineCount,
     };
     const inventoryModel = {
       scannerBaselineQuantity: inventoryCount,
@@ -549,7 +558,11 @@ export function adjustedInventoryPayload(inventory, ledger, options = {}) {
     options.catalog,
   );
   const given = activeOutgoingAdjustments(ledger, { ...options, aliases });
-  const receivedLoose = completedLooseReceivedAdjustments(ledger, aliases, options.legacyCollected);
+  const inventoryAlbumCounts = canonicalInventoryAlbumCounts(sourceCards, aliases);
+  const albumBaselineCodes = [...inventoryAlbumCounts.entries()]
+    .filter(([, quantity]) => quantity > 0)
+    .map(([code]) => code);
+  const receivedLoose = completedLooseReceivedAdjustments(ledger, aliases, [...(options.legacyCollected || []), ...albumBaselineCodes]);
   const catalogueByCode = new Map(normalizeCatalogCards(options.catalog).map((card) => [card.code, card]));
   const cards = {};
   for (const [code, card] of Object.entries(sourceCards)) {
@@ -1299,6 +1312,24 @@ function canonicalInventoryCounts(cards, aliases = {}) {
   return totals;
 }
 
+function canonicalInventoryAlbumCounts(cards, aliases = {}) {
+  const totals = new Map();
+  for (const [rawCode, card] of Object.entries(cards || {})) {
+    const code = canonicalCardCode(rawCode, aliases);
+    if (!code) continue;
+    const explicit = [
+      card?.album_count,
+      card?.albumQuantity,
+      card?.collection?.placedQuantity,
+      card?.collection?.acquiredQuantity,
+    ].find((value) => value !== undefined && value !== null);
+    const fallback = card?.owned && card?.in_album !== false ? 1 : 0;
+    const quantity = Math.max(0, Number(explicit ?? fallback) || 0);
+    if (quantity > 0) totals.set(code, (totals.get(code) || 0) + quantity);
+  }
+  return totals;
+}
+
 function canonicalInventoryCards(cards, aliases = {}, catalog) {
   const catalogueByCode = new Map(normalizeCatalogCards(catalog).map((card) => [card.code, card]));
   const merged = {};
@@ -1314,8 +1345,13 @@ function canonicalInventoryCards(cards, aliases = {}, catalog) {
       aliases: [],
       captures: [],
       back_insignia_counts: {},
+      album_count: 0,
     };
     current.count = Math.max(0, Number(current.count || 0)) + Math.max(0, Number(card?.count || 0));
+    current.album_count = Math.max(0, Number(current.album_count || 0)) + Math.max(0, Number(card?.album_count || 0));
+    if (!card?.album_count && card?.owned && card?.in_album !== false) current.album_count += 1;
+    current.owned = Boolean(current.owned || current.album_count > 0);
+    current.in_album = Boolean(current.in_album || current.album_count > 0);
     if (rawCode !== code && !current.aliases.includes(rawCode)) current.aliases.push(rawCode);
     if (Array.isArray(card?.aliases)) {
       for (const alias of card.aliases) if (!current.aliases.includes(alias)) current.aliases.push(alias);
@@ -1335,6 +1371,7 @@ function canonicalInventoryCards(cards, aliases = {}, catalog) {
     if (!card.aliases.length) delete card.aliases;
     if (!card.captures.length) delete card.captures;
     if (!Object.keys(card.back_insignia_counts).length) delete card.back_insignia_counts;
+    if (!card.album_count) delete card.album_count;
   }
   return merged;
 }

@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-960000000007";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a38557dee9e6";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");
@@ -30,7 +30,6 @@ const closeProcessingButton = document.querySelector("#closeAlbumProcessing");
 const reasonInput = document.querySelector("#albumReasonInput");
 const slotList = document.querySelector("#albumSlotList");
 const previousPhoto = document.querySelector("#previousPhoto");
-const nextPhoto = document.querySelector("#nextPhoto");
 const approvePhoto = document.querySelector("#approvePhoto");
 const markBadPhoto = document.querySelector("#markBadPhoto");
 const flipSlotsInput = document.querySelector("#albumFlipSlotsInput");
@@ -140,7 +139,6 @@ function bindControls() {
     clearDebugObjectUrls();
   });
   previousPhoto.addEventListener("click", () => movePhoto(-1));
-  nextPhoto.addEventListener("click", () => movePhoto(1));
   approvePhoto.addEventListener("click", () => approveCurrentPhoto(approvePhoto));
   markBadPhoto.addEventListener("click", () => markCurrentPhotoBad(markBadPhoto));
   flipTypedSlots.addEventListener("click", flipTypedSlotList);
@@ -257,6 +255,7 @@ function guessTemplateForPhoto(photo) {
 
 function shouldRotatePhotoView() {
   if (!currentPhoto) return false;
+  if (isCompactReviewLayout()) return false;
   const isLandscape = Number(currentPhoto.width || 0) > Number(currentPhoto.height || 0);
   const isPhonePortrait = window.matchMedia?.("(max-width: 720px) and (orientation: portrait)")?.matches;
   return Boolean(isLandscape && isPhonePortrait);
@@ -389,12 +388,11 @@ function updateImageFrameLayout() {
   const stageHeight = Math.max(1, stageSurface.clientHeight);
   const naturalW = image.naturalWidth || Number(currentPhoto?.width || 0) || 1;
   const naturalH = image.naturalHeight || Number(currentPhoto?.height || 0) || 1;
-  const fillCompactRotatedStage = isCompactReviewLayout() && viewRotated;
-  const scale = fillCompactRotatedStage ? Math.max(stageWidth / naturalW, stageHeight / naturalH) : Math.min(stageWidth / naturalW, stageHeight / naturalH);
+  const scale = Math.min(stageWidth / naturalW, stageHeight / naturalH);
   const width = Math.max(1, naturalW * scale);
   const height = Math.max(1, naturalH * scale);
   const x = (stageWidth - width) / 2;
-  const y = isCompactReviewLayout() && !fillCompactRotatedStage ? 0 : (stageHeight - height) / 2;
+  const y = isCompactReviewLayout() ? 0 : (stageHeight - height) / 2;
   imageFrame.style.left = `${x}px`;
   imageFrame.style.top = `${y}px`;
   imageFrame.style.width = `${width}px`;
@@ -549,6 +547,7 @@ function openProcessingDebug() {
       const card = document.createElement("article");
       const heading = document.createElement("div");
       const title = document.createElement("h2");
+      const outcome = document.createElement("p");
       const serializedOutcome = typeof step.outcome === "string" ? step.outcome : JSON.stringify(step.outcome || {}, null, 2);
       title.textContent = `${String(index + 1).padStart(2, "0")} ${step.title || "Step"}`;
       heading.className = "albumDebugStepHeader";
@@ -560,6 +559,7 @@ function openProcessingDebug() {
         copyButton.addEventListener("click", () => copyProcessingText(copyButton, serializedOutcome));
         heading.append(copyButton);
       }
+      outcome.textContent = serializedOutcome;
       card.append(heading);
       if (step.kind === "image" && step.url) {
         const image = document.createElement("img");
@@ -575,35 +575,18 @@ function openProcessingDebug() {
             image.replaceWith(error);
           });
         card.append(image);
-        if (serializedOutcome) card.append(collapsedProcessingText(serializedOutcome, "Show details"));
+        card.append(outcome);
       } else if (step.kind === "json") {
         const pre = document.createElement("pre");
         pre.textContent = serializedOutcome;
-        const details = collapsedProcessingText("", "Show JSON");
-        details.append(pre);
-        card.append(details);
-      } else if (serializedOutcome) {
-        const outcome = document.createElement("p");
-        outcome.textContent = serializedOutcome;
+        card.append(pre);
+      } else {
         card.append(outcome);
       }
       return card;
     }),
   );
   debugPanel.hidden = false;
-}
-
-function collapsedProcessingText(text, label) {
-  const details = document.createElement("details");
-  const summary = document.createElement("summary");
-  summary.textContent = label;
-  details.append(summary);
-  if (text) {
-    const outcome = document.createElement("p");
-    outcome.textContent = text;
-    details.append(outcome);
-  }
-  return details;
 }
 
 async function copyProcessingText(button, text) {
@@ -846,7 +829,7 @@ async function withSavingState(button, task) {
 }
 
 function updateSavingControls() {
-  const controls = [markFilled, markEmpty, markUnknown, approvePhoto, markBadPhoto, flipTypedSlots, previousSlot, nextSlot, previousPhoto, nextPhoto];
+  const controls = [markFilled, markEmpty, markUnknown, approvePhoto, markBadPhoto, flipTypedSlots, previousSlot, nextSlot, previousPhoto];
   for (const control of controls) {
     if (!control) continue;
     if (saveInFlight && !saveDisabledStates.has(control)) saveDisabledStates.set(control, control.disabled);
@@ -876,7 +859,6 @@ function movePhoto(delta) {
 function updatePhotoNavControls() {
   const index = currentPhoto ? photos.findIndex((photo) => photo.id === currentPhoto.id) : -1;
   previousPhoto.disabled = index <= 0;
-  nextPhoto.disabled = index < 0 || index >= photos.length - 1;
 }
 
 function handleStagePointerDown(event) {
@@ -938,8 +920,12 @@ function handleStageTap(event) {
   }
   const rect = surfaceRect();
   const imageRect = drawnImageRect(rect);
-  const point = eventPointInOverlay(event);
-  if (!point) return;
+  const overlayRect = overlay.getBoundingClientRect();
+  const point = {
+    x: event.clientX - overlayRect.left,
+    y: event.clientY - overlayRect.top,
+  };
+  if (point.x < 0 || point.y < 0 || point.x > overlayRect.width || point.y > overlayRect.height) return;
   for (let i = currentTemplate.slots.length - 1; i >= 0; i--) {
     const polygon = slotPolygon(currentTemplate.slots[i]).map((item) => transformPoint(item[0], item[1], imageRect));
     if (pointInPolygon(point, polygon)) {
@@ -947,25 +933,6 @@ function handleStageTap(event) {
       return;
     }
   }
-}
-
-function eventPointInOverlay(event) {
-  const overlayRect = overlay.getBoundingClientRect();
-  const screenX = event.clientX - overlayRect.left;
-  const screenY = event.clientY - overlayRect.top;
-  if (screenX < 0 || screenY < 0 || screenX > overlayRect.width || screenY > overlayRect.height) return null;
-  if (!viewRotated) {
-    return {
-      x: screenX,
-      y: screenY,
-    };
-  }
-  const width = Math.max(1, overlay.clientWidth);
-  const height = Math.max(1, overlay.clientHeight);
-  return {
-    x: (screenY / Math.max(1, overlayRect.height)) * width,
-    y: (1 - screenX / Math.max(1, overlayRect.width)) * height,
-  };
 }
 
 function pointInPolygon(point, polygon) {
