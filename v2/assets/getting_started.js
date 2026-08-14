@@ -1,4 +1,5 @@
 import {
+  albumPageBackendReadiness,
   applyOcrBackendFromQuery,
   createAlbumPageJob,
   ocrToken,
@@ -6,12 +7,12 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-932283f24986";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-08c766d5aa58";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-932283f24986";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-932283f24986";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-08c766d5aa58";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-08c766d5aa58";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");
@@ -83,6 +84,8 @@ async function scanAlbumPhotos(files) {
   let lastError = null;
   setAlbumScanProgress(`Preparing album photos...`);
   try {
+    const readiness = await ensureAlbumBackendReady();
+    if (!readiness) return;
     for (let index = 0; index < selected.length; index += 1) {
       setAlbumScanProgress(`Scanning album page... ${index + 1}/${selected.length}`);
       try {
@@ -239,11 +242,13 @@ async function testBackend() {
   backendTestButton.disabled = true;
   updateBackendStatus("Testing backend...");
   try {
-    const response = await fetch(recognitionUrl("/readyz"), { cache: "no-store" });
-    if (!response.ok) throw new Error(`Backend check failed (${response.status}).`);
-    const payload = await response.json();
-    if (payload.album_page_jobs === false) {
+    const readiness = await albumPageBackendReadiness();
+    if (!readiness.available) {
       updateBackendStatus("Backend is reachable, but album-page scanning is not enabled.");
+      return;
+    }
+    if (readiness.authRequired && !ocrToken()) {
+      updateBackendStatus("Backend needs the OCR token. Open the test URL with token=... or paste the token here.");
       return;
     }
     updateBackendStatus("Backend ready for album pages.");
@@ -257,6 +262,24 @@ async function testBackend() {
 function updateBackendStatus(message) {
   if (!backendStatus) return;
   backendStatus.textContent = message || (recognitionBaseUrl() ? `Using ${recognitionBaseUrl()}` : "Recognition backend is not configured.");
+}
+
+async function ensureAlbumBackendReady() {
+  try {
+    const readiness = await albumPageBackendReadiness();
+    if (!readiness.available) {
+      showAlbumScanMessage("Album scan", "The laptop backend is reachable, but album-page scanning is not enabled.");
+      return null;
+    }
+    if (readiness.authRequired && !ocrToken()) {
+      showAlbumScanMessage("Album scan", "This laptop backend needs the OCR token. Open the test URL with token=... or paste the token in OCR backend.");
+      return null;
+    }
+    return readiness;
+  } catch {
+    showAlbumScanMessage("Album scan", "Could not reach the laptop OCR backend.");
+    return null;
+  }
 }
 
 function placeScanActionsBeforeVoice() {

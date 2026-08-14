@@ -19,7 +19,7 @@ export function applyOcrBackendFromQuery() {
     }
     changedSensitiveParams = true;
   }
-  const token = params.get("ocrToken");
+  const token = params.get("ocrToken") ?? params.get("token") ?? params.get("ocr_token");
   if (token !== null) {
     if (token) {
       savePersistedValue(OCR_TOKEN_KEY, token);
@@ -111,6 +111,21 @@ export async function createAlbumPageJob(file) {
   if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
   if (!response.ok) throw new Error(`Album upload failed (${response.status}).`);
   return response.json();
+}
+
+export async function albumPageBackendReadiness() {
+  const response = await fetch(recognitionUrl("/readyz"), {
+    cache: "no-store",
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`Backend check failed (${response.status}).`);
+  const payload = await response.json();
+  const albumJobs = payload?.v2?.album_page_jobs || {};
+  return {
+    available: albumJobs.available !== false && albumJobs.create_endpoint === ALBUM_PAGE_JOBS_PATH,
+    authRequired: Boolean(albumJobs.auth_required),
+    auth: String(albumJobs.auth || ""),
+  };
 }
 
 export async function waitForPhotoCodeJob(jobId, { onStatus } = {}) {
@@ -208,7 +223,7 @@ function secureCookieSuffix() {
 function clearSensitiveQueryParams() {
   const url = new URL(window.location.href);
   let changed = false;
-  for (const key of ["ocr", "recognitionBaseUrl", "ocrToken"]) {
+  for (const key of ["ocr", "recognitionBaseUrl", "ocrToken", "token", "ocr_token"]) {
     if (url.searchParams.has(key)) {
       url.searchParams.delete(key);
       changed = true;
