@@ -32,6 +32,7 @@ let albumScanRunning = false;
 let lastAlbumSelectionSignature = "";
 let parsedTextCodes = [];
 let parseTextTimer = null;
+let backendTestRunning = false;
 
 applyOcrBackendFromQuery();
 const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', {
@@ -526,6 +527,7 @@ function initializeBackendSettings() {
   updateBackendStatus();
   backendSaveButton?.addEventListener("click", saveBackendSettings);
   backendTestButton?.addEventListener("click", () => testBackend());
+  if (recognitionBaseUrl()) setTimeout(() => testBackend({ autosave: false }), 250);
 }
 
 function saveBackendSettings() {
@@ -537,14 +539,19 @@ function saveBackendSettings() {
   updateBackendStatus("Backend settings saved. Run Test backend to verify the connection.", "idle");
 }
 
-async function testBackend() {
-  saveBackendSettings();
+async function testBackend({ autosave = true } = {}) {
+  if (backendTestRunning) return;
+  backendTestRunning = true;
+  if (autosave) saveBackendSettings();
   const base = recognitionBaseUrl();
   if (!base) {
     updateBackendStatus("Backend test failed: add a laptop URL first.", "fail");
+    backendTestRunning = false;
     return;
   }
   backendTestButton.disabled = true;
+  const originalText = backendTestButton.textContent;
+  backendTestButton.textContent = "Testing...";
   updateBackendStatus(`Testing backend at ${base}/readyz...`, "checking");
   try {
     const readiness = await albumPageBackendReadiness();
@@ -561,6 +568,8 @@ async function testBackend() {
     updateBackendStatus(`Backend test failed: ${backendReachabilityErrorMessage(error)}`, "fail");
   } finally {
     backendTestButton.disabled = false;
+    backendTestButton.textContent = originalText || "Test backend";
+    backendTestRunning = false;
   }
 }
 
