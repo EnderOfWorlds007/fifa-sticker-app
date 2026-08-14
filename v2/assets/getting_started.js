@@ -148,17 +148,18 @@ function renderAlbumResult(result, filename) {
   const template = result.template || {};
   const title = template.team || template.page_label || filename || "Album page";
   const imageUrl = result.focused_image_url || "";
-  const slots = Array.isArray(result.slots) ? result.slots : [];
+  const slots = Array.isArray(result.slots) ? result.slots.map((slot) => ({ ...slot })) : [];
+  const editableResult = { ...result, slots };
   const counts = countSlotStates(slots);
-  const changes = albumPageInventoryChanges(result);
+  const changes = albumPageInventoryChanges(editableResult);
   card.innerHTML = `
     <div class="albumParseHeader">
       <div>
         <h3>${escapeHtml(title)}</h3>
-        <p>${counts.filled} filled · ${counts.empty} empty · ${counts.unknown} review</p>
+        <p data-album-counts>${albumCountsText(counts)}</p>
       </div>
     </div>
-    ${imageUrl ? `<div class="albumParseImageFrame"><img class="albumParseImage" alt=""><span class="albumParseImageStatus">Loading photo...</span></div>` : ""}
+    ${imageUrl ? `<div class="albumParseImageFrame"><img class="albumParseImage" alt=""><canvas class="albumParseOverlay"></canvas><span class="albumParseImageStatus">Loading photo...</span></div>` : ""}
     <pre class="albumParseSummary"></pre>
     <div class="tradeLookupActions albumInventoryActions">
       <button class="secondaryButton" data-apply-album-result type="button"${changes.length ? "" : " disabled"}>Apply to inventory</button>
@@ -166,15 +167,22 @@ function renderAlbumResult(result, filename) {
     </div>
     <ol class="albumSlotList"></ol>
   `;
-  card.querySelector(".albumParseSummary").textContent = result.summary_text || "";
-  card.querySelector("[data-apply-album-result]")?.addEventListener("click", (event) => applyAlbumResult(result, event.currentTarget, card));
-  const list = card.querySelector(".albumSlotList");
-  list.replaceChildren(...slots.map(slotRow));
+  card.querySelector("[data-apply-album-result]")?.addEventListener("click", (event) => applyAlbumResult(editableResult, event.currentTarget, card));
   albumParseList.prepend(card);
-  if (imageUrl) loadAlbumResultImage(card, imageUrl);
+  updateAlbumResultCard(card, editableResult);
+  card.querySelector(".albumSlotList")?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-slot-index]");
+    if (!row) return;
+    toggleAlbumSlot(editableResult, Number(row.dataset.slotIndex), card);
+  });
+  if (imageUrl) {
+    card.querySelector(".albumParseOverlay")?.addEventListener("click", (event) => handleAlbumOverlayTap(event, editableResult, card));
+    installAlbumOverlayResizeRedraw(card, editableResult);
+    loadAlbumResultImage(card, imageUrl, editableResult);
+  }
 }
 
-async function loadAlbumResultImage(card, path) {
+async function loadAlbumResultImage(card, path, result) {
   const image = card.querySelector(".albumParseImage");
   const statusNode = card.querySelector(".albumParseImageStatus");
   if (!image) return;
@@ -185,6 +193,7 @@ async function loadAlbumResultImage(card, path) {
     image.addEventListener("load", () => {
       URL.revokeObjectURL(objectUrl);
       if (statusNode) statusNode.remove();
+      drawAlbumOverlay(card, result);
     }, { once: true });
     image.src = objectUrl;
   } catch {
@@ -224,20 +233,180 @@ function applyAlbumResult(result, button, card) {
   }
 }
 
-function slotRow(slot) {
+function updateAlbumResultCard(card, result) {
+  const slots = Array.isArray(result.slots) ? result.slots : [];
+  const counts = countSlotStates(slots);
+  const changes = albumPageInventoryChanges(result);
+  const countsNode = card.querySelector("[data-album-counts]");
+  if (countsNode) countsNode.textContent = albumCountsText(counts);
+  const summaryNode = card.querySelector(".albumParseSummary");
+  if (summaryNode) summaryNode.textContent = albumSummaryText(result);
+  const applyButton = card.querySelector("[data-apply-album-result]");
+  if (applyButton) applyButton.disabled = changes.length === 0;
+  const statusNode = card.querySelector("[data-album-inventory-status]");
+  if (statusNode) statusNode.textContent = `${changes.length} ready · ${counts.unknown} review`;
+  const list = card.querySelector(".albumSlotList");
+  list?.replaceChildren(...slots.map((slot, index) => slotRow(slot, index)));
+  drawAlbumOverlay(card, result);
+}
+
+function slotRow(slot, index) {
   const row = document.createElement("li");
-  row.dataset.state = slot.state || "unknown";
+  row.dataset.slotIndex = String(index);
+  row.dataset.state = normalizedSlotState(slot);
+  row.dataset.review = String(slot.review_required === true);
   const label = slot.code || `Slot ${slot.ordinal}`;
-  row.innerHTML = `<strong>${escapeHtml(label)}</strong><span>${escapeHtml(slot.state || "unknown")}</span>`;
+  row.innerHTML = `<strong>${escapeHtml(label)}</strong><span>${slotStatusText(slot)}</span>`;
   return row;
 }
 
 function countSlotStates(slots) {
   return slots.reduce((counts, slot) => {
-    const state = slot.state === "filled" || slot.state === "empty" ? slot.state : "unknown";
+    const state = displaySlotState(slot);
     counts[state] += 1;
     return counts;
   }, { filled: 0, empty: 0, unknown: 0 });
+}
+
+function normalizedSlotState(slot) {
+  return slot?.state === "filled" || slot?.state === "empty" ? slot.state : "unknown";
+}
+
+function displaySlotState(slot) {
+  if (slot?.review_required === true) return "unknown";
+  return normalizedSlotState(slot);
+}
+
+function slotStatusText(slot) {
+  const state = displaySlotState(slot);
+  return state === "unknown" ? "review" : state;
+}
+
+function albumCountsText(counts) {
+  return `${counts.filled} filled · ${counts.empty} empty · ${counts.unknown} review`;
+}
+
+function albumSummaryText(result) {
+  const slots = Array.isArray(result.slots) ? result.slots : [];
+  const filled = slots.filter((slot) => normalizedSlotState(slot) === "filled" && slot.review_required !== true);
+  const empty = slots.filter((slot) => normalizedSlotState(slot) === "empty" && slot.review_required !== true);
+  const review = slots.filter((slot) => slot.review_required === true || normalizedSlotState(slot) === "unknown");
+  const title = result?.template?.team || result?.template?.page_label || "Album page";
+  return [
+    `${title}:`,
+    `Filled: ${albumSlotLabels(filled)}`,
+    `Empty: ${albumSlotLabels(empty)}`,
+    `Needs review: ${albumSlotLabels(review)}`,
+  ].join("\n");
+}
+
+function albumSlotLabels(slots) {
+  return slots.map((slot) => slot.code || slot.ordinal).filter(Boolean).join(", ") || "None";
+}
+
+function toggleAlbumSlot(result, index, card) {
+  const slot = result?.slots?.[index];
+  if (!slot) return;
+  const current = normalizedSlotState(slot);
+  const next = slot.review_required === true || current === "unknown"
+    ? "filled"
+    : current === "filled"
+      ? "empty"
+      : "filled";
+  slot.state = next;
+  slot.review_required = false;
+  slot.confidence = Math.max(Number(slot.confidence || 0), 0.99);
+  updateAlbumResultCard(card, result);
+}
+
+function handleAlbumOverlayTap(event, result, card) {
+  const overlay = card.querySelector(".albumParseOverlay");
+  if (!overlay || !Array.isArray(result?.slots)) return;
+  const rect = overlay.getBoundingClientRect();
+  const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  for (let index = result.slots.length - 1; index >= 0; index -= 1) {
+    const polygon = slotPolygon(result.slots[index]).map(([x, y]) => transformAlbumPoint(x, y, rect));
+    if (pointInPolygon(point, polygon)) {
+      toggleAlbumSlot(result, index, card);
+      return;
+    }
+  }
+}
+
+function drawAlbumOverlay(card, result) {
+  const image = card.querySelector(".albumParseImage");
+  const overlay = card.querySelector(".albumParseOverlay");
+  if (!image || !overlay || !image.complete || !image.naturalWidth) return;
+  const rect = overlay.getBoundingClientRect();
+  const ratio = window.devicePixelRatio || 1;
+  overlay.width = Math.max(1, Math.round(rect.width * ratio));
+  overlay.height = Math.max(1, Math.round(rect.height * ratio));
+  const ctx = overlay.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  const slots = Array.isArray(result?.slots) ? result.slots : [];
+  for (const slot of slots) drawAlbumSlotOverlay(ctx, slot, rect);
+}
+
+function installAlbumOverlayResizeRedraw(card, result) {
+  const frame = card.querySelector(".albumParseImageFrame");
+  if (!frame) return;
+  const redraw = () => drawAlbumOverlay(card, result);
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(redraw);
+    observer.observe(frame);
+  } else {
+    window.addEventListener("resize", redraw);
+  }
+}
+
+function drawAlbumSlotOverlay(ctx, slot, rect) {
+  const points = slotPolygon(slot).map(([x, y]) => transformAlbumPoint(x, y, rect));
+  if (points.length < 3) return;
+  const state = displaySlotState(slot);
+  const review = state === "unknown";
+  const color = review ? "#f1be59" : state === "filled" ? "#28d17c" : "#63a9ff";
+  ctx.beginPath();
+  points.forEach((point, index) => (index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
+  ctx.closePath();
+  ctx.fillStyle = review ? "rgba(241, 190, 89, 0.13)" : state === "filled" ? "rgba(40, 209, 124, 0.14)" : "rgba(99, 169, 255, 0.13)";
+  ctx.strokeStyle = color;
+  ctx.lineWidth = review ? 3 : 2;
+  ctx.setLineDash(review ? [6, 4] : state === "empty" ? [8, 5] : []);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const center = points.reduce((acc, point) => ({ x: acc.x + point.x / points.length, y: acc.y + point.y / points.length }), { x: 0, y: 0 });
+  const label = slot.code || slot.ordinal || "";
+  const stateLetter = review ? "?" : state === "filled" ? "F" : "E";
+  const text = `${label} ${stateLetter}`.trim();
+  ctx.font = "800 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+  const width = Math.max(34, ctx.measureText(text).width + 12);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+  ctx.fillRect(center.x - width / 2, center.y - 12, width, 24);
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, center.x, center.y);
+}
+
+function slotPolygon(slot) {
+  return Array.isArray(slot?.polygon) ? slot.polygon : [];
+}
+
+function transformAlbumPoint(x, y, rect) {
+  return { x: Number(x) * rect.width, y: Number(y) * rect.height };
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const pi = polygon[i];
+    const pj = polygon[j];
+    const crosses = pi.y > point.y !== pj.y > point.y && point.x < ((pj.x - pi.x) * (point.y - pi.y)) / (pj.y - pi.y) + pi.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }
 
 function appendText(text) {

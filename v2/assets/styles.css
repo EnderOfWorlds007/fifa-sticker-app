@@ -1163,9 +1163,19 @@
 }
 
 .albumParseImage {
+  grid-area: 1 / 1;
+  display: block;
   width: 100%;
   max-height: 52dvh;
   object-fit: contain;
+}
+
+.albumParseOverlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: manipulation;
 }
 
 .albumParseImageStatus {
@@ -1208,6 +1218,7 @@
   border-radius: 7px;
   padding: 7px 8px;
   background: var(--panel);
+  cursor: pointer;
 }
 
 .albumSlotList li[data-state="filled"] {
@@ -1215,11 +1226,15 @@
 }
 
 .albumSlotList li[data-state="empty"] {
-  border-left-color: #ffcf5a;
+  border-left-color: #63a9ff;
 }
 
 .albumSlotList li[data-state="unknown"] {
-  border-left-color: #d16666;
+  border-left-color: #f1be59;
+}
+
+.albumSlotList li[data-review="true"] {
+  border-style: dashed;
 }
 
 .albumSlotList strong {
