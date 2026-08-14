@@ -1168,10 +1168,31 @@
   margin-top: 12px;
 }
 
-.ocrBackendSettings .hint {
-  margin: 10px 0 0;
+.ocrBackendStatus {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1114;
   color: var(--muted);
   font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.ocrBackendStatus[data-state="checking"] {
+  border-color: rgba(241, 190, 89, 0.66);
+  color: #ffd98a;
+}
+
+.ocrBackendStatus[data-state="ok"] {
+  border-color: rgba(0, 194, 168, 0.66);
+  color: #8ff5dc;
+}
+
+.ocrBackendStatus[data-state="fail"] {
+  border-color: rgba(255, 125, 125, 0.72);
+  color: #ffb6b6;
 }
 
 .albumParseResults {

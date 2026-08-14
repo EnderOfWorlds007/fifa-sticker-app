@@ -534,39 +534,42 @@ function saveBackendSettings() {
     token: backendTokenInput?.value || "",
   });
   if (backendUrlInput) backendUrlInput.value = saved.baseUrl;
-  updateBackendStatus("Backend saved.");
+  updateBackendStatus("Backend settings saved. Run Test backend to verify the connection.", "idle");
 }
 
 async function testBackend() {
   saveBackendSettings();
   const base = recognitionBaseUrl();
   if (!base) {
-    updateBackendStatus("Add a laptop URL first.");
+    updateBackendStatus("Backend test failed: add a laptop URL first.", "fail");
     return;
   }
   backendTestButton.disabled = true;
-  updateBackendStatus("Testing backend...");
+  updateBackendStatus(`Testing backend at ${base}/readyz...`, "checking");
   try {
     const readiness = await albumPageBackendReadiness();
     if (!readiness.available) {
-      updateBackendStatus("Backend is reachable, but album-page scanning is not enabled.");
+      updateBackendStatus("Backend test failed: the laptop is reachable, but album-page scanning is not enabled.", "fail");
       return;
     }
     if (readiness.authRequired && !ocrToken()) {
-      updateBackendStatus("Backend needs the OCR token. Open the test URL with token=... or paste the token here.");
+      updateBackendStatus("Backend test failed: this laptop requires the OCR token. Open the test URL with token=... or paste the token here.", "fail");
       return;
     }
-    updateBackendStatus("Backend ready for album pages.");
+    updateBackendStatus(`Backend test passed. Album page scanning is ready at ${base}.`, "ok");
   } catch (error) {
-    updateBackendStatus(backendReachabilityErrorMessage(error));
+    updateBackendStatus(`Backend test failed: ${backendReachabilityErrorMessage(error)}`, "fail");
   } finally {
     backendTestButton.disabled = false;
   }
 }
 
-function updateBackendStatus(message) {
+function updateBackendStatus(message, state = "idle") {
   if (!backendStatus) return;
-  backendStatus.textContent = message || (recognitionBaseUrl() ? `Using ${recognitionBaseUrl()}` : "Recognition backend is not configured.");
+  backendStatus.dataset.state = state;
+  backendStatus.textContent = message || (recognitionBaseUrl()
+    ? `Backend saved: ${recognitionBaseUrl()}. Run Test backend to verify the connection.`
+    : "Backend not configured. Add the laptop URL, then run Test backend.");
 }
 
 async function ensureAlbumBackendReady() {
