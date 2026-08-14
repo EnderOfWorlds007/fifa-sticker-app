@@ -6,6 +6,7 @@ import {
 import { ensureActiveProfileId } from "./v2_profile.js?v=build-c1b0d4e9a623";
 
 const ALBUM_SCAN_SOURCE_LABEL = "album page scan";
+const TEXT_INVENTORY_SOURCE_LABEL = "pasted text inventory";
 
 export function albumPageInventoryChanges(result) {
   const slots = Array.isArray(result?.slots) ? result.slots : [];
@@ -84,6 +85,48 @@ export function applyAlbumPageResultToInventory(result, {
   return { applied: changes.length, filled, empty, skipped: skippedSlotCount(result), payload };
 }
 
+export function applyTextInventoryCodesToInventory(codes, {
+  storage = globalThis.localStorage,
+  now = () => new Date().toISOString(),
+} = {}) {
+  const quantities = normalizedCodeQuantities(codes);
+  if (!quantities.size) {
+    return { applied: 0, unique: 0, total: 0, payload: loadCachedInventoryPayload(storage) };
+  }
+  const timestamp = now();
+  const payload = normalizedInventoryPayload(loadCachedInventoryPayload(storage), timestamp);
+  const cards = payload.cards;
+  let total = 0;
+  for (const [code, quantity] of quantities.entries()) {
+    total += quantity;
+    const current = cards[code] || { code, count: 0 };
+    cards[code] = {
+      ...current,
+      code,
+      count: Math.max(Number(current.count || 0), quantity),
+      owned: true,
+      text_inventory_updated_at: timestamp,
+      text_inventory_source: TEXT_INVENTORY_SOURCE_LABEL,
+    };
+  }
+  payload.updated_at = timestamp;
+  payload.source = payload.source || "browser-local inventory";
+  payload.stats = {
+    ...(payload.stats || {}),
+    text_inventory_updated_at: timestamp,
+    text_inventory_applied_count: Number(payload.stats?.text_inventory_applied_count || 0) + total,
+    unique_code_count: Object.keys(cards).length,
+    matched_card_count: Object.values(cards).reduce((sum, card) => sum + Number(card?.count || 0), 0),
+  };
+  storage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(payload));
+  storage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify({
+    cachedAt: timestamp,
+    sourceLabel: TEXT_INVENTORY_SOURCE_LABEL,
+  }));
+  ensureActiveProfileId(storage);
+  return { applied: total, unique: quantities.size, total, payload };
+}
+
 function normalizedInventoryPayload(payload, timestamp) {
   const base = payload && typeof payload === "object" ? payload : {};
   return {
@@ -103,4 +146,15 @@ function skippedSlotCount(result) {
 
 function normalizeCode(value) {
   return String(value || "").trim().replace(/[\s_-]/g, "").toUpperCase();
+}
+
+function normalizedCodeQuantities(codes) {
+  const quantities = new Map();
+  const values = Array.isArray(codes) ? codes : String(codes || "").split(/\s+/);
+  for (const value of values) {
+    const code = normalizeCode(value);
+    if (!code) continue;
+    quantities.set(code, (quantities.get(code) || 0) + 1);
+  }
+  return quantities;
 }

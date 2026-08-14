@@ -814,6 +814,65 @@
   display: none;
 }
 
+.textInventoryPreview {
+  display: grid;
+  gap: 10px;
+  max-width: min(100%, 560px);
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f1418;
+}
+
+.textInventoryPreview[hidden] {
+  display: none;
+}
+
+.textInventoryPreviewHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.textInventoryPreviewHeader h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.textInventoryPreviewHeader span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.textInventoryCodeList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 6px;
+  max-height: 170px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.textInventoryCodeList li {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(0, 194, 168, 0.28);
+  border-radius: 8px;
+  background: #15191f;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.textInventoryActions {
+  align-items: center;
+}
+
 .photoReviewPanel {
   display: grid;
   gap: 12px;

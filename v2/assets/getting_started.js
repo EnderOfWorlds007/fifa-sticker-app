@@ -11,8 +11,10 @@ import {
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-c1b0d4e9a623";
+  applyTextInventoryCodesToInventory,
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-4e7a92c1d0f6";
 import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-c1b0d4e9a623";
+import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-4e7a92c1d0f6";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");
@@ -28,6 +30,8 @@ const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let albumScanRunning = false;
 let lastAlbumSelectionSignature = "";
+let parsedTextCodes = [];
+let parseTextTimer = null;
 
 applyOcrBackendFromQuery();
 const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', {
@@ -44,6 +48,7 @@ const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', 
 });
 
 placeScanActionsBeforeVoice();
+const textParsePreview = installTextParsePreview();
 initializeBackendSettings();
 albumPhotoButton?.addEventListener("click", () => {
   lastAlbumSelectionSignature = "";
@@ -57,6 +62,91 @@ copyButton?.addEventListener("click", async () => {
   await navigator.clipboard?.writeText(text);
   setStatus("Text copied.");
 });
+pasteBox?.textarea?.addEventListener("input", scheduleTextParsePreview);
+scheduleTextParsePreview();
+
+function installTextParsePreview() {
+  if (!pasteBox?.root) return null;
+  const panel = document.createElement("section");
+  panel.className = "textInventoryPreview";
+  panel.hidden = true;
+  panel.innerHTML = `
+    <div class="textInventoryPreviewHeader">
+      <h2>Parsed text</h2>
+      <span data-text-inventory-count></span>
+    </div>
+    <ol class="textInventoryCodeList" data-text-inventory-list></ol>
+    <div class="tradeLookupActions textInventoryActions">
+      <button class="secondaryButton" data-apply-text-inventory type="button" disabled>Apply parsed cards</button>
+      <span class="hint" data-text-inventory-status></span>
+    </div>
+  `;
+  const voiceBlock = pasteBox.root.querySelector(".liveTranscriptPanel, .pasteCapabilityActions");
+  if (voiceBlock) pasteBox.root.insertBefore(panel, voiceBlock);
+  else pasteBox.root.append(panel);
+  panel.querySelector("[data-apply-text-inventory]")?.addEventListener("click", applyParsedTextInventory);
+  return panel;
+}
+
+function scheduleTextParsePreview() {
+  clearTimeout(parseTextTimer);
+  parseTextTimer = setTimeout(updateTextParsePreview, 120);
+}
+
+function updateTextParsePreview() {
+  if (!textParsePreview || !pasteBox?.textarea) return;
+  const value = pasteBox.textarea.value.trim();
+  const list = textParsePreview.querySelector("[data-text-inventory-list]");
+  const count = textParsePreview.querySelector("[data-text-inventory-count]");
+  const statusNode = textParsePreview.querySelector("[data-text-inventory-status]");
+  const applyButton = textParsePreview.querySelector("[data-apply-text-inventory]");
+  parsedTextCodes = parsedCodesFromText(value);
+  if (!value) {
+    textParsePreview.hidden = true;
+    if (applyButton) applyButton.disabled = true;
+    return;
+  }
+  textParsePreview.hidden = false;
+  list?.replaceChildren(...parsedTextCodes.slice(0, 120).map((code) => {
+    const item = document.createElement("li");
+    item.textContent = code;
+    return item;
+  }));
+  if (count) count.textContent = parsedTextCodes.length ? `${parsedTextCodes.length} found` : "None found";
+  if (statusNode) {
+    statusNode.textContent = parsedTextCodes.length
+      ? "Review the recognized cards, then apply them to this phone's inventory."
+      : "No card codes recognized yet.";
+  }
+  if (applyButton) applyButton.disabled = parsedTextCodes.length === 0;
+}
+
+function parsedCodesFromText(value) {
+  if (!value) return [];
+  const normalized = normalizeCodeInput(value).text || "";
+  return normalized
+    .split(/\s+/)
+    .map((code) => code.trim())
+    .filter(Boolean);
+}
+
+function applyParsedTextInventory(event) {
+  const button = event?.currentTarget;
+  if (!parsedTextCodes.length) return;
+  if (button) button.disabled = true;
+  try {
+    const applied = applyTextInventoryCodesToInventory(parsedTextCodes);
+    const statusNode = textParsePreview?.querySelector("[data-text-inventory-status]");
+    const message = `Saved ${applied.unique} card${applied.unique === 1 ? "" : "s"} from text`;
+    if (statusNode) statusNode.textContent = `${message}.`;
+    setStatus(`${message}. Collection and Compare now use this inventory.`);
+  } catch {
+    if (button) button.disabled = false;
+    const statusNode = textParsePreview?.querySelector("[data-text-inventory-status]");
+    if (statusNode) statusNode.textContent = "Could not save parsed text.";
+    setStatus("Could not save parsed text to inventory.");
+  }
+}
 
 function handleAlbumPhotoSelection() {
   const files = [...(albumPhotoInput?.files || [])];
