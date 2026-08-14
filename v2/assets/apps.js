@@ -1,4 +1,4 @@
-import { redirectNewBrowserToGettingStarted } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-08c766d5aa58";
+import { redirectNewBrowserToGettingStarted } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-2c133a7da1c4";
 
 redirectNewBrowserToGettingStarted({ isHub: document.body.classList.contains("appsBody") });
 

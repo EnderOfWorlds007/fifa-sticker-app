@@ -7,12 +7,12 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-08c766d5aa58";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-2c133a7da1c4";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-08c766d5aa58";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-08c766d5aa58";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-2c133a7da1c4";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-2c133a7da1c4";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");
@@ -252,8 +252,8 @@ async function testBackend() {
       return;
     }
     updateBackendStatus("Backend ready for album pages.");
-  } catch {
-    updateBackendStatus("Could not reach that backend.");
+  } catch (error) {
+    updateBackendStatus(backendReachabilityErrorMessage(error));
   } finally {
     backendTestButton.disabled = false;
   }
@@ -276,10 +276,15 @@ async function ensureAlbumBackendReady() {
       return null;
     }
     return readiness;
-  } catch {
-    showAlbumScanMessage("Album scan", "Could not reach the laptop OCR backend.");
+  } catch (error) {
+    showAlbumScanMessage("Album scan", backendReachabilityErrorMessage(error));
     return null;
   }
+}
+
+function backendReachabilityErrorMessage(error) {
+  if (error?.name === "AbortError") return "Backend check timed out. Make sure the laptop is awake and Tailscale Funnel is online.";
+  return "Could not reach the laptop OCR backend.";
 }
 
 function placeScanActionsBeforeVoice() {

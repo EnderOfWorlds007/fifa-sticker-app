@@ -114,10 +114,17 @@ export async function createAlbumPageJob(file) {
 }
 
 export async function albumPageBackendReadiness() {
-  const response = await fetch(recognitionUrl("/readyz"), {
-    cache: "no-store",
-    headers: authHeaders(),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let response;
+  try {
+    response = await fetch(recognitionUrl("/readyz"), {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) throw new Error(`Backend check failed (${response.status}).`);
   const payload = await response.json();
   const albumJobs = payload?.v2?.album_page_jobs || {};
