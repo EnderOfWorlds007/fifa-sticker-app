@@ -176,7 +176,7 @@ function renderAlbumResult(result, filename) {
     toggleAlbumSlot(editableResult, Number(row.dataset.slotIndex), card);
   });
   if (imageUrl) {
-    card.querySelector(".albumParseOverlay")?.addEventListener("click", (event) => handleAlbumOverlayTap(event, editableResult, card));
+    card.querySelector(".albumParseOverlay")?.addEventListener("pointerdown", (event) => handleAlbumOverlayTap(event, editableResult, card));
     installAlbumOverlayResizeRedraw(card, editableResult);
     loadAlbumResultImage(card, imageUrl, editableResult);
   }
@@ -253,7 +253,7 @@ function updateAlbumResultCard(card, result) {
 function slotRow(slot, index) {
   const row = document.createElement("li");
   row.dataset.slotIndex = String(index);
-  row.dataset.state = normalizedSlotState(slot);
+  row.dataset.state = displaySlotState(slot);
   row.dataset.review = String(slot.review_required === true);
   const label = slot.code || `Slot ${slot.ordinal}`;
   row.innerHTML = `<strong>${escapeHtml(label)}</strong><span>${slotStatusText(slot)}</span>`;
@@ -320,16 +320,25 @@ function toggleAlbumSlot(result, index, card) {
 }
 
 function handleAlbumOverlayTap(event, result, card) {
+  event.preventDefault();
   const overlay = card.querySelector(".albumParseOverlay");
   if (!overlay || !Array.isArray(result?.slots)) return;
   const rect = overlay.getBoundingClientRect();
   const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  let nearest = { index: -1, distance: Infinity };
   for (let index = result.slots.length - 1; index >= 0; index -= 1) {
     const polygon = slotPolygon(result.slots[index]).map(([x, y]) => transformAlbumPoint(x, y, rect));
     if (pointInPolygon(point, polygon)) {
       toggleAlbumSlot(result, index, card);
       return;
     }
+    const center = polygonCenter(polygon);
+    const distance = Math.hypot(point.x - center.x, point.y - center.y);
+    if (distance < nearest.distance) nearest = { index, distance };
+  }
+  const fallbackRadius = Math.max(34, Math.min(rect.width, rect.height) * 0.08);
+  if (nearest.index >= 0 && nearest.distance <= fallbackRadius) {
+    toggleAlbumSlot(result, nearest.index, card);
   }
 }
 
@@ -396,6 +405,11 @@ function slotPolygon(slot) {
 
 function transformAlbumPoint(x, y, rect) {
   return { x: Number(x) * rect.width, y: Number(y) * rect.height };
+}
+
+function polygonCenter(polygon) {
+  if (!polygon.length) return { x: 0, y: 0 };
+  return polygon.reduce((acc, point) => ({ x: acc.x + point.x / polygon.length, y: acc.y + point.y / polygon.length }), { x: 0, y: 0 });
 }
 
 function pointInPolygon(point, polygon) {
