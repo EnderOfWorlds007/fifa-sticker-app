@@ -18,27 +18,27 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8ae15889ea59";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6dbdd88f9b0a";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-8ae15889ea59";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-8ae15889ea59";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-6dbdd88f9b0a";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-6dbdd88f9b0a";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-8ae15889ea59";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-6dbdd88f9b0a";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8ae15889ea59";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-8ae15889ea59";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-8ae15889ea59";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6dbdd88f9b0a";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-6dbdd88f9b0a";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-6dbdd88f9b0a";
 
 const STARTING_MISSING = {
   MEX: [15, 17],
@@ -83,6 +83,60 @@ const STARTING_MISSING = {
   CC: [3, 11],
 };
 
+const ALBUM_PREFIX_ORDER = [
+  "00",
+  "FWC",
+  "MEX",
+  "RSA",
+  "KOR",
+  "CZE",
+  "CAN",
+  "BIH",
+  "QAT",
+  "SUI",
+  "BRA",
+  "MAR",
+  "HAI",
+  "SCO",
+  "USA",
+  "PAR",
+  "AUS",
+  "TUR",
+  "GER",
+  "CUW",
+  "CIV",
+  "ECU",
+  "NED",
+  "JPN",
+  "SWE",
+  "TUN",
+  "BEL",
+  "EGY",
+  "IRN",
+  "NZL",
+  "ESP",
+  "CPV",
+  "KSA",
+  "URU",
+  "FRA",
+  "SEN",
+  "IRQ",
+  "NOR",
+  "ARG",
+  "ALG",
+  "AUT",
+  "JOR",
+  "POR",
+  "COD",
+  "UZB",
+  "COL",
+  "ENG",
+  "CRO",
+  "GHA",
+  "PAN",
+];
+
+const ALBUM_PREFIX_RANK = new Map(ALBUM_PREFIX_ORDER.map((prefix, index) => [prefix, index]));
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
 
 mountTradePasteBox('[data-trade-paste-box="collection-update"]', {
@@ -132,6 +186,7 @@ const tradedAwayIgnoredSummary = document.querySelector("#tradedAwayIgnoredSumma
 const addIgnoredTradedAwayButton = document.querySelector("#addIgnoredTradedAwayButton");
 const resetButton = document.querySelector("#resetButton");
 const filterButtons = [...document.querySelectorAll("[data-filter]")];
+const sortButtons = [...document.querySelectorAll("[data-sort-order]")];
 const parsedBatchPreview = document.querySelector("#parsedBatchPreview");
 const activityList = document.querySelector("#activityList");
 const backupButton = document.querySelector("#backupButton");
@@ -468,6 +523,33 @@ function groupedByTeam(items) {
   }, new Map());
 }
 
+function sortedTeamEntries(groups) {
+  const entries = [...groups.entries()];
+  if (state.sortOrder === "alphabetical") {
+    return entries.sort(([teamA, cardsA], [teamB, cardsB]) => (
+      teamA.localeCompare(teamB) || cardAlbumRank(cardsA[0]) - cardAlbumRank(cardsB[0])
+    ));
+  }
+  return entries.sort(([, cardsA], [, cardsB]) => (
+    teamAlbumRank(cardsA) - teamAlbumRank(cardsB)
+    || cardsA[0].team.localeCompare(cardsB[0].team)
+  ));
+}
+
+function teamAlbumRank(teamCards) {
+  return Math.min(...teamCards.map(cardAlbumRank));
+}
+
+function cardAlbumRank(card) {
+  const code = String(card?.code || "").toUpperCase();
+  if (code === "00") return 0;
+  const match = code.match(/^([A-Z]+)(\d+)/);
+  if (!match) return 999999;
+  const prefixRank = ALBUM_PREFIX_RANK.get(match[1]);
+  const number = Number(match[2]);
+  return (prefixRank ?? 999) * 1000 + (Number.isFinite(number) ? number : 999);
+}
+
 function render() {
   const model = currentCollectionModel();
   const visible = visibleCards();
@@ -487,8 +569,14 @@ function render() {
     button.setAttribute("aria-pressed", String(active));
   });
 
+  sortButtons.forEach((button) => {
+    const active = button.dataset.sortOrder === state.sortOrder;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+
   teamList.replaceChildren(
-    ...[...groups.entries()].map(([team, teamCards]) => teamSection(team, teamCards)),
+    ...sortedTeamEntries(groups).map(([team, teamCards]) => teamSection(team, teamCards)),
   );
   emptyState.hidden = visible.length > 0;
   renderParsedPreview();
@@ -530,7 +618,7 @@ function cardButton(card) {
 
 function missingText() {
   const missing = currentCollectionModel().cards.filter((card) => card.missing);
-  return [...groupedByTeam(missing).entries()]
+  return sortedTeamEntries(groupedByTeam(missing))
     .map(([team, teamCards]) => {
       const remaining = teamCards.map((card) => card.number);
       return remaining.length ? `${team}: ${remaining.join(", ")}` : "";
@@ -801,7 +889,7 @@ async function importBackupFile() {
 
 function startOwnTracker() {
   if (!window.confirm("Start a local-only tracker on this phone? Current local marks and trade activity will be cleared.")) return;
-  state = { filter: "missing", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
   inventorySnapshot = emptyLocalInventorySnapshot();
   inventoryProjection = null;
   saveState();
@@ -848,6 +936,14 @@ filterButtons.forEach((button) => {
   });
 });
 
+sortButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    state.sortOrder = button.dataset.sortOrder;
+    saveState();
+    render();
+  });
+});
+
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
 gotCardsButton.addEventListener("click", markGotCards);
@@ -867,7 +963,7 @@ updateText.addEventListener("keydown", (event) => {
 });
 resetButton.addEventListener("click", () => {
   if (!window.confirm("Reset all collection marks from this tracker? Traded-away activity stays recorded.")) return;
-  state = { filter: "missing", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
   const ledger = loadLedger();
   saveLedger({
     ...ledger,

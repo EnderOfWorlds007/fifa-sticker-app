@@ -1,15 +1,15 @@
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8ae15889ea59";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6dbdd88f9b0a";
 import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   isUsableInventoryPayload,
   loadCachedInventoryPayload,
   loadInventoryCacheMeta,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-8ae15889ea59";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-8ae15889ea59";
+} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-6dbdd88f9b0a";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-6dbdd88f9b0a";
 
 export const COLLECTION_KEY = "panini.collectionTracker.v1";
-export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-8ae15889ea59";
+export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-6dbdd88f9b0a";
 export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 4;
 const PUBLIC_V1_COLLECTION_KEY = "panini.collectionTracker.v2";
 const SNAPSHOT_IMPORT_SOURCE_LABEL = "imported v1 collection snapshot";
@@ -195,12 +195,13 @@ function shouldImportSnapshotInventory(storage, forceInventoryImport) {
 }
 
 function defaultCollectionState() {
-  return { filter: "missing", collected: [], hasLocalState: false, importedCollectionSnapshotVersion: 0 };
+  return { filter: "missing", sortOrder: "album", collected: [], hasLocalState: false, importedCollectionSnapshotVersion: 0 };
 }
 
 function normalizeCollectionState(value, hasLocalState) {
   return {
     filter: ["missing", "all", "collected"].includes(value?.filter) ? value.filter : "missing",
+    sortOrder: ["album", "alphabetical"].includes(value?.sortOrder) ? value.sortOrder : "album",
     collected: Array.isArray(value?.collected) ? value.collected : [],
     hasLocalState: Boolean(hasLocalState),
     importedCollectionSnapshotVersion: Number(value?.importedCollectionSnapshotVersion || 0),
