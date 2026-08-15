@@ -387,6 +387,47 @@
   background: #181d20;
 }
 
+.albumReviewPanel {
+  border-color: rgba(0, 194, 168, 0.44);
+  background: #13211f;
+}
+
+.albumReviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.albumReviewHeader span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.albumReviewList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.albumReviewList li {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: #101416;
+  font-size: 14px;
+}
+
+.albumReviewList li.found {
+  border-color: rgba(0, 194, 168, 0.42);
+}
+
+.albumReviewList li.missing {
+  border-color: rgba(255, 176, 118, 0.44);
+}
+
 .collectionUpdateCard label {
   font-weight: 800;
 }
@@ -563,6 +604,24 @@
 
 .collectionCard.collected span {
   color: #9de6c8;
+}
+
+.collectionCard.pending {
+  box-shadow: 0 0 0 2px #f3b35b inset;
+}
+
+.collectionCard.pendingPresent {
+  border-color: #f3b35b;
+  background: #1d332c;
+}
+
+.collectionCard.pendingMissing {
+  border-color: #f3b35b;
+  background: #362620;
+}
+
+.collectionCard.pending span {
+  color: #ffd7a2;
 }
 
 .collectionEmpty {

@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
   <title>FIFA Collection Tracker</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-8b19f3a6d4c2">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-93af2b41d674">
 </head>
 <body class="collectionBody">
   <main class="collectionShell">
@@ -68,6 +68,18 @@
       </div>
     </section>
 
+    <section id="albumReviewPanel" class="collectionUpdateCard albumReviewPanel" aria-label="Review album status changes" hidden>
+      <div class="albumReviewHeader">
+        <h2>Album status review</h2>
+        <span id="albumReviewSummary"></span>
+      </div>
+      <ul id="albumReviewList" class="albumReviewList"></ul>
+      <div class="collectionUpdateActions">
+        <button id="saveAlbumReviewButton" type="button">Save album status</button>
+        <button id="cancelAlbumReviewButton" class="secondaryButton" type="button">Cancel changes</button>
+      </div>
+    </section>
+
     <section class="collectionUpdateCard" aria-label="Update collection from pasted text">
       <div data-trade-paste-box="collection-update"></div>
       <div id="parsedBatchPreview" class="parsedBatchPreview" aria-live="polite"></div>
@@ -113,9 +125,9 @@
     <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-d72c6b4e1980" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-6dbdd88f9b0a" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/collection_tracker.js?v=build-6dbdd88f9b0a" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-6dbdd88f9b0a" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-93af2b41d674" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-93af2b41d674" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/collection_tracker.js?v=build-93af2b41d674" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-93af2b41d674" type="module"></script>
 </body>
 </html>

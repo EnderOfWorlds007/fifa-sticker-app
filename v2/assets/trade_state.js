@@ -1103,8 +1103,22 @@ function uniqueRows(rows) {
 function normalizeCollectionState(value) {
   return {
     filter: ["missing", "all", "collected"].includes(value?.filter) ? value.filter : "missing",
+    sortOrder: ["album", "alphabetical"].includes(value?.sortOrder) ? value.sortOrder : "album",
     collected: Array.isArray(value?.collected) ? [...new Set(value.collected)].sort(sortCode) : [],
+    albumStatusOverrides: normalizeAlbumStatusOverrides(value?.albumStatusOverrides),
   };
+}
+
+function normalizeAlbumStatusOverrides(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([code, status]) => [
+        canonicalCardCode(code, {}),
+        String(status || "").trim().toLowerCase(),
+      ])
+      .filter(([code, status]) => code && ["present", "missing"].includes(status)),
+  );
 }
 
 function normalizeTransaction(value) {

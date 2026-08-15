@@ -18,27 +18,27 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6dbdd88f9b0a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-93af2b41d674";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-6dbdd88f9b0a";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-6dbdd88f9b0a";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-93af2b41d674";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-93af2b41d674";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-6dbdd88f9b0a";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-93af2b41d674";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6dbdd88f9b0a";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-6dbdd88f9b0a";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-6dbdd88f9b0a";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-93af2b41d674";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-93af2b41d674";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-93af2b41d674";
 
 const STARTING_MISSING = {
   MEX: [15, 17],
@@ -189,6 +189,11 @@ const filterButtons = [...document.querySelectorAll("[data-filter]")];
 const sortButtons = [...document.querySelectorAll("[data-sort-order]")];
 const parsedBatchPreview = document.querySelector("#parsedBatchPreview");
 const activityList = document.querySelector("#activityList");
+const albumReviewPanel = document.querySelector("#albumReviewPanel");
+const albumReviewSummary = document.querySelector("#albumReviewSummary");
+const albumReviewList = document.querySelector("#albumReviewList");
+const saveAlbumReviewButton = document.querySelector("#saveAlbumReviewButton");
+const cancelAlbumReviewButton = document.querySelector("#cancelAlbumReviewButton");
 const backupButton = document.querySelector("#backupButton");
 const shareBackupButton = document.querySelector("#shareBackupButton");
 const downloadBackupButton = document.querySelector("#downloadBackupButton");
@@ -202,6 +207,7 @@ const storagePersistenceStatus = document.querySelector("#storagePersistenceStat
 let state = loadState();
 let pendingIgnoredGotLines = [];
 let pendingIgnoredTradedAwayLines = [];
+let pendingAlbumStatusChanges = new Map();
 let inventorySnapshot = null;
 let inventoryProjection = null;
 let cards = startingMissingCards();
@@ -274,15 +280,6 @@ function saveState() {
 
 function collectedSet() {
   return deriveCollectionCodes(state.collected, loadLedger());
-}
-
-function setCardCollected(code, isCollected) {
-  const next = new Set(state.collected);
-  if (isCollected) next.add(code);
-  else next.delete(code);
-  state.collected = [...next].sort(sortCode);
-  saveState();
-  render();
 }
 
 function trackedCodeSet() {
@@ -479,7 +476,46 @@ function visibleCards() {
 }
 
 function currentCollectionModel() {
+  return applyAlbumStatusOverrides(currentInventoryProjection().collectionModel);
+}
+
+function baseCollectionModel() {
   return currentInventoryProjection().collectionModel;
+}
+
+function applyAlbumStatusOverrides(model) {
+  const overrides = state.albumStatusOverrides || {};
+  const cards = model.cards.map((card) => {
+    const status = overrides[card.code];
+    if (!["present", "missing"].includes(status)) return card;
+    const missing = status === "missing";
+    return {
+      ...card,
+      missing,
+      collection: {
+        ...card.collection,
+        acquiredQuantity: missing ? 0 : Math.max(1, card.collection?.acquiredQuantity || 0),
+        placedQuantity: missing ? 0 : 1,
+        missingQuantity: missing ? 1 : 0,
+        albumStatusOverride: status,
+      },
+    };
+  });
+  const byCode = Object.fromEntries(cards.map((card) => [card.code, card]));
+  const collectedCount = cards.filter((card) => !card.missing).length;
+  const missingCards = cards.filter((card) => card.missing);
+  return {
+    ...model,
+    cards,
+    byCode,
+    summary: {
+      ...model.summary,
+      collectedCount,
+      missingCount: missingCards.length,
+      teamsRemainingCount: new Set(missingCards.map((card) => card.team)).size,
+      progressPercent: cards.length ? Math.round((collectedCount / cards.length) * 100) : 0,
+    },
+  };
 }
 
 function currentInventoryProjection() {
@@ -579,6 +615,7 @@ function render() {
     ...sortedTeamEntries(groups).map(([team, teamCards]) => teamSection(team, teamCards)),
   );
   emptyState.hidden = visible.length > 0;
+  renderAlbumReviewPanel();
   renderParsedPreview();
   renderActivity();
 }
@@ -604,16 +641,120 @@ function teamSection(team, teamCards) {
 }
 
 function cardButton(card) {
-  const isCollected = !card.missing;
+  const pendingStatus = pendingAlbumStatusChanges.get(card.code);
+  const displayedStatus = pendingStatus || savedAlbumStatus(card);
+  const isCollected = displayedStatus === "present";
   const button = document.createElement("button");
   button.type = "button";
   button.className = "collectionCard";
   button.classList.toggle("collected", isCollected);
+  button.classList.toggle("pending", Boolean(pendingStatus));
+  button.classList.toggle("pendingPresent", pendingStatus === "present");
+  button.classList.toggle("pendingMissing", pendingStatus === "missing");
   button.setAttribute("aria-pressed", String(isCollected));
-  button.setAttribute("aria-label", `${card.label}, ${isCollected ? "collected" : "missing"}`);
-  button.innerHTML = `<strong>${card.number}</strong><span>${isCollected ? "Have" : "Need"}</span>`;
-  button.addEventListener("click", () => setCardCollected(card.code, !isCollected));
+  button.setAttribute("aria-label", `${card.label}, ${isCollected ? "present" : "missing"}${pendingStatus ? ", pending change" : ""}`);
+  button.innerHTML = `<strong>${card.number}</strong><span>${cardStatusLabel(displayedStatus, pendingStatus)}</span>`;
+  button.addEventListener("click", () => stageAlbumStatusFlip(card.code));
   return button;
+}
+
+function cardStatusLabel(status, pendingStatus) {
+  if (pendingStatus === "present") return "Save present";
+  if (pendingStatus === "missing") return "Save missing";
+  return status === "present" ? "Present" : "Missing";
+}
+
+function savedAlbumStatus(card) {
+  const override = state.albumStatusOverrides?.[card.code];
+  if (["present", "missing"].includes(override)) return override;
+  return card.missing ? "missing" : "present";
+}
+
+function baseAlbumStatus(code) {
+  return baseCollectionModel().byCode?.[code]?.missing ? "missing" : "present";
+}
+
+function stageAlbumStatusFlip(code) {
+  const card = currentCollectionModel().byCode?.[code];
+  if (!card) return;
+  const savedStatus = savedAlbumStatus(card);
+  const currentStatus = pendingAlbumStatusChanges.get(code) || savedStatus;
+  const nextStatus = currentStatus === "present" ? "missing" : "present";
+  if (nextStatus === savedStatus) pendingAlbumStatusChanges.delete(code);
+  else pendingAlbumStatusChanges.set(code, nextStatus);
+  render();
+  const count = pendingAlbumStatusChanges.size;
+  status.textContent = count
+    ? `${count} album status change${count === 1 ? "" : "s"} staged. Review and save below.`
+    : "No album status changes staged.";
+}
+
+function renderAlbumReviewPanel() {
+  const entries = pendingAlbumStatusEntries();
+  albumReviewPanel.hidden = entries.length === 0;
+  if (!entries.length) {
+    albumReviewSummary.textContent = "";
+    albumReviewList.replaceChildren();
+    return;
+  }
+  const presentCount = entries.filter((entry) => entry.nextStatus === "present").length;
+  const missingCount = entries.filter((entry) => entry.nextStatus === "missing").length;
+  albumReviewSummary.textContent = [
+    presentCount ? `${presentCount} to present` : "",
+    missingCount ? `${missingCount} to missing` : "",
+  ].filter(Boolean).join(" / ");
+  albumReviewList.replaceChildren(...entries.map(albumReviewItem));
+}
+
+function pendingAlbumStatusEntries() {
+  const model = currentCollectionModel();
+  return [...pendingAlbumStatusChanges.entries()]
+    .map(([code, nextStatus]) => {
+      const card = model.byCode?.[code];
+      if (!card) return null;
+      return {
+        code,
+        card,
+        currentStatus: savedAlbumStatus(card),
+        nextStatus,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => cardAlbumRank(a.card) - cardAlbumRank(b.card) || sortCode(a.code, b.code));
+}
+
+function albumReviewItem(entry) {
+  const item = document.createElement("li");
+  item.className = entry.nextStatus === "present" ? "found" : "missing";
+  item.textContent = `${entry.code}${entry.card.name ? ` - ${entry.card.name}` : ""} - ${entry.currentStatus} -> ${entry.nextStatus}`;
+  return item;
+}
+
+function saveAlbumStatusChanges() {
+  const entries = pendingAlbumStatusEntries();
+  if (!entries.length) return;
+  const overrides = { ...(state.albumStatusOverrides || {}) };
+  for (const entry of entries) {
+    const baseline = baseAlbumStatus(entry.code);
+    if (entry.nextStatus === baseline) delete overrides[entry.code];
+    else overrides[entry.code] = entry.nextStatus;
+  }
+  state = {
+    ...state,
+    albumStatusOverrides: Object.fromEntries(Object.entries(overrides).sort(([a], [b]) => sortCode(a, b))),
+    hasLocalState: true,
+  };
+  pendingAlbumStatusChanges = new Map();
+  saveState();
+  render();
+  status.textContent = `${entries.length} album status change${entries.length === 1 ? "" : "s"} saved on this phone.`;
+}
+
+function cancelAlbumStatusChanges() {
+  const count = pendingAlbumStatusChanges.size;
+  pendingAlbumStatusChanges = new Map();
+  render();
+  status.textContent = count ? "Album status changes discarded." : "No album status changes to discard.";
 }
 
 function missingText() {
@@ -889,7 +1030,8 @@ async function importBackupFile() {
 
 function startOwnTracker() {
   if (!window.confirm("Start a local-only tracker on this phone? Current local marks and trade activity will be cleared.")) return;
-  state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], albumStatusOverrides: {}, hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  pendingAlbumStatusChanges = new Map();
   inventorySnapshot = emptyLocalInventorySnapshot();
   inventoryProjection = null;
   saveState();
@@ -946,6 +1088,8 @@ sortButtons.forEach((button) => {
 
 searchInput.addEventListener("input", render);
 copyMissingButton.addEventListener("click", copyMissingList);
+saveAlbumReviewButton.addEventListener("click", saveAlbumStatusChanges);
+cancelAlbumReviewButton.addEventListener("click", cancelAlbumStatusChanges);
 gotCardsButton.addEventListener("click", markGotCards);
 tradedAwayButton.addEventListener("click", markTradedAway);
 addIgnoredGotButton.addEventListener("click", addIgnoredGotCards);
@@ -963,7 +1107,8 @@ updateText.addEventListener("keydown", (event) => {
 });
 resetButton.addEventListener("click", () => {
   if (!window.confirm("Reset all collection marks from this tracker? Traded-away activity stays recorded.")) return;
-  state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], albumStatusOverrides: {}, hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
+  pendingAlbumStatusChanges = new Map();
   const ledger = loadLedger();
   saveLedger({
     ...ledger,
