@@ -7,36 +7,33 @@ import {
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-c1b0d4e9a623";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-c1b0d4e9a623";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-c1b0d4e9a623";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8ae15889ea59";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8ae15889ea59";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-8ae15889ea59";
 
 const STARTING_MISSING = {
-  MEX: [7, 12, 15, 17],
+  MEX: [15, 17],
   RSA: [6, 10],
-  CZE: [5, 8, 13],
-  CAN: [4, 16],
+  CZE: [8, 13],
+  CAN: [4],
   BIH: [2, 3, 9, 14, 16],
   SUI: [9, 13],
-  HAI: [3, 4, 7, 17],
-  SCO: [10, 13],
+  HAI: [3, 4, 7],
+  SCO: [10],
   MAR: [15],
   BRA: [10],
-  QAT: [16, 19, 20],
+  QAT: [19, 20],
   USA: [2, 7],
   CUW: [15],
   NED: [15],
-  ECU: [5, 7, 8, 15],
-  CIV: [2, 8, 12, 17],
+  ECU: [5, 7],
+  CIV: [2, 8, 17],
   GER: [3, 14, 15, 16],
-  AUS: [8, 11, 13, 14, 16, 18],
-  PAR: [2, 6, 18],
-  JPN: [9, 10],
-  SWE: [3, 5],
+  AUS: [8, 13, 14, 16, 18],
+  PAR: [2],
   TUN: [3, 8, 9, 10],
   EGY: [12],
   IRN: [6],
-  NZL: [10],
   ESP: [7],
   CPV: [14],
   KSA: [7],
@@ -44,19 +41,17 @@ const STARTING_MISSING = {
   SEN: [9, 13],
   NOR: [3, 20],
   AUT: [2, 18],
-  POR: [3, 8],
   JOR: [6, 10],
-  ALG: [12, 17],
-  ARG: [8, 10, 15, 16, 17],
+  ALG: [12],
+  ARG: [10, 15, 16, 17],
   IRQ: [2, 9, 13, 16],
   FRA: [1, 17, 19],
-  COD: [1, 2, 10, 15, 16, 20],
-  UZB: [2],
-  GHA: [16, 20],
+  COD: [1, 2, 10],
+  GHA: [20],
   CRO: [13],
   ENG: [4, 13, 19],
-  FWC: [1, 12],
-  CC: [1, 3],
+  FWC: [9],
+  CC: [3, 11],
 };
 
 const TRADE_SEED_KEY = "panini.pendingTradeSeed.v1";
@@ -363,7 +358,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-c1b0d4e9a623");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-8ae15889ea59");
 }
 
 function reservedQuantity(code) {
