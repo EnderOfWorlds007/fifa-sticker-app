@@ -2,10 +2,11 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-0b4150f2a999";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-38c0e65f18c5";
 import {
   normalizeCodeInput,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-0b4150f2a999";
+  normalizePastedCardText,
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-38c0e65f18c5";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -56,6 +57,7 @@ export function mountTradePasteBox(target, options) {
   textarea.rows = rows;
   textarea.placeholder = placeholder;
   if (autofocus) textarea.autofocus = true;
+  textarea.addEventListener("input", () => normalizeEncodedTextareaValue(textarea));
   root.append(textarea);
 
   const capabilityStatus = document.createElement("div");
@@ -88,6 +90,16 @@ export function mountTradePasteBox(target, options) {
   for (const noticeConfig of notices || (notice ? [notice] : [])) root.append(buildNotice(noticeConfig));
 
   return { root, textarea, actionRow, capabilityStatus, voiceTranscriptStatus };
+}
+
+function normalizeEncodedTextareaValue(textarea) {
+  if (!/%[0-9A-Fa-f]{2}/.test(textarea.value)) return;
+  const normalized = normalizePastedCardText(textarea.value);
+  if (normalized === textarea.value) return;
+  textarea.value = normalized;
+  textarea.selectionStart = normalized.length;
+  textarea.selectionEnd = normalized.length;
+  textarea.blur?.();
 }
 
 function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options = {}) {
