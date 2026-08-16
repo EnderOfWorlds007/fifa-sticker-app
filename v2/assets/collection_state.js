@@ -26,7 +26,15 @@ export function loadCollectionState(storage = globalThis.localStorage) {
 }
 
 export function saveCollectionState(state, storage = globalThis.localStorage) {
-  storage.setItem(COLLECTION_KEY, JSON.stringify(normalizeCollectionState(state, true)));
+  const normalized = normalizeCollectionState(state, true);
+  storage.setItem(COLLECTION_KEY, JSON.stringify(normalized));
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent("panini:local-state-saved", {
+      detail: { kind: "collection", collectionState: normalized },
+    }));
+  } catch {
+    // Local collection writes should not depend on optional cloud sync.
+  }
 }
 
 export async function importCollectionSnapshotState({

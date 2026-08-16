@@ -100,6 +100,26 @@
 
     <section class="collectionUpdateCard collectionBackupCard" aria-label="Backup and restore">
       <h2>Backup</h2>
+      <section class="cloudSyncPanel" aria-label="Cloud backup">
+        <div id="cloudSyncStatus" class="localTrustStatus" data-severity="muted" aria-live="polite">
+          <strong>Cloud backup status</strong>
+          <span>Cloud sync is not configured on this app.</span>
+        </div>
+        <div class="cloudSyncCode">
+          <span>Active restore code</span>
+          <code id="cloudUserId">Not assigned yet</code>
+        </div>
+        <label class="cloudSyncField" for="cloudAccountSelect">
+          <span>Account</span>
+          <select id="cloudAccountSelect"></select>
+        </label>
+        <div class="collectionBackupActions">
+          <button id="copyCloudIdButton" class="secondaryButton" type="button">Copy restore code</button>
+          <button id="newCloudAccountButton" class="secondaryButton" type="button">New account</button>
+          <input id="cloudRestoreIdInput" type="text" inputmode="latin" autocomplete="off" spellcheck="false" placeholder="Paste restore code">
+          <button id="restoreCloudIdButton" class="secondaryButton" type="button">Add account</button>
+        </div>
+      </section>
       <div class="collectionBackupActions">
         <button id="backupButton" type="button">Create JSON backup</button>
         <button id="shareBackupButton" class="secondaryButton" type="button">Share JSON</button>

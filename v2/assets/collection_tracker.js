@@ -1170,6 +1170,16 @@ importBackupButton.addEventListener("click", chooseBackupFile);
 restoreButton.addEventListener("click", restoreBackup);
 startLocalButton.addEventListener("click", startOwnTracker);
 backupFileInput.addEventListener("change", importBackupFile);
+window.addEventListener("panini:cloud-sync-applied", () => {
+  state = loadState();
+  try {
+    inventoryProjection = null;
+    inventorySnapshot = JSON.parse(localStorage.getItem(INVENTORY_SNAPSHOT_KEY) || "null") || inventorySnapshot;
+  } catch {}
+  render();
+  loadSharedInventoryProjection();
+  status.textContent = "Cloud backup changes applied on this browser.";
+});
 updateText.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") markGotCards();
 });

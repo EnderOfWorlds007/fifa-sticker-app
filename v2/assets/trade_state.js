@@ -288,7 +288,9 @@ export function loadLedger(storage = globalThis.localStorage) {
 }
 
 export function saveLedger(ledger, storage = globalThis.localStorage) {
-  storage.setItem(LEDGER_KEY, JSON.stringify(normalizeLedger(ledger)));
+  const normalized = normalizeLedger(ledger);
+  storage.setItem(LEDGER_KEY, JSON.stringify(normalized));
+  dispatchLocalStateSaved("ledger", { ledger: normalized });
 }
 
 export function createTransaction(ledger, options) {
@@ -1640,6 +1642,16 @@ function orderedVariants(counts, preferredVariant) {
 function positiveVariantCounts(counts) {
   if (!counts || typeof counts !== "object") return [];
   return Object.entries(counts).filter(([, quantity]) => Number(quantity || 0) > 0);
+}
+
+function dispatchLocalStateSaved(kind, detail = {}) {
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent("panini:local-state-saved", {
+      detail: { kind, ...detail },
+    }));
+  } catch {
+    // Local writes should not depend on optional cloud sync notifications.
+  }
 }
 
 function transactionLabel(transaction) {

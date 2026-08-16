@@ -6,3 +6,7 @@ redirectNewBrowserToGettingStarted({ isHub: document.body.classList.contains("ap
 
 // Scan links stay on the static v2 app. The configured recognition backend is
 // only used by OCR API calls from the scanner page.
+
+import("/fifa-sticker-app/v2/assets/cloud_sync.js?v=build-a6d4f09c2e71")
+  .then(({ mountCollectionCloudSync }) => mountCollectionCloudSync())
+  .catch(() => {});

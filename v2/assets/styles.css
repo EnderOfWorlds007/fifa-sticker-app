@@ -464,6 +464,50 @@
   background: transparent;
 }
 
+.cloudSyncPanel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #13181b;
+}
+
+.cloudSyncCode,
+.cloudSyncField {
+  display: grid;
+  gap: 4px;
+}
+
+.cloudSyncCode span,
+.cloudSyncField span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cloudSyncCode code {
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.cloudSyncPanel input,
+.cloudSyncPanel select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
 .parsedBatchPreview {
   min-height: 42px;
   border: 1px dashed var(--line);
@@ -2079,6 +2123,11 @@
 .localTrustStatus[data-severity="warning"] {
   border-color: rgba(255, 207, 102, 0.45);
   background: rgba(255, 207, 102, 0.08);
+}
+
+.localTrustStatus[data-severity="ok"] {
+  border-color: rgba(0, 194, 168, 0.45);
+  background: rgba(0, 194, 168, 0.08);
 }
 
 .localTrustStatus strong,
