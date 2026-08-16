@@ -186,9 +186,10 @@ export function mountCollectionCloudSync({
   };
   controls.onNewAccount = async () => {
     if (!confirmAccountSwitch(windowRef, "Create a new empty cloud account and make it active? Current local collection and activity will be saved on the previous account.")) return;
+    const importedCollectionSnapshotVersion = currentCollectionImportVersion(storage);
     if (client.profileId) saveAccountProjection(storage, client.profileId);
     await client.useRestoreCode(generateUserSecretId(cryptoImpl));
-    applyAccountProjection(storage, emptyAccountProjection());
+    applyAccountProjection(storage, emptyAccountProjection({ importedCollectionSnapshotVersion }));
     saveAccountProjection(storage, client.profileId);
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     await autosave("new-account");
@@ -309,7 +310,7 @@ export function storageProjection(storage = globalThis.localStorage) {
   };
 }
 
-export function emptyAccountProjection() {
+export function emptyAccountProjection({ importedCollectionSnapshotVersion = 1 } = {}) {
   return {
     collectionState: {
       filter: "missing",
@@ -317,7 +318,7 @@ export function emptyAccountProjection() {
       collected: [],
       albumStatusOverrides: {},
       hasLocalState: true,
-      importedCollectionSnapshotVersion: 0,
+      importedCollectionSnapshotVersion: Math.max(1, Number(importedCollectionSnapshotVersion || 0)),
     },
     ledger: { schemaVersion: 1, transactions: [] },
     inventorySnapshot: {},
@@ -524,6 +525,11 @@ function applyAccountProjection(storage, projection) {
   storage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(projection.inventorySnapshot || {}));
   storage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify(projection.inventoryCacheMeta || {}));
   return true;
+}
+
+function currentCollectionImportVersion(storage) {
+  const current = parseStoredJson(storage.getItem(COLLECTION_KEY), {});
+  return Math.max(1, Number(current?.importedCollectionSnapshotVersion || 0));
 }
 
 function confirmAccountSwitch(windowRef, message) {
