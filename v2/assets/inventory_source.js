@@ -1,8 +1,8 @@
 export const INVENTORY_SNAPSHOT_KEY = "panini.inventorySnapshot.v1";
 export const INVENTORY_CACHE_META_KEY = "panini.inventorySnapshotMeta.v1";
 export const DEFAULT_INVENTORY_SOURCES = [
-  { url: "/fifa-sticker-app/v2/api/trade-inventory", label: "local scanner server" },
-  { url: "/fifa-sticker-app/v2/data/trade_inventory.json", label: "static snapshot" },
+  { url: "/api/trade-inventory", label: "local scanner server" },
+  { url: "/data/trade_inventory.json", label: "static snapshot" },
 ];
 
 export function isUsableInventoryPayload(payload) {
@@ -18,6 +18,7 @@ export async function loadInventoryPayload(options = {}) {
   const sources = options.sources || DEFAULT_INVENTORY_SOURCES;
   const cached = loadCachedInventoryPayload(storage);
   const cachedMeta = cached ? loadInventoryCacheMeta(storage) : {};
+  if (cached && cachedMeta?.emptyAccount) return { payload: cached, source: { label: cachedMeta.sourceLabel || "empty cloud account" } };
   const candidates = [];
   let lastError = null;
 

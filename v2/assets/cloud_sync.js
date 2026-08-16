@@ -321,8 +321,8 @@ export function emptyAccountProjection({ importedCollectionSnapshotVersion = 1 }
       importedCollectionSnapshotVersion: Math.max(1, Number(importedCollectionSnapshotVersion || 0)),
     },
     ledger: { schemaVersion: 1, transactions: [] },
-    inventorySnapshot: {},
-    inventoryCacheMeta: {},
+    inventorySnapshot: { schema_version: 1, updated_at: new Date(0).toISOString(), cards: {}, stats: { empty_account: true } },
+    inventoryCacheMeta: { sourceLabel: "empty cloud account", emptyAccount: true },
   };
 }
 
