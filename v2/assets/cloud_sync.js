@@ -8,6 +8,7 @@ import {
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
 export const DEVICE_ID_KEY = "panini.cloudSync.deviceId.v1";
+const DEVICE_ID_PATTERN = /^dev_[A-Za-z0-9_-]{12,80}$/;
 const LAST_REVISION_PREFIX = "panini.cloudSync.lastRevision.v1:";
 const ACCOUNT_STATE_PREFIX = "panini.cloudSync.accountState.v1:";
 const LAST_SYNC_STATUS_KEY = "panini.cloudSync.lastStatus.v1";
@@ -574,7 +575,7 @@ async function encryptionKey(userSecretId, cryptoImpl) {
 
 function ensureDeviceId(storage, cryptoImpl) {
   const existing = String(storage.getItem(DEVICE_ID_KEY) || "");
-  if (existing) return existing;
+  if (DEVICE_ID_PATTERN.test(existing)) return existing;
   const deviceId = randomId("dev", cryptoImpl);
   storage.setItem(DEVICE_ID_KEY, deviceId);
   return deviceId;
