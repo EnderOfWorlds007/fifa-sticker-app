@@ -175,7 +175,7 @@ export function extractCodeOccurrences(value) {
       add(team, match[1], match[2], match[3]);
       countryNameSpans.push([match.index, match.index + match[0].length]);
     }
-    const groupedCountryPattern = new RegExp(`(?:^|[\\n,;])\\s*${namePattern}\\s*:\\s*([1-9][0-9S\\s,;/&+().X-]*)`, "gm");
+    const groupedCountryPattern = new RegExp(`(?:^|[\\n,;])[\\t ]*${namePattern}[\\t ]*:[\\t ]*([1-9][0-9S\\t ,;/&+().X-]*)`, "gm");
     for (const match of upper.matchAll(groupedCountryPattern)) {
       if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
       for (const token of match[1].matchAll(countryGroupedTokenPattern)) add(team, token[1], token[2], token[3]);
@@ -193,11 +193,14 @@ export function extractCodeOccurrences(value) {
     add(match[1], match[2], match[3], match[4]);
     inlineSpans.push([match.index, match.index + match[0].length]);
   }
-  const groupedPattern = /(?:^|[\n,;:])\s*([A-Z]{2,3})\s*:\s*([1-9][0-9S\s,/&+().X-]*)(?=$|[\n;])/gm;
+  const groupedPattern = /(?:^|[\n,;:])[\t ]*([A-Z]{2,3})(?:[\t ]+[^:\d\n]+)?[\t ]*:[\t ]*([1-9][0-9S\t ,/&+().X-]*)(?=$|[\n;])/gm;
   const groupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index + match[0].indexOf(match[1]);
-    if (inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
+    if (
+      inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)
+      || countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)
+    ) continue;
     for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3]);
   }
   return new Map([...occurrences.entries()].sort(([a], [b]) => sortCode(a, b)));
@@ -1150,10 +1153,17 @@ function normalizedParserText(value) {
 
 function decodePossiblyEncodedText(value) {
   if (!/%[0-9A-Fa-f]{2}/.test(value)) return value;
+  const formValue = value.replace(/\+/g, " ");
   try {
-    return decodeURIComponent(value.replace(/\+/g, "%20"));
+    return decodeURIComponent(formValue);
   } catch {
-    return value;
+    return formValue.replace(/(?:%[0-9A-Fa-f]{2})+/g, (encodedRun) => {
+      try {
+        return decodeURIComponent(encodedRun);
+      } catch {
+        return encodedRun;
+      }
+    });
   }
 }
 
