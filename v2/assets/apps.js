@@ -1,5 +1,5 @@
-import { applyOcrBackendFromQuery } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-38c0e65f18c5";
-import { redirectNewBrowserToGettingStarted } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-38c0e65f18c5";
+import { applyOcrBackendFromQuery } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a6d4f09c2e71";
+import { redirectNewBrowserToGettingStarted } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a6d4f09c2e71";
 
 applyOcrBackendFromQuery();
 redirectNewBrowserToGettingStarted({ isHub: document.body.classList.contains("appsBody") });

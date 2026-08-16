@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createTransaction,
   extractCodeOccurrences,
   extractDirectedCodeOccurrences,
   normalizePastedCardText,
+  transactionDetailLines,
+  transactionSummary,
 } from "../v2/assets/trade_state.js";
 
 test("v2 parser handles grouped country codes with flag emoji before colons", () => {
@@ -124,4 +127,19 @@ test("v2 paste normalization visibly decodes text and replaces grouped country n
     [...extractCodeOccurrences(normalized).entries()],
     EXPECTED_COUNTRY_NAME_CODES.map((code) => [code, 1]),
   );
+});
+
+test("album update transactions keep their kind and activity labels", () => {
+  const ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_album_update_test",
+    now: () => "2026-08-16T00:00:00.000Z",
+    kind: "album-update",
+    received: [],
+    given: [{ code: "RSA6", quantity: 1, variant: "united_edition" }],
+  });
+
+  const [summary] = transactionSummary(ledger);
+  assert.equal(summary.kind, "album-update");
+  assert.equal(summary.label, "Moved 1 to album");
+  assert.deepEqual(transactionDetailLines(summary), ["Move to album: RSA6 Green"]);
 });

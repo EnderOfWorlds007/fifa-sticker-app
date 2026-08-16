@@ -1,16 +1,16 @@
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-38c0e65f18c5";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a6d4f09c2e71";
 import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   isUsableInventoryPayload,
   loadCachedInventoryPayload,
   loadInventoryCacheMeta,
-} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-38c0e65f18c5";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a6d4f09c2e71";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a6d4f09c2e71";
 
 export const COLLECTION_KEY = "panini.collectionTracker.v1";
-export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-38c0e65f18c5";
-export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 4;
+export const COLLECTION_SNAPSHOT_URL = "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-a6d4f09c2e71";
+export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 5;
 const PUBLIC_V1_COLLECTION_KEY = "panini.collectionTracker.v2";
 const SNAPSHOT_IMPORT_SOURCE_LABEL = "imported v1 collection snapshot";
 
@@ -44,7 +44,8 @@ export async function importCollectionSnapshotState({
   let imported = false;
   let inventoryImported = false;
   const publicV1Collected = loadPublicV1Collected(storage);
-  if (nextState.importedCollectionSnapshotVersion !== COLLECTION_SNAPSHOT_IMPORT_VERSION) {
+  const shouldRefreshSnapshotVersion = nextState.importedCollectionSnapshotVersion !== COLLECTION_SNAPSHOT_IMPORT_VERSION;
+  if (shouldRefreshSnapshotVersion) {
     nextState = {
       ...nextState,
       collected: [...new Set([...nextState.collected, ...publicV1Collected])].sort(sortCode),
@@ -54,7 +55,7 @@ export async function importCollectionSnapshotState({
     saveCollectionState(nextState, storage);
     imported = true;
   }
-  if (shouldImportSnapshotInventory(storage, forceInventoryImport)) {
+  if (shouldImportSnapshotInventory(storage, forceInventoryImport || shouldRefreshSnapshotVersion)) {
     saveCollectionSnapshotInventory(snapshot, { storage, publicV1Collected });
     inventoryImported = true;
   }
@@ -103,7 +104,7 @@ export function collectionSnapshotInventorySummary(snapshot, { publicV1Collected
   let missingCount = 0;
   for (const card of cards) {
     const code = normalizeCode(card?.code);
-    const albumOwned = Boolean(card?.owned) || importedCodes.has(code);
+    const albumOwned = (card?.in_album !== undefined ? Boolean(card.in_album) : Boolean(card?.owned)) || importedCodes.has(code);
     if (albumOwned) albumOwnedCount += 1;
     else missingCount += 1;
     const tradeable = Math.max(0, Number(card?.tradeable_count || 0));
@@ -128,7 +129,8 @@ export function collectionSnapshotToInventoryPayload(snapshot, { publicV1Collect
     const code = normalizeCode(row?.code);
     if (!code) continue;
     const tradeable = Math.max(0, Number(row?.tradeable_count || 0));
-    const albumQuantity = (row?.owned || importedCodes.has(code)) ? 1 : 0;
+    const inAlbum = row?.in_album !== undefined ? Boolean(row.in_album) : Boolean(row?.owned);
+    const albumQuantity = (inAlbum || importedCodes.has(code)) ? 1 : 0;
     const card = {
       code,
       name: String(row?.name || "").trim(),

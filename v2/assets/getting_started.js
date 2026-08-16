@@ -7,14 +7,14 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a6d4f09c2e71";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
   applyTextInventoryCodesToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-38c0e65f18c5";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-38c0e65f18c5";
-import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-a6d4f09c2e71";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-a6d4f09c2e71";
+import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a6d4f09c2e71";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");

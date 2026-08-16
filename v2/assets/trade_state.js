@@ -378,6 +378,10 @@ export function transactionDetailLines(transaction) {
   const details = [];
   const received = lineDetails(transaction?.received || []);
   const given = lineDetails(transaction?.given || []);
+  if (transaction?.kind === "album-update") {
+    if (given) details.push(`Move to album: ${given}`);
+    return details;
+  }
   if (received) details.push(`Receive: ${received}`);
   if (given) details.push(`Give: ${given}`);
   return details;
@@ -917,7 +921,7 @@ function validateBackupLedger(ledger) {
     if (typeof transaction.createdAt !== "string" || !transaction.createdAt.trim()) {
       throw new Error("Backup transaction missing createdAt.");
     }
-    if (!["received", "given", "trade"].includes(transaction.kind)) {
+    if (!["received", "given", "trade", "album-update"].includes(transaction.kind)) {
       throw new Error(`Unsupported transaction kind: ${transaction.kind}`);
     }
     if (!["draft", "reserved", "completed", "cancelled"].includes(transaction.status)) {
@@ -1145,7 +1149,7 @@ function normalizeTransaction(value) {
   return {
     id: String(value.id || `txn_${Date.now().toString(36)}`),
     createdAt: String(value.createdAt || new Date().toISOString()),
-    kind: ["received", "given", "trade"].includes(value.kind) ? value.kind : "trade",
+    kind: ["received", "given", "trade", "album-update"].includes(value.kind) ? value.kind : "trade",
     status: ["draft", "reserved", "completed", "cancelled"].includes(value.status) ? value.status : "completed",
     received: normalizeLines(value.received),
     given: normalizeLines(value.given),
@@ -1641,6 +1645,7 @@ function positiveVariantCounts(counts) {
 function transactionLabel(transaction) {
   const received = transaction.received.reduce((sum, line) => sum + line.quantity, 0);
   const given = transaction.given.reduce((sum, line) => sum + line.quantity, 0);
+  if (transaction.kind === "album-update" && given) return `Moved ${given} to album`;
   if (received && given) return `Received ${received}, gave ${given}`;
   if (received) return `Received ${received}`;
   if (given) return `Gave ${given}`;

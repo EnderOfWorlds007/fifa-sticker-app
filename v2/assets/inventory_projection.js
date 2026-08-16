@@ -2,10 +2,10 @@ import {
   adjustedInventoryPayload,
   deriveCollectionModel,
   loadLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-38c0e65f18c5";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-38c0e65f18c5";
-import { loadInventoryCacheMeta, loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-38c0e65f18c5";
-import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a6d4f09c2e71";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-a6d4f09c2e71";
+import { loadInventoryCacheMeta, loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a6d4f09c2e71";
+import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a6d4f09c2e71";
 
 export async function loadInventoryProjection(options = {}) {
   const catalog = options.catalog || await loadCatalogFallback();

@@ -18,27 +18,27 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a6d4f09c2e71";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-38c0e65f18c5";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-a6d4f09c2e71";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-a6d4f09c2e71";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a6d4f09c2e71";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-38c0e65f18c5";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-38c0e65f18c5";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-38c0e65f18c5";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a6d4f09c2e71";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-a6d4f09c2e71";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a6d4f09c2e71";
 
 const STARTING_MISSING = {
   MEX: [15, 17],
@@ -138,6 +138,7 @@ const ALBUM_PREFIX_ORDER = [
 
 const ALBUM_PREFIX_RANK = new Map(ALBUM_PREFIX_ORDER.map((prefix, index) => [prefix, index]));
 const TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
+const ALBUM_UPDATE_PROMPT_LIMIT = 12;
 
 mountTradePasteBox('[data-trade-paste-box="collection-update"]', {
   label: "Update from pasted text",
@@ -208,6 +209,7 @@ let state = loadState();
 let pendingIgnoredGotLines = [];
 let pendingIgnoredTradedAwayLines = [];
 let pendingAlbumStatusChanges = new Map();
+let albumInventoryCheckPrompted = false;
 let inventorySnapshot = null;
 let inventoryProjection = null;
 let cards = startingMissingCards();
@@ -545,6 +547,7 @@ async function loadSharedInventoryProjection() {
     state = projection.collectionState;
     saveState();
     render();
+    maybePromptAlbumInventoryUpdates();
   } catch {
     inventoryProjection = currentInventoryProjection();
   }
@@ -750,6 +753,73 @@ function saveAlbumStatusChanges() {
   status.textContent = `${entries.length} album status change${entries.length === 1 ? "" : "s"} saved on this phone.`;
 }
 
+function albumInventoryUpdateCandidates() {
+  return currentCollectionModel().cards
+    .filter((card) => card.missing && card.inventory?.availableToTradeQuantity > 0)
+    .sort((a, b) => cardAlbumRank(a) - cardAlbumRank(b) || sortCode(a.code, b.code));
+}
+
+function maybePromptAlbumInventoryUpdates() {
+  if (albumInventoryCheckPrompted) return;
+  const candidates = albumInventoryUpdateCandidates();
+  if (!candidates.length) return;
+  albumInventoryCheckPrompted = true;
+  const preview = candidates.slice(0, ALBUM_UPDATE_PROMPT_LIMIT).map((card) => card.code).join(", ");
+  const overflow = candidates.length > ALBUM_UPDATE_PROMPT_LIMIT ? `, plus ${candidates.length - ALBUM_UPDATE_PROMPT_LIMIT} more` : "";
+  const confirmText = [
+    `Found ${candidates.length} card${candidates.length === 1 ? "" : "s"} you need for the album in your inventory:`,
+    `${preview}${overflow}.`,
+    "",
+    "Move them into the album now? This will remove one copy of each from Cards I Can Give and mark them present in the album.",
+  ].join("\n");
+  if (!window.confirm(confirmText)) {
+    status.textContent = `${candidates.length} album-needed card${candidates.length === 1 ? "" : "s"} found in inventory. Not moved.`;
+    return;
+  }
+  applyAlbumInventoryUpdates(candidates);
+}
+
+function applyAlbumInventoryUpdates(candidates) {
+  const rawLines = candidates.map((card) => ({ code: card.code, quantity: 1 }));
+  const outgoing = assignOutgoingVariants(rawLines, currentInventoryProjection().adjustedInventory);
+  if (!outgoing.length) {
+    status.textContent = "No album-needed inventory cards were available to move.";
+    return;
+  }
+  const outgoingCodes = new Set(outgoing.map((line) => line.code));
+  const overrides = { ...(state.albumStatusOverrides || {}) };
+  for (const code of outgoingCodes) overrides[code] = "present";
+  saveLedger(createTransaction(loadLedger(), { kind: "album-update", received: [], given: outgoing }));
+  state = {
+    ...state,
+    albumStatusOverrides: Object.fromEntries(Object.entries(overrides).sort(([a], [b]) => sortCode(a, b))),
+    hasLocalState: true,
+  };
+  inventoryProjection = null;
+  saveState();
+  render();
+  status.textContent = `Moved ${outgoing.length} needed card${outgoing.length === 1 ? "" : "s"} from inventory into the album.`;
+}
+
+function undoTransaction(transaction) {
+  saveLedger(cancelTransaction(loadLedger(), transaction.id));
+  if (transaction.kind === "album-update") {
+    const overrides = { ...(state.albumStatusOverrides || {}) };
+    for (const line of transaction.given || []) {
+      const baseline = baseAlbumStatus(line.code);
+      if (baseline === "missing" && overrides[line.code] === "present") delete overrides[line.code];
+    }
+    state = {
+      ...state,
+      albumStatusOverrides: Object.fromEntries(Object.entries(overrides).sort(([a], [b]) => sortCode(a, b))),
+      hasLocalState: true,
+    };
+    saveState();
+  }
+  inventoryProjection = null;
+  render();
+}
+
 function cancelAlbumStatusChanges() {
   const count = pendingAlbumStatusChanges.size;
   pendingAlbumStatusChanges = new Map();
@@ -847,10 +917,7 @@ function renderActivity() {
       const undo = document.createElement("button");
       undo.type = "button";
       undo.textContent = "Undo";
-      undo.addEventListener("click", () => {
-        saveLedger(cancelTransaction(loadLedger(), transaction.id));
-        render();
-      });
+      undo.addEventListener("click", () => undoTransaction(transaction));
       row.append(undo);
     }
     return row;
@@ -876,6 +943,7 @@ function activityDetailList(transaction) {
 }
 
 function transactionLabel(transaction) {
+  if (transaction.kind === "album-update") return transaction.label;
   if (transaction.kind === "trade") return `Trade · ${transaction.label}`;
   return transaction.label;
 }
