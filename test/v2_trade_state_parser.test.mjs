@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   extractCodeOccurrences,
   extractDirectedCodeOccurrences,
+  normalizePastedCardText,
 } from "../v2/assets/trade_state.js";
 
 test("v2 parser handles grouped country codes with flag emoji before colons", () => {
@@ -108,6 +109,19 @@ test("v2 parser decodes valid escapes when pasted text also contains a stray per
   const malformed = `${encodeURIComponent(COUNTRY_NAME_MISSING_LIST)}%`;
   assert.deepEqual(
     [...extractCodeOccurrences(malformed).entries()],
+    EXPECTED_COUNTRY_NAME_CODES.map((code) => [code, 1]),
+  );
+});
+
+test("v2 paste normalization visibly decodes text and replaces grouped country names", () => {
+  const normalized = normalizePastedCardText(encodeURIComponent(COUNTRY_NAME_MISSING_LIST));
+
+  assert.match(normalized, /^MEX: 15, 17\nRSA: 4, 10\nCZE: 8, 13/);
+  assert.match(normalized, /\nCUW: 15\nCIV: 2, 8, 17/);
+  assert.match(normalized, /\nCOD: 1, 2, 10\nENG: 4, 13, 19/);
+  assert.doesNotMatch(normalized, /%[0-9A-Fa-f]{2}/);
+  assert.deepEqual(
+    [...extractCodeOccurrences(normalized).entries()],
     EXPECTED_COUNTRY_NAME_CODES.map((code) => [code, 1]),
   );
 });

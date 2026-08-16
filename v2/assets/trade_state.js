@@ -69,6 +69,9 @@ const COUNTRY_NAME_CODES = [
   ["Uruguay", "URU"],
   ["Uzbekistan", "UZB"],
 ].sort((a, b) => b[0].length - a[0].length);
+const COUNTRY_NAME_CODE_BY_LABEL = new Map(
+  COUNTRY_NAME_CODES.map(([name, code]) => [normalizedCountryLabel(name), code]),
+);
 
 const VOICE_TEAM_ALIASES = aliasMap({
   alg: "ALG", algeria: "ALG", argelia: "ALG", algerie: "ALG", algerien: "ALG",
@@ -212,6 +215,19 @@ export function normalizeCodeInput(value) {
     text: [...occurrences.entries()].flatMap(([code, quantity]) => Array(quantity).fill(code)).join("\n"),
     details: details.map((detail) => `${detail.raw} -> ${detail.code}`),
   };
+}
+
+export function normalizePastedCardText(value) {
+  const decoded = decodePossiblyEncodedText(String(value || ""));
+  return decoded
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^(\s*)([^:]+?)(\s*:\s*)(.*)$/);
+      if (!match) return line;
+      const team = COUNTRY_NAME_CODE_BY_LABEL.get(normalizedCountryLabel(match[2]));
+      return team ? `${match[1]}${team}${match[3]}${match[4]}` : line;
+    })
+    .join("\n");
 }
 
 export function extractDirectedCodeOccurrences(value) {
@@ -1165,6 +1181,15 @@ function decodePossiblyEncodedText(value) {
       }
     });
   }
+}
+
+function normalizedCountryLabel(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
 }
 
 function collectVoiceCodeOccurrences(value) {
