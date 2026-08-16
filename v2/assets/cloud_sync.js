@@ -185,13 +185,14 @@ export function mountCollectionCloudSync({
     });
   };
   controls.onNewAccount = async () => {
-    if (!confirmAccountSwitch(windowRef, "Create a new cloud account and make it active? Current local collection and activity will become its first backup.")) return;
+    if (!confirmAccountSwitch(windowRef, "Create a new empty cloud account and make it active? Current local collection and activity will be saved on the previous account.")) return;
     if (client.profileId) saveAccountProjection(storage, client.profileId);
     await client.useRestoreCode(generateUserSecretId(cryptoImpl));
+    applyAccountProjection(storage, emptyAccountProjection());
     saveAccountProjection(storage, client.profileId);
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
-    await syncDeltas({ apply: true });
     await autosave("new-account");
+    dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
   };
 
   const pendingRestoreCode = restoreCodeFromLocation(location);
@@ -305,6 +306,22 @@ export function storageProjection(storage = globalThis.localStorage) {
     ledger: parseStoredJson(storage.getItem(LEDGER_KEY), { schemaVersion: 1, transactions: [] }),
     inventorySnapshot: parseStoredJson(storage.getItem(INVENTORY_SNAPSHOT_KEY), {}),
     inventoryCacheMeta: parseStoredJson(storage.getItem(INVENTORY_CACHE_META_KEY), {}),
+  };
+}
+
+export function emptyAccountProjection() {
+  return {
+    collectionState: {
+      filter: "missing",
+      sortOrder: "album",
+      collected: [],
+      albumStatusOverrides: {},
+      hasLocalState: true,
+      importedCollectionSnapshotVersion: 0,
+    },
+    ledger: { schemaVersion: 1, transactions: [] },
+    inventorySnapshot: {},
+    inventoryCacheMeta: {},
   };
 }
 
@@ -613,11 +630,11 @@ function base32Encode(bytes) {
 
 function base64UrlEncode(bytes) {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  return btoa(binary).replaceAll("+", "-").replaceAll("/fifa-sticker-app/v2/", "_").replaceAll("=", "");
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
 function base64UrlDecode(value) {
-  const padded = String(value || "").replaceAll("-", "+").replaceAll("_", "/fifa-sticker-app/v2/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
+  const padded = String(value || "").replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
   const binary = atob(padded);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }

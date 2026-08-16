@@ -1,5 +1,5 @@
-const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-270a82eaecd6";
-const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-270a82eaecd6$/, "");
+const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-6b0e9fd4zero";
+const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}|build-6b0e9fd4zero$/, "");
 const APP_SHELL = [
   "/fifa-sticker-app/v2/",
   "/fifa-sticker-app/v2/apps/",
