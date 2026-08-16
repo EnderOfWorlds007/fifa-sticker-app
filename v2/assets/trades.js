@@ -4,7 +4,7 @@ import {
   transactionDetailLines,
   tradeGroups,
   transitionTransactionStatus,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-93af2b41d674";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-0b4150f2a999";
 
 const lists = {
   draft: document.querySelector("#draftTradesList"),

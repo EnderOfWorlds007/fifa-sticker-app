@@ -12,12 +12,12 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-93af2b41d674";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-0b4150f2a999";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-93af2b41d674";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-93af2b41d674";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-0b4150f2a999";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-0b4150f2a999";
 
 const STARTING_MISSING = {
   MEX: [15, 17],
