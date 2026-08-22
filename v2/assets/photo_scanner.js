@@ -9,16 +9,16 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a6d4f09c2e71";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b7d3a91c4e2f";
 import {
   createTransaction,
   deriveCollectionCodes,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a6d4f09c2e71";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a6d4f09c2e71";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a6d4f09c2e71";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b7d3a91c4e2f";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b7d3a91c4e2f";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b7d3a91c4e2f";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");

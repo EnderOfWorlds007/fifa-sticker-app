@@ -162,49 +162,47 @@ export function extractCodeOccurrences(value) {
   const upper = normalizedParserText(value);
   const occurrences = new Map();
   const countryNameSpans = [];
-  const inlineSpans = [];
+  const groupedSpans = [];
   const add = (team, number = "", suffix = "", quantity = 1) => {
     const code = normalizeCardCode(`${team}${number}${suffix}`);
     if (!code) return;
     occurrences.set(code, (occurrences.get(code) || 0) + Math.max(1, Number(quantity || 1)));
   };
-  const countryGroupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
+  const groupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\))?/g;
   for (const [name, team] of COUNTRY_NAME_CODES) {
     if (team === "00") continue;
     const namePattern = countryNamePattern(name);
-    const inlineCountryPattern = new RegExp(`(?<![A-Z0-9])${namePattern}\\s*[-–—_./]?\\s*([1-9]\\d?)(S)?(?:\\s*\\(\\s*(\\d{1,2})\\s*X\\s*\\))?(?![A-Z0-9])`, "g");
-    for (const match of upper.matchAll(inlineCountryPattern)) {
-      if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
-      add(team, match[1], match[2], match[3]);
-      countryNameSpans.push([match.index, match.index + match[0].length]);
-    }
-    const groupedCountryPattern = new RegExp(`(?:^|[\\n,;])[\\t ]*${namePattern}[\\t ]*:[\\t ]*([1-9][0-9S\\t ,;/&+().X-]*)`, "gm");
+    const groupedCountryPattern = new RegExp(`(?:^|[\\n,;])[\\t ]*${namePattern}[\\t ]*(?::|[-–—])[\\t ]*([1-9][0-9S\\t ,;/&+().X×-]*)`, "gm");
     for (const match of upper.matchAll(groupedCountryPattern)) {
       if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
-      for (const token of match[1].matchAll(countryGroupedTokenPattern)) add(team, token[1], token[2], token[3]);
+      for (const token of match[1].matchAll(groupedTokenPattern)) add(team, token[1], token[2], token[3] || token[4]);
+      countryNameSpans.push([match.index, match.index + match[0].length]);
+    }
+    const inlineCountryPattern = new RegExp(`(?<![A-Z0-9])${namePattern}\\s*[-–—_./]?\\s*([1-9]\\d?)(S)?(?:\\s*\\(\\s*(?:(\\d{1,2})\\s*[X×]|[X×]\\s*(\\d{1,2}))\\s*\\))?(?![A-Z0-9])`, "g");
+    for (const match of upper.matchAll(inlineCountryPattern)) {
+      if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
+      add(team, match[1], match[2], match[3] || match[4]);
       countryNameSpans.push([match.index, match.index + match[0].length]);
     }
   }
-  const zeroPattern = /(?<![A-Z0-9])00(?:\s*\(\s*(\d{1,2})\s*X\s*\))?(?![A-Z0-9])/g;
+  const zeroPattern = /(?<![A-Z0-9])00(?:\s*\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\))?(?![A-Z0-9])/g;
   for (const match of upper.matchAll(zeroPattern)) {
-    add("00", "", "", match[1]);
-    inlineSpans.push([match.index, match.index + match[0].length]);
+    add("00", "", "", match[1] || match[2]);
   }
-  const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?(?![A-Z0-9])/g;
-  for (const match of upper.matchAll(inlinePattern)) {
-    if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
-    add(match[1], match[2], match[3], match[4]);
-    inlineSpans.push([match.index, match.index + match[0].length]);
-  }
-  const groupedPattern = /(?:^|[\n,;:])[\t ]*([A-Z]{2,3})(?:[\t ]+[^:\d\n]+)?[\t ]*:[\t ]*([1-9][0-9S\t ,/&+().X-]*)(?=$|[\n;])/gm;
-  const groupedTokenPattern = /([1-9]\d?)(S)?(?:\s*\(\s*(\d{1,2})\s*X\s*\))?/g;
+  const groupedPattern = /(?:^|[\n,;:])[\t ]*([A-Z]{2,3})(?:[\t ]+[^:\d\n]+)?[\t ]*(?::|[-–—])[\t ]*([1-9][0-9S\t ,/&+().X×-]*)(?=$|[\n;])/gm;
   for (const match of upper.matchAll(groupedPattern)) {
     const start = match.index + match[0].indexOf(match[1]);
+    if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
+    for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3] || token[4]);
+    groupedSpans.push([start, match.index + match[0].length]);
+  }
+  const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*([1-9]\d?)(S)?(?:\s*\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\))?(?![A-Z0-9])/g;
+  for (const match of upper.matchAll(inlinePattern)) {
     if (
-      inlineSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)
-      || countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)
+      countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)
+      || groupedSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)
     ) continue;
-    for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3]);
+    add(match[1], match[2], match[3], match[4] || match[5]);
   }
   return new Map([...occurrences.entries()].sort(([a], [b]) => sortCode(a, b)));
 }
