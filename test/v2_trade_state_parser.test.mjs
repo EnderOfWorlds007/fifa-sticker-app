@@ -37,6 +37,27 @@ GHA 🇬🇭: 12`;
   ]);
 });
 
+test("v2 parser handles dash-grouped codes with x-before-copy counts", () => {
+  assert.deepEqual(
+    [...extractCodeOccurrences("JPN — 1, 5, 7 (x3), 15, 18 (x2), 20 (x2)").entries()],
+    [
+      ["JPN1", 1],
+      ["JPN5", 1],
+      ["JPN7", 3],
+      ["JPN15", 1],
+      ["JPN18", 2],
+      ["JPN20", 2],
+    ],
+  );
+});
+
+test("v2 parser preserves separate inline hyphenated codes", () => {
+  assert.deepEqual([...extractCodeOccurrences("ENG-7, POR-11").entries()], [
+    ["ENG7", 1],
+    ["POR11", 1],
+  ]);
+});
+
 const COUNTRY_NAME_MISSING_LIST = `Mexico: 15, 17
 South Africa: 4, 10
 Czechia: 8, 13
