@@ -9,17 +9,22 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b7d3a91c4e2f";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e5f";
 import {
   createTransaction,
-  deriveCollectionCodes,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b7d3a91c4e2f";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b7d3a91c4e2f";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-b7d3a91c4e2f";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b7d3a91c4e2f";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e5f";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e5f";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a11b2c3d4e5f";
+import {
+  normalizeCollectionCodeList,
+  splitCodesByAlbumStatus,
+  splitCodesByResolvedCollectionModel,
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-a11b2c3d4e5f";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e5f";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e5f";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -51,11 +56,17 @@ const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
 let latestScanCodes = [];
 let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
+let latestInventoryProjection = null;
 let scanInFlight = false;
 
 applyOcrBackendFromQuery();
 initializeBackendSettings();
 initializeSideSelection();
+refreshScannerCollectionProjection().then(() => {
+  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  renderCollectionActions();
+  renderRecognizedCodeRows();
+});
 scanButton?.addEventListener("click", () => input?.click());
 input?.addEventListener("change", scanSelectedPhotos);
 reviewImage?.addEventListener("load", () => drawPhotoReview());
@@ -128,7 +139,7 @@ async function scanPhotos(files) {
         lastError = error;
       }
     }
-    renderResults(recognizedPayloads, { requestedCount: selected.length, lastError });
+    await renderResults(recognizedPayloads, { requestedCount: selected.length, lastError });
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
     codesList.replaceChildren(emptyRow("No result."));
@@ -145,9 +156,10 @@ function setScanProgress(message) {
   status.textContent = message;
 }
 
-function renderResults(payloads, options = {}) {
+async function renderResults(payloads, options = {}) {
   const codes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
   latestScanCodes = normalizeCodeList(codes);
+  await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   const text = copyTextForCodes(latestScanCodes);
   result.value = text;
@@ -414,9 +426,10 @@ async function saveAllReviewSlotsCorrect() {
   }
 }
 
-function updateResultFromReviewSlots() {
+async function updateResultFromReviewSlots() {
   const codes = photoReviewState.slots.filter((slot) => slot.code && slotStatus(slot) === "matched").map((slot) => slot.code);
   latestScanCodes = normalizeCodeList(codes);
+  await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   result.value = copyTextForCodes(latestScanCodes);
   copyButton.disabled = !result.value;
@@ -425,7 +438,7 @@ function updateResultFromReviewSlots() {
 }
 
 function normalizeCodeList(codes) {
-  return codes.map((code) => String(code || "").trim().toUpperCase()).filter(Boolean);
+  return normalizeCollectionCodeList(codes);
 }
 
 function copyTextForCodes(codes) {
@@ -433,25 +446,23 @@ function copyTextForCodes(codes) {
 }
 
 function splitCollectionCodes(codes) {
-  const owned = deriveCollectionCodes(loadCollectionState().collected, loadLedger());
-  addInventoryAlbumCodes(owned, loadCachedInventoryPayload());
-  const newCodes = [];
-  const inventoryCodes = [];
-  for (const code of normalizeCodeList(codes)) {
-    if (owned.has(code) || newCodes.includes(code)) inventoryCodes.push(code);
-    else newCodes.push(code);
+  if (latestInventoryProjection?.collectionModel) {
+    return splitCodesByResolvedCollectionModel(codes, latestInventoryProjection.collectionModel);
   }
-  return { newCodes: newCodes.sort(sortCode), inventoryCodes: inventoryCodes.sort(sortCode) };
+  return splitCodesByAlbumStatus(codes, {
+    collectionState: loadCollectionState(),
+    ledger: loadLedger(),
+    inventoryPayload: loadCachedInventoryPayload(),
+  });
 }
 
-function addInventoryAlbumCodes(owned, inventoryPayload) {
-  const cards = inventoryPayload?.cards && typeof inventoryPayload.cards === "object" ? inventoryPayload.cards : {};
-  for (const [rawCode, card] of Object.entries(cards)) {
-    const code = normalizeCodeList([card?.code || rawCode])[0];
-    if (!code) continue;
-    const albumCount = Number(card?.album_count ?? card?.collection?.placedQuantity ?? 0);
-    if (albumCount > 0 || card?.in_album === true) owned.add(code);
+async function refreshScannerCollectionProjection() {
+  try {
+    latestInventoryProjection = await loadInventoryProjection();
+  } catch {
+    latestInventoryProjection = null;
   }
+  return latestInventoryProjection;
 }
 
 function renderCollectionActions() {
@@ -482,9 +493,11 @@ function addScanToCollection() {
   const received = [...quantities.entries()].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => sortCode(a.code, b.code));
   saveLedger(createTransaction(loadLedger(), { kind: "received", received, given: [] }));
   ensureActiveProfileId();
-  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
-  renderCollectionActions();
-  renderRecognizedCodeRows();
+  refreshScannerCollectionProjection().then(() => {
+    latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+    renderCollectionActions();
+    renderRecognizedCodeRows();
+  });
   status.textContent = `Added ${codes.length} scanned card${codes.length === 1 ? "" : "s"} to collection activity.`;
   showToast("Scan added to collection.");
 }

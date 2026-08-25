@@ -3,6 +3,44 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("../v2/assets/photo_scanner.js", import.meta.url), "utf8");
+const projectionSource = readFileSync(new URL("../v2/assets/inventory_projection.js", import.meta.url), "utf8");
+const collectionSource = readFileSync(new URL("../v2/assets/collection_tracker.js", import.meta.url), "utf8");
+const compareSource = readFileSync(new URL("../v2/assets/compare.js", import.meta.url), "utf8");
+const tradeBuilderSource = readFileSync(new URL("../v2/assets/trade_builder.js", import.meta.url), "utf8");
+const collectionModelSource = readFileSync(new URL("../v2/assets/collection_model.js", import.meta.url), "utf8");
+const collectionInventory = JSON.parse(
+  readFileSync(new URL("../v2/data/collection_inventory.json", import.meta.url), "utf8"),
+);
+
+const EXPECTED_MISSING_CODES = [
+  "ALG12",
+  "ARG10",
+  "AUS13",
+  "AUS14",
+  "AUS16",
+  "AUS18",
+  "AUT18",
+  "BIH2",
+  "CIV17",
+  "CZE13",
+  "ENG13",
+  "FRA1",
+  "GER14",
+  "GER15",
+  "HAI3",
+  "HAI4",
+  "IRN6",
+  "IRQ9",
+  "JOR6",
+  "NED15",
+  "PAR2",
+  "QAT19",
+  "RSA10",
+  "SCO10",
+  "SUI13",
+  "TUN8",
+  "URU19",
+];
 
 function functionBody(name) {
   const marker = `function ${name}(`;
@@ -44,12 +82,38 @@ test("adding scan to collection refreshes per-card album labels", () => {
 
 test("scanner album labels include cached inventory album ownership", () => {
   assert.match(source, /import \{ loadCachedInventoryPayload \} from "\/fifa-sticker-app\/v2\/assets\/inventory_source\.js/);
+  assert.match(source, /import \{ loadInventoryProjection \} from "\/fifa-sticker-app\/v2\/assets\/inventory_projection\.js/);
+  assert.match(source, /splitCodesByResolvedCollectionModel/);
   const splitBody = functionBody("splitCollectionCodes");
-  assert.match(splitBody, /addInventoryAlbumCodes\(owned,\s*loadCachedInventoryPayload\(\)\)/);
-  const albumBody = functionBody("addInventoryAlbumCodes");
-  assert.match(albumBody, /album_count/);
-  assert.match(albumBody, /in_album === true/);
-  assert.doesNotMatch(albumBody, /card\?\.owned === true/, "loose inventory ownership is not treated as album placement");
+  assert.match(splitBody, /latestInventoryProjection\?\.collectionModel/);
+  assert.match(splitBody, /splitCodesByResolvedCollectionModel\(codes,\s*latestInventoryProjection\.collectionModel\)/);
+  assert.match(splitBody, /splitCodesByAlbumStatus\(codes,\s*\{/);
+  assert.match(splitBody, /collectionState:\s*loadCollectionState\(\)/);
+  assert.match(splitBody, /ledger:\s*loadLedger\(\)/);
+  assert.match(splitBody, /inventoryPayload:\s*loadCachedInventoryPayload\(\)/);
+});
+
+test("scanner normalizes recognized code formatting before row classification", () => {
+  assert.match(source, /import \{[\s\S]*normalizeCollectionCodeList[\s\S]*\} from "\/fifa-sticker-app\/v2\/assets\/collection_model\.js/);
+  assert.match(functionBody("normalizeCodeList"), /return normalizeCollectionCodeList\(codes\)/);
+  assert.match(collectionModelSource, /export function normalizeCollectionCodeList/);
+  assert.match(collectionModelSource, /replace\(\s*\/\[\\s_-\]\/g,\s*""\s*\)/);
+});
+
+test("scanner album labels honor explicit collection overrides", () => {
+  assert.match(collectionModelSource, /export function applyAlbumStatusOverridesToCodes/);
+  assert.match(collectionModelSource, /status === "present"/);
+  assert.match(collectionModelSource, /owned\.add\(code\)/);
+  assert.match(collectionModelSource, /status === "missing"/);
+  assert.match(collectionModelSource, /owned\.delete\(code\)/);
+});
+
+test("inventory-aware screens use the shared resolved collection model", () => {
+  assert.match(projectionSource, /import \{ deriveResolvedCollectionModel \} from "\/fifa-sticker-app\/v2\/assets\/collection_model\.js/);
+  assert.match(projectionSource, /const collectionModel = deriveResolvedCollectionModel\(\{/);
+  assert.doesNotMatch(projectionSource, /deriveCollectionModel/);
+  assert.doesNotMatch(collectionSource, /function applyAlbumStatusOverrides/);
+  assert.match(collectionSource, /return currentInventoryProjection\(\)\.collectionModel/);
 });
 
 test("recognized code rows use one shared renderer", () => {
@@ -57,4 +121,30 @@ test("recognized code rows use one shared renderer", () => {
   assert.equal(directRenderExpressions.length, 1);
   assert.match(functionBody("renderResults"), /renderRecognizedCodeRows\(\)/);
   assert.match(functionBody("updateResultFromReviewSlots"), /renderRecognizedCodeRows\(\)/);
+});
+
+test("seeded V2 missing list matches the three-letter country-code list", () => {
+  const missingCodes = collectionInventory.cards
+    .filter((card) => !card.in_album || card.source === "missing")
+    .map((card) => card.code)
+    .sort();
+
+  assert.deepEqual(missingCodes, EXPECTED_MISSING_CODES);
+  assert.equal(collectionInventory.stats.missing_count, EXPECTED_MISSING_CODES.length);
+  assert.equal(collectionInventory.stats.album_owned_count, collectionInventory.cards.length - EXPECTED_MISSING_CODES.length);
+  assert.ok(missingCodes.every((code) => /^[A-Z]{3}\d+$/.test(code)), "missing entries use 3-letter prefixes");
+  assert.ok(!missingCodes.includes("USA2"));
+  assert.ok(!missingCodes.includes("USA7"));
+});
+
+test("fallback missing constants use the same three-letter country-code seed", () => {
+  for (const fileSource of [collectionSource, compareSource, tradeBuilderSource]) {
+    assert.match(fileSource, /RSA:\s*\[10\]/);
+    assert.match(fileSource, /CZE:\s*\[13\]/);
+    assert.match(fileSource, /BIH:\s*\[2\]/);
+    assert.match(fileSource, /ENG:\s*\[13\]/);
+    assert.doesNotMatch(fileSource, /USA:\s*\[/);
+    assert.doesNotMatch(fileSource, /FWC:\s*\[/);
+    assert.doesNotMatch(fileSource, /CC:\s*\[/);
+  }
 });

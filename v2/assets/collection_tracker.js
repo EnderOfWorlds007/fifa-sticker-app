@@ -3,8 +3,6 @@ import {
   buildBackupPayload,
   cancelTransaction,
   createTransaction,
-  deriveCollectionCodes,
-  deriveCollectionSummary,
   extractCodeOccurrences as sharedExtractCodeOccurrences,
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
@@ -18,69 +16,51 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b7d3a91c4e2f";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e5f";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-b7d3a91c4e2f";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-b7d3a91c4e2f";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-a11b2c3d4e5f";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-a11b2c3d4e5f";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b7d3a91c4e2f";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e5f";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-b7d3a91c4e2f";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-b7d3a91c4e2f";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b7d3a91c4e2f";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e5f";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-a11b2c3d4e5f";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e5f";
 
 const STARTING_MISSING = {
-  MEX: [15, 17],
-  RSA: [6, 10],
-  CZE: [8, 13],
-  CAN: [4],
-  BIH: [2, 3, 9, 14, 16],
-  SUI: [9, 13],
-  HAI: [3, 4, 7],
+  RSA: [10],
+  CZE: [13],
+  BIH: [2],
+  QAT: [19],
+  SUI: [13],
+  HAI: [3, 4],
   SCO: [10],
-  MAR: [15],
-  BRA: [10],
-  QAT: [19, 20],
-  USA: [2, 7],
-  CUW: [15],
-  NED: [15],
-  ECU: [5, 7],
-  CIV: [2, 8, 17],
-  GER: [3, 14, 15, 16],
-  AUS: [8, 13, 14, 16, 18],
   PAR: [2],
-  TUN: [3, 8, 9, 10],
-  EGY: [12],
+  AUS: [13, 14, 16, 18],
+  GER: [14, 15],
+  CIV: [17],
+  NED: [15],
+  TUN: [8],
   IRN: [6],
-  ESP: [7],
-  CPV: [14],
-  KSA: [7],
   URU: [19],
-  SEN: [9, 13],
-  NOR: [3, 20],
-  AUT: [2, 18],
-  JOR: [6, 10],
+  FRA: [1],
+  IRQ: [9],
+  ARG: [10],
   ALG: [12],
-  ARG: [10, 15, 16, 17],
-  IRQ: [2, 9, 13, 16],
-  FRA: [1, 17, 19],
-  COD: [1, 2, 10],
-  GHA: [20],
-  CRO: [13],
-  ENG: [4, 13, 19],
-  FWC: [9],
-  CC: [3, 11],
+  AUT: [18],
+  JOR: [6],
+  ENG: [13],
 };
 
 const ALBUM_PREFIX_ORDER = [
@@ -281,7 +261,7 @@ function saveState() {
 }
 
 function collectedSet() {
-  return deriveCollectionCodes(state.collected, loadLedger());
+  return new Set(currentCollectionModel().cards.filter((card) => !card.missing).map((card) => card.code));
 }
 
 function trackedCodeSet() {
@@ -478,46 +458,18 @@ function visibleCards() {
 }
 
 function currentCollectionModel() {
-  return applyAlbumStatusOverrides(currentInventoryProjection().collectionModel);
-}
-
-function baseCollectionModel() {
   return currentInventoryProjection().collectionModel;
 }
 
-function applyAlbumStatusOverrides(model) {
-  const overrides = state.albumStatusOverrides || {};
-  const cards = model.cards.map((card) => {
-    const status = overrides[card.code];
-    if (!["present", "missing"].includes(status)) return card;
-    const missing = status === "missing";
-    return {
-      ...card,
-      missing,
-      collection: {
-        ...card.collection,
-        acquiredQuantity: missing ? 0 : Math.max(1, card.collection?.acquiredQuantity || 0),
-        placedQuantity: missing ? 0 : 1,
-        missingQuantity: missing ? 1 : 0,
-        albumStatusOverride: status,
-      },
-    };
-  });
-  const byCode = Object.fromEntries(cards.map((card) => [card.code, card]));
-  const collectedCount = cards.filter((card) => !card.missing).length;
-  const missingCards = cards.filter((card) => card.missing);
-  return {
-    ...model,
-    cards,
-    byCode,
-    summary: {
-      ...model.summary,
-      collectedCount,
-      missingCount: missingCards.length,
-      teamsRemainingCount: new Set(missingCards.map((card) => card.team)).size,
-      progressPercent: cards.length ? Math.round((collectedCount / cards.length) * 100) : 0,
-    },
-  };
+function baseCollectionModel() {
+  return buildInventoryProjection({
+    catalog: collectionCatalog,
+    collectionState: { ...state, albumStatusOverrides: {} },
+    ledger: loadLedger(),
+    inventoryPayload: inventorySnapshot || {},
+    inventorySource: inventoryProjection?.inventorySource || { label: inventorySnapshot ? "browser cache" : "unloaded inventory" },
+    inventoryCacheMeta: inventoryProjection?.inventoryCacheMeta || {},
+  }).collectionModel;
 }
 
 function currentInventoryProjection() {
