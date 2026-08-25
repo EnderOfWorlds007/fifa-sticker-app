@@ -18,6 +18,7 @@ import {
   sortCode,
 } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b7d3a91c4e2f";
 import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b7d3a91c4e2f";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-b7d3a91c4e2f";
 import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b7d3a91c4e2f";
 
 const input = document.querySelector("#photoScannerInput");
@@ -159,7 +160,7 @@ function renderResults(payloads, options = {}) {
       ? options.lastError.message
       : "No cards recognized in those photos.";
   renderCollectionActions();
-  codesList.replaceChildren(...(latestScanCodes.length ? latestScanCodes.map(codeRow) : [emptyRow("No recognized codes.")]));
+  renderRecognizedCodeRows();
   renderPhotoReview(payloads[0] || null);
 }
 
@@ -420,7 +421,7 @@ function updateResultFromReviewSlots() {
   result.value = copyTextForCodes(latestScanCodes);
   copyButton.disabled = !result.value;
   renderCollectionActions();
-  codesList.replaceChildren(...(latestScanCodes.length ? latestScanCodes.map(codeRow) : [emptyRow("No recognized codes.")]));
+  renderRecognizedCodeRows();
 }
 
 function normalizeCodeList(codes) {
@@ -433,6 +434,7 @@ function copyTextForCodes(codes) {
 
 function splitCollectionCodes(codes) {
   const owned = deriveCollectionCodes(loadCollectionState().collected, loadLedger());
+  addInventoryAlbumCodes(owned, loadCachedInventoryPayload());
   const newCodes = [];
   const inventoryCodes = [];
   for (const code of normalizeCodeList(codes)) {
@@ -440,6 +442,16 @@ function splitCollectionCodes(codes) {
     else newCodes.push(code);
   }
   return { newCodes: newCodes.sort(sortCode), inventoryCodes: inventoryCodes.sort(sortCode) };
+}
+
+function addInventoryAlbumCodes(owned, inventoryPayload) {
+  const cards = inventoryPayload?.cards && typeof inventoryPayload.cards === "object" ? inventoryPayload.cards : {};
+  for (const [rawCode, card] of Object.entries(cards)) {
+    const code = normalizeCodeList([card?.code || rawCode])[0];
+    if (!code) continue;
+    const albumCount = Number(card?.album_count ?? card?.collection?.placedQuantity ?? 0);
+    if (albumCount > 0 || card?.in_album === true) owned.add(code);
+  }
 }
 
 function renderCollectionActions() {
@@ -458,6 +470,10 @@ function renderCollectionActions() {
   collectionSummary.textContent = `${newCount} new for album · ${inventoryCount} already owned / inventory`;
 }
 
+function renderRecognizedCodeRows() {
+  codesList.replaceChildren(...(latestScanCodes.length ? latestScanCodes.map(codeRow) : [emptyRow("No recognized codes.")]));
+}
+
 function addScanToCollection() {
   const codes = normalizeCodeList(latestScanCodes);
   if (!codes.length) return;
@@ -468,6 +484,7 @@ function addScanToCollection() {
   ensureActiveProfileId();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   renderCollectionActions();
+  renderRecognizedCodeRows();
   status.textContent = `Added ${codes.length} scanned card${codes.length === 1 ? "" : "s"} to collection activity.`;
   showToast("Scan added to collection.");
 }
