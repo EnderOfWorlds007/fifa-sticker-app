@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("../v2/assets/photo_scanner.js", import.meta.url), "utf8");
+const scannerHtml = readFileSync(new URL("../v2/scanner/index.html", import.meta.url), "utf8");
 const projectionSource = readFileSync(new URL("../v2/assets/inventory_projection.js", import.meta.url), "utf8");
 const collectionSource = readFileSync(new URL("../v2/assets/collection_tracker.js", import.meta.url), "utf8");
 const compareSource = readFileSync(new URL("../v2/assets/compare.js", import.meta.url), "utf8");
@@ -121,6 +122,30 @@ test("recognized code rows use one shared renderer", () => {
   assert.equal(directRenderExpressions.length, 1);
   assert.match(functionBody("renderResults"), /renderRecognizedCodeRows\(\)/);
   assert.match(functionBody("updateResultFromReviewSlots"), /renderRecognizedCodeRows\(\)/);
+});
+
+test("scanner add-to-collection is one-shot with undo", () => {
+  assert.match(scannerHtml, /id="photoUndoCollectionButton"/);
+  assert.match(source, /import \{[\s\S]*cancelTransaction[\s\S]*\} from "\/fifa-sticker-app\/v2\/assets\/trade_state\.js/);
+  assert.match(source, /let latestAppliedScan = \{ signature: "", transactionId: "" \}/);
+  assert.match(source, /undoCollectionButton\?\.addEventListener\("click", undoLastScanAdd\)/);
+
+  const addBody = functionBody("addScanToCollection");
+  assert.match(addBody, /if \(isCurrentScanApplied\(\)\) \{/);
+  assert.match(addBody, /This scan was already added/);
+  assert.match(addBody, /const nextLedger = createTransaction\(loadLedger\(\), \{ kind: "received", received, given: \[\] \}\)/);
+  assert.match(addBody, /latestAppliedScan = \{ signature: currentScanSignature\(\), transactionId \}/);
+
+  const renderBody = functionBody("renderCollectionActions");
+  assert.match(renderBody, /const applied = isCurrentScanApplied\(\)/);
+  assert.match(renderBody, /addCollectionButton\.disabled = applied/);
+  assert.match(renderBody, /undoCollectionButton\.hidden = !applied/);
+
+  const undoBody = functionBody("undoLastScanAdd");
+  assert.match(undoBody, /cancelTransaction\(loadLedger\(\), latestAppliedScan\.transactionId\)/);
+  assert.match(undoBody, /already undone elsewhere/);
+  assert.match(undoBody, /latestAppliedScan = \{ signature: "", transactionId: "" \}/);
+  assert.match(undoBody, /Scan add undone/);
 });
 
 test("seeded V2 missing list matches the three-letter country-code list", () => {

@@ -9,22 +9,23 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e5f";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e60";
 import {
+  cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e5f";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e5f";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a11b2c3d4e5f";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e60";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e60";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a11b2c3d4e60";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-a11b2c3d4e5f";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e5f";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e5f";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-a11b2c3d4e60";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e60";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e60";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -36,6 +37,7 @@ const codesList = document.querySelector("#photoScannerCodes");
 const collectionActions = document.querySelector("#photoCollectionActions");
 const collectionSummary = document.querySelector("#photoCollectionSummary");
 const addCollectionButton = document.querySelector("#photoAddCollectionButton");
+const undoCollectionButton = document.querySelector("#photoUndoCollectionButton");
 const reviewPanel = document.querySelector("#photoReviewPanel");
 const reviewSummary = document.querySelector("#photoReviewSummary");
 const reviewStage = document.querySelector("#photoReviewStage");
@@ -57,6 +59,7 @@ let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
 let latestScanCodes = [];
 let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
 let latestInventoryProjection = null;
+let latestAppliedScan = { signature: "", transactionId: "" };
 let scanInFlight = false;
 
 applyOcrBackendFromQuery();
@@ -75,6 +78,7 @@ reviewInspector?.addEventListener("submit", saveInspectorCode);
 reviewNextButton?.addEventListener("click", selectNextReviewSlot);
 reviewAllCorrectButton?.addEventListener("click", saveAllReviewSlotsCorrect);
 addCollectionButton?.addEventListener("click", addScanToCollection);
+undoCollectionButton?.addEventListener("click", undoLastScanAdd);
 window.addEventListener("resize", () => drawPhotoReview());
 copyButton?.addEventListener("click", async () => {
   const text = copyTextForCodes(latestScanCodes);
@@ -114,6 +118,7 @@ async function scanPhotos(files) {
   result.value = "";
   latestScanCodes = [];
   latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
+  latestAppliedScan = { signature: "", transactionId: "" };
   renderCollectionActions();
   codesList.replaceChildren(emptyRow("Scanning..."));
   scanButton.classList.add("scanning");
@@ -471,14 +476,26 @@ function renderCollectionActions() {
   if (!total) {
     collectionActions.hidden = true;
     addCollectionButton.disabled = true;
+    if (undoCollectionButton) {
+      undoCollectionButton.hidden = true;
+      undoCollectionButton.disabled = true;
+    }
     collectionSummary.textContent = "";
     return;
   }
   const newCount = latestCollectionSplit.newCodes.length;
   const inventoryCount = latestCollectionSplit.inventoryCodes.length;
+  const applied = isCurrentScanApplied();
   collectionActions.hidden = false;
-  addCollectionButton.disabled = false;
-  collectionSummary.textContent = `${newCount} new for album · ${inventoryCount} already owned / inventory`;
+  addCollectionButton.disabled = applied;
+  addCollectionButton.textContent = applied ? "Added to collection" : "Add to collection";
+  if (undoCollectionButton) {
+    undoCollectionButton.hidden = !applied;
+    undoCollectionButton.disabled = !applied;
+  }
+  collectionSummary.textContent = applied
+    ? `${total} scanned card${total === 1 ? "" : "s"} already added · Undo to add again`
+    : `${newCount} new for album · ${inventoryCount} already owned / inventory`;
 }
 
 function renderRecognizedCodeRows() {
@@ -488,11 +505,20 @@ function renderRecognizedCodeRows() {
 function addScanToCollection() {
   const codes = normalizeCodeList(latestScanCodes);
   if (!codes.length) return;
+  if (isCurrentScanApplied()) {
+    status.textContent = "This scan was already added. Use Undo before adding it again.";
+    showToast("Scan already added.");
+    renderCollectionActions();
+    return;
+  }
   const quantities = new Map();
   for (const code of codes) quantities.set(code, (quantities.get(code) || 0) + 1);
   const received = [...quantities.entries()].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => sortCode(a.code, b.code));
-  saveLedger(createTransaction(loadLedger(), { kind: "received", received, given: [] }));
+  const nextLedger = createTransaction(loadLedger(), { kind: "received", received, given: [] });
+  const transactionId = nextLedger.transactions[nextLedger.transactions.length - 1]?.id || "";
+  saveLedger(nextLedger);
   ensureActiveProfileId();
+  latestAppliedScan = { signature: currentScanSignature(), transactionId };
   refreshScannerCollectionProjection().then(() => {
     latestCollectionSplit = splitCollectionCodes(latestScanCodes);
     renderCollectionActions();
@@ -500,6 +526,40 @@ function addScanToCollection() {
   });
   status.textContent = `Added ${codes.length} scanned card${codes.length === 1 ? "" : "s"} to collection activity.`;
   showToast("Scan added to collection.");
+}
+
+function undoLastScanAdd() {
+  if (!isCurrentScanApplied()) {
+    status.textContent = "There is no scan add to undo.";
+    showToast("Nothing to undo.");
+    renderCollectionActions();
+    return;
+  }
+  try {
+    saveLedger(cancelTransaction(loadLedger(), latestAppliedScan.transactionId));
+  } catch {
+    latestAppliedScan = { signature: "", transactionId: "" };
+    status.textContent = "That scan add was already undone elsewhere.";
+    showToast("Already undone.");
+    renderCollectionActions();
+    return;
+  }
+  latestAppliedScan = { signature: "", transactionId: "" };
+  refreshScannerCollectionProjection().then(() => {
+    latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+    renderCollectionActions();
+    renderRecognizedCodeRows();
+  });
+  status.textContent = "Scan add undone. You can add this scan again.";
+  showToast("Scan add undone.");
+}
+
+function isCurrentScanApplied() {
+  return Boolean(latestAppliedScan.transactionId && latestAppliedScan.signature === currentScanSignature());
+}
+
+function currentScanSignature() {
+  return normalizeCodeList(latestScanCodes).join("|");
 }
 
 function renderReviewQueue() {
