@@ -9,23 +9,23 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e60";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e61";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e60";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e60";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a11b2c3d4e60";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e61";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e61";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a11b2c3d4e61";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-a11b2c3d4e60";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e60";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e60";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-a11b2c3d4e61";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e61";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e61";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -162,8 +162,9 @@ function setScanProgress(message) {
 }
 
 async function renderResults(payloads, options = {}) {
-  const codes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
-  latestScanCodes = normalizeCodeList(codes);
+  const fallbackCodes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
+  const reviewCodes = renderPhotoReview(payloads[0] || null);
+  latestScanCodes = reviewCodes.length ? reviewCodes : normalizeCodeList(fallbackCodes);
   await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   const text = copyTextForCodes(latestScanCodes);
@@ -171,14 +172,13 @@ async function renderResults(payloads, options = {}) {
   copyButton.disabled = !text;
   const failedCount = Math.max(0, Number(options.requestedCount || payloads.length) - payloads.length);
   const failureText = failedCount ? ` ${failedCount} photo${failedCount === 1 ? "" : "s"} could not be read.` : "";
-  status.textContent = codes.length
-    ? `${codes.length} cards recognized.${failureText}`
+  status.textContent = latestScanCodes.length
+    ? `${latestScanCodes.length} cards recognized.${failureText}`
     : options.lastError instanceof Error
       ? options.lastError.message
       : "No cards recognized in those photos.";
   renderCollectionActions();
   renderRecognizedCodeRows();
-  renderPhotoReview(payloads[0] || null);
 }
 
 function showPhotoReviewImage(imageUrl) {
@@ -208,6 +208,7 @@ function renderPhotoReview(payload) {
   renderReviewQueue();
   renderInspector();
   drawPhotoReview();
+  return matchedReviewSlotCodes(slots);
 }
 
 function normalizeReviewSlots(slots, payload = {}) {
@@ -226,6 +227,10 @@ function normalizeReviewSlots(slots, payload = {}) {
       normalized_code_anchor_box: normalizedPolygon(slot.normalized_code_anchor_box),
     }))
     .filter((slot) => (slot.normalized_polygon?.length || slot.normalized_code_anchor_box?.length) >= 4);
+}
+
+function matchedReviewSlotCodes(slots) {
+  return normalizeCodeList(slots.filter((slot) => slot.code && slotStatus(slot) === "matched").map((slot) => slot.code));
 }
 
 function normalizedPolygon(points) {
