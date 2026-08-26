@@ -3,6 +3,7 @@ let activeSession = null;
 export const IMAGE_CAPTURE_TIMEOUT_MS = 6000;
 const CANVAS_ENCODE_TIMEOUT_MS = 12000;
 const IMAGE_DECODE_TIMEOUT_MS = 8000;
+const TORCH_CONSTRAINT_TIMEOUT_MS = 1800;
 
 export class CameraCaptureTimeoutError extends Error {
   constructor(milliseconds) {
@@ -20,6 +21,11 @@ export function takePhotoWithTimeout(imageCapture, settings, timeoutMs = IMAGE_C
     timeoutId = environment.setTimeout(() => reject(new CameraCaptureTimeoutError(timeoutMs)), timeoutMs);
   });
   return Promise.race([capture, timeout]).finally(() => environment.clearTimeout(timeoutId));
+}
+
+export function applyTorchConstraintWithTimeout(track, enabled, timeoutMs = TORCH_CONSTRAINT_TIMEOUT_MS, environment = globalThis) {
+  const constraint = Promise.resolve().then(() => track.applyConstraints({ advanced: [{ torch: enabled }] }));
+  return promiseWithTimeout(constraint, timeoutMs, "Torch request timed out.", environment);
 }
 
 export async function captureStillWithFallback({
@@ -87,6 +93,16 @@ export function cameraAvailabilityMessage(environment = globalThis) {
   return "";
 }
 
+export function shouldBypassNativeStillCapture(environment = globalThis) {
+  const navigatorLike = environment.navigator || {};
+  const userAgent = String(navigatorLike.userAgent || "");
+  const platform = String(navigatorLike.platform || "");
+  const touchPoints = Number(navigatorLike.maxTouchPoints || 0);
+  return /iPad|iPhone|iPod/i.test(userAgent)
+    || /iPad|iPhone|iPod/i.test(platform)
+    || (platform === "MacIntel" && touchPoints > 1);
+}
+
 export function formatCameraDiagnostics(diagnostics = {}) {
   const preview = diagnostics.streamWidth && diagnostics.streamHeight
     ? `Preview ${diagnostics.streamWidth}×${diagnostics.streamHeight}`
@@ -96,7 +112,9 @@ export function formatCameraDiagnostics(diagnostics = {}) {
     : "capture pending";
   const source = diagnostics.source === "image-capture"
     ? "native still photo (maximum resolution requested)"
-    : diagnostics.source === "video-frame" ? "video-frame fallback" : "camera preview";
+    : diagnostics.source === "video-frame" && diagnostics.nativeStillBypassed
+      ? "iPhone/iPad camera frame (native still bypassed)"
+      : diagnostics.source === "video-frame" ? "video-frame fallback" : "camera preview";
   return `${preview}; ${captured}; ${source}; ${lightStatusLabel(diagnostics)}.`;
 }
 
@@ -105,6 +123,7 @@ export function lightStatusLabel(diagnostics = {}) {
   if (diagnostics.fillLightModeRequested && diagnostics.fillLightModeSupported) return "still-photo flash requested (browser cannot confirm firing)";
   if (diagnostics.lightRequested && diagnostics.fillLightModeSupported) return "still-photo flash ready";
   if (diagnostics.torchRequested && diagnostics.torchApplied) return "torch requested (browser did not confirm it active)";
+  if (diagnostics.torchRequested && diagnostics.torchTimedOut) return "torch request timed out; captured without confirmed light";
   if (diagnostics.torchRequested && diagnostics.torchRejected) return "torch request rejected";
   if (diagnostics.lightRequested && !diagnostics.torchSupported && !diagnostics.fillLightModeSupported) return "flash/torch unsupported";
   return "flash/torch off";
@@ -137,11 +156,13 @@ function createCameraSession(options) {
     facingMode: "",
     rearCameraRequested: true,
     imageCaptureSupported: false,
+    nativeStillBypassed: false,
     torchSupported: false,
     torchRequested: false,
     torchApplied: false,
     torchObserved: false,
     torchRejected: false,
+    torchTimedOut: false,
     fillLightModeRequested: false,
     fillLightModeSupported: false,
     fallbackReason: "",
@@ -231,11 +252,13 @@ function createCameraSession(options) {
       updateSettings();
       const ImageCaptureClass = window.ImageCapture;
       diagnostics.imageCaptureSupported = typeof ImageCaptureClass === "function";
-      if (diagnostics.imageCaptureSupported) {
+      diagnostics.nativeStillBypassed = shouldBypassNativeStillCapture(window);
+      if (diagnostics.imageCaptureSupported && !diagnostics.nativeStillBypassed) {
         try { imageCapture = new ImageCaptureClass(track); } catch { imageCapture = null; }
       }
       await inspectLightCapabilities();
       if (!isCurrent(token)) return;
+      renderLightButton();
       if (lightRequested && lightMode === "torch") await requestTorch(true);
       if (!isCurrent(token)) return;
       captureButton.disabled = false;
@@ -269,13 +292,19 @@ function createCameraSession(options) {
   async function inspectLightCapabilities() {
     const capabilities = safeCapabilities(track);
     diagnostics.torchSupported = capabilities.torch === true || (Array.isArray(capabilities.torch) && capabilities.torch.includes(true));
-    diagnostics.fillLightModeSupported = Array.isArray(capabilities.fillLightMode) && capabilities.fillLightMode.includes("flash");
+    diagnostics.fillLightModeSupported = Boolean(imageCapture)
+      && Array.isArray(capabilities.fillLightMode)
+      && capabilities.fillLightMode.includes("flash");
     if (imageCapture?.getPhotoCapabilities) {
       try { photoCapabilities = await imageCapture.getPhotoCapabilities(); } catch { photoCapabilities = null; }
       const fillModes = photoCapabilities?.fillLightMode || [];
       diagnostics.fillLightModeSupported ||= Array.isArray(fillModes) && fillModes.includes("flash");
     }
     lightMode = diagnostics.fillLightModeSupported ? "fill-light" : diagnostics.torchSupported ? "torch" : "unsupported";
+    if (lightMode === "unsupported") {
+      lightRequested = false;
+      diagnostics.lightRequested = false;
+    }
   }
 
   async function toggleLight() {
@@ -283,10 +312,23 @@ function createCameraSession(options) {
     lightRequested = !lightRequested;
     diagnostics.lightRequested = lightRequested;
     lightButton.setAttribute("aria-pressed", String(lightRequested));
-    lightButton.textContent = lightRequested ? "Light: requested" : "Light: off";
+    renderLightButton();
     if (!lightRequested || lightMode === "torch") await requestTorch(lightRequested);
     if (!isCurrent(token)) return;
     updateStatus();
+  }
+
+  function renderLightButton() {
+    if (lightMode === "unsupported") {
+      lightButton.disabled = true;
+      lightButton.setAttribute("aria-pressed", "false");
+      lightButton.textContent = "Light unavailable";
+      return;
+    }
+    lightButton.disabled = false;
+    lightButton.setAttribute("aria-pressed", String(lightRequested));
+    const kind = lightMode === "fill-light" ? "Flash" : "Torch";
+    lightButton.textContent = lightRequested ? `${kind}: requested` : `${kind}: off`;
   }
 
   async function requestTorch(enabled) {
@@ -294,14 +336,20 @@ function createCameraSession(options) {
     diagnostics.torchApplied = false;
     diagnostics.torchObserved = false;
     diagnostics.torchRejected = false;
+    diagnostics.torchTimedOut = false;
     if (!track || !diagnostics.torchSupported) return;
     try {
-      await track.applyConstraints({ advanced: [{ torch: enabled }] });
+      await applyTorchConstraintWithTimeout(
+        track,
+        enabled,
+        options.torchConstraintTimeoutMs || TORCH_CONSTRAINT_TIMEOUT_MS,
+      );
       diagnostics.torchApplied = enabled;
       diagnostics.torchObserved = track.getSettings?.().torch === enabled && enabled;
       if (enabled) await delay(300);
-    } catch {
-      diagnostics.torchRejected = enabled;
+    } catch (error) {
+      diagnostics.torchTimedOut = enabled && /timed out/i.test(String(error?.message || ""));
+      diagnostics.torchRejected = enabled && !diagnostics.torchTimedOut;
     }
   }
 
@@ -340,7 +388,12 @@ function createCameraSession(options) {
             : `Native still capture failed: ${result.error instanceof Error ? result.error.message : "unknown error"}`;
         }
       } else {
-        diagnostics.fallbackReason = "ImageCapture is unavailable; used the camera preview frame.";
+        if (diagnostics.nativeStillBypassed) {
+          showStatus("Capturing iPhone/iPad camera frame without the blocking native still API…");
+          diagnostics.fallbackReason = "Native still capture was bypassed on iPhone/iPad to prevent a WebKit camera stall.";
+        } else {
+          diagnostics.fallbackReason = "ImageCapture is unavailable; used the camera preview frame.";
+        }
         blob = await canvasFrame(video);
         if (!isCurrent(token)) return;
         diagnostics.source = "video-frame";
@@ -387,8 +440,14 @@ function createCameraSession(options) {
     window.removeEventListener("pagehide", closeForNavigation);
     document.removeEventListener("visibilitychange", closeWhenHidden);
     let torchReset = null;
-    if (track && diagnostics.torchSupported) {
-      try { torchReset = track.applyConstraints({ advanced: [{ torch: false }] }); } catch { /* best effort */ }
+    if (track && diagnostics.torchSupported && !diagnostics.nativeStillBypassed) {
+      try {
+        torchReset = applyTorchConstraintWithTimeout(
+          track,
+          false,
+          TORCH_CONSTRAINT_TIMEOUT_MS,
+        );
+      } catch { /* best effort */ }
     }
     stopStream(stream);
     if (video) video.srcObject = null;

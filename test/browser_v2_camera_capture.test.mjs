@@ -68,7 +68,27 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       assert.equal(result.torch, false, "cleanup should turn the torch off");
       assert.equal(result.cameraButtonDisabled, false);
 
+      await evaluate(cdp, `(() => {
+        Object.defineProperty(navigator, "platform", { configurable: true, value: "iPhone" });
+        Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      })()`);
+      await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
+      await waitForExpression(cdp, `document.querySelector(".cameraTakeButton:not([disabled])")`);
+      const iosPreview = await evaluate(cdp, `document.querySelector(".cameraCaptureStatus").textContent`);
+      assert.match(iosPreview, /torch confirmed active/);
+      await evaluate(cdp, `document.querySelector(".cameraTakeButton").click()`);
+      await waitForExpression(cdp, `window.__cameraUploadCount === 2`);
+      const iosResult = await evaluate(cdp, `({
+        nativeCalls: window.__nativeTakePhotoCalls,
+        diagnostics: document.querySelector("#photoCameraDiagnostics").textContent,
+        upload: window.__cameraUpload,
+      })`);
+      assert.equal(iosResult.nativeCalls, 1, "iPhone capture must not call ImageCapture.takePhoto");
+      assert.ok(iosResult.upload.size > 0);
+      assert.match(iosResult.diagnostics, /iPhone\/iPad camera frame \(native still bypassed\)/);
+
       await send(cdp, "Page.setInterceptFileChooserDialog", { enabled: true });
+      await waitForExpression(cdp, `document.querySelector("#photoScannerStatus").textContent.includes("recognized") && !document.querySelector("#photoScannerCameraButton").disabled`);
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraFallbackButton")`);
       const fallbackRect = await evaluate(cdp, `(() => {
@@ -93,8 +113,10 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
 
 function cameraMockSource() {
   return `(() => {
+    sessionStorage.setItem("fifa-v2-controller-reload-build-b7e3d4f6a219", "1");
     window.__cameraTorch = false;
     window.__cameraTracksStopped = false;
+    window.__nativeTakePhotoCalls = 0;
     const track = {
       getCapabilities: () => ({ width: { max: 4096 }, height: { max: 3072 }, torch: true, resizeMode: ["none"] }),
       getSettings: () => ({ width: 1920, height: 1080, facingMode: "environment", torch: window.__cameraTorch }),
@@ -114,10 +136,22 @@ function cameraMockSource() {
       set(value) { this.__mockStream = value; },
     });
     HTMLVideoElement.prototype.play = async function () {};
+    HTMLCanvasElement.prototype.getContext = () => new Proxy({}, {
+      get(target, property) {
+        if (!(property in target)) target[property] = () => {};
+        return target[property];
+      },
+      set(target, property, value) { target[property] = value; return true; },
+    });
+    HTMLCanvasElement.prototype.toBlob = function (callback) {
+      const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="), (value) => value.charCodeAt(0));
+      callback(new Blob([bytes], { type: "image/png" }));
+    };
     window.ImageCapture = class {
       constructor() {}
       async getPhotoCapabilities() { return { imageWidth: { max: 4032 }, imageHeight: { max: 3024 }, fillLightMode: ["flash"] }; }
       async takePhoto() {
+        window.__nativeTakePhotoCalls += 1;
         const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="), (value) => value.charCodeAt(0));
         return new Blob([bytes], { type: "image/png" });
       }
@@ -131,6 +165,7 @@ function installOcrMockSource() {
     window.fetch = (url, init) => {
       if (String(url).includes("/api/photo-code-jobs") && init?.method === "POST") {
         const file = init.body;
+        window.__cameraUploadCount = (window.__cameraUploadCount || 0) + 1;
         window.__cameraUpload = file ? { name: file.name, type: file.type, size: file.size } : null;
         return Promise.resolve(new Response(JSON.stringify({ job_id: "camera-job", status: "queued" }), { status: 202, headers: { "content-type": "application/json" } }));
       }
@@ -209,8 +244,15 @@ async function waitForExpression(cdp, expression) {
     if (await evaluate(cdp, expression)) return;
     await delay(50);
   }
-  const cameraStatus = await evaluate(cdp, `document.querySelector(".cameraCaptureStatus")?.textContent || ""`);
-  throw new Error(`Timed out waiting for ${expression}. Camera status: ${cameraStatus}`);
+  const debug = await evaluate(cdp, `({
+    cameraStatus: document.querySelector(".cameraCaptureStatus")?.textContent || "",
+    scannerStatus: document.querySelector("#photoScannerStatus")?.textContent || "",
+    result: document.querySelector("#photoScannerResult")?.value || "",
+    upload: window.__cameraUpload || null,
+    uploadCount: window.__cameraUploadCount || 0,
+    href: location.href,
+  })`);
+  throw new Error(`Timed out waiting for ${expression}. State: ${JSON.stringify(debug)}`);
 }
 
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
