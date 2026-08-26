@@ -1,6 +1,7 @@
-const CACHE_NAME = "fifa-card-apps-fifa-sticker-app-v2-build-0d8b7c2e6a41";
+const BUILD_ID = "build-9c4a1f2e7b63";
+const CACHE_NAME = `fifa-card-apps-fifa-sticker-app-v2-${BUILD_ID}`;
 const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}$/, "");
-const APP_SHELL = [
+const APP_SHELL_PATHS = [
   "/fifa-sticker-app/v2/",
   "/fifa-sticker-app/v2/apps/",
   "/fifa-sticker-app/v2/getting-started/",
@@ -42,10 +43,11 @@ const APP_SHELL = [
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
   "/fifa-sticker-app/v2/assets/pwa.js",
   "/fifa-sticker-app/v2/data/trade_inventory.json",
-  "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-0d8b7c2e6a41",
-  "/fifa-sticker-app/v2/data/collection_inventory.json?v=build-0d8b7c2e6a41",
+  "/fifa-sticker-app/v2/data/collection_catalog.json",
+  "/fifa-sticker-app/v2/data/collection_inventory.json",
   "/fifa-sticker-app/v2/manifest.webmanifest",
 ];
+const APP_SHELL = APP_SHELL_PATHS.map((path) => `${path}${path.includes("?") ? "&" : "?"}v=${BUILD_ID}`);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -59,6 +61,10 @@ self.addEventListener("activate", (event) => {
       .then((names) => Promise.all(names.filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME).map((name) => caches.delete(name))))
       .then(() => self.clients.claim()),
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -86,26 +92,26 @@ function shouldPreferNetwork(url) {
 }
 
 async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
   try {
     const response = await fetch(request, { cache: "no-store" });
     if (response.ok && !response.redirected && response.type === "basic") {
-      const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cached = await cache.match(request);
     if (cached) return cached;
-    return caches.match(request, { ignoreSearch: true });
+    return cache.match(request, { ignoreSearch: true });
   }
 }
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok && !response.redirected && response.type === "basic") {
-    const cache = await caches.open(CACHE_NAME);
     cache.put(request, response.clone());
   }
   return response;

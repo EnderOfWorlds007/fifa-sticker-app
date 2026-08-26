@@ -1,4 +1,5 @@
-const CACHE_NAME = "fifa-card-apps-v26";
+const CACHE_NAME = "fifa-card-apps-v27";
+const CACHE_PREFIX = "fifa-card-apps-v";
 const APP_SHELL = [
   "/fifa-sticker-app/",
   "/fifa-sticker-app/apps/",
@@ -32,7 +33,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((names) => Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))))
+      .then((names) => Promise.all(names.filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME).map((name) => caches.delete(name))))
       .then(() => self.clients.claim()),
   );
 });
@@ -46,34 +47,39 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(request).catch(() => cachedJsonUnavailable(url.pathname)));
     return;
   }
-  if (url.pathname === "/fifa-sticker-app/assets/site_config.js") {
+  if (shouldPreferNetwork(url)) {
     event.respondWith(networkFirst(request));
     return;
   }
   event.respondWith(cacheFirst(request));
 });
 
+function shouldPreferNetwork(url) {
+  return url.pathname === "/fifa-sticker-app/assets/site_config.js"
+    || url.pathname.startsWith("/fifa-sticker-app/v2/");
+}
+
 async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
   try {
     const response = await fetch(request, { cache: "no-store" });
     if (response.ok && !response.redirected && response.type === "basic") {
-      const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cached = await cache.match(request);
     if (cached) return cached;
     throw new Error("Network unavailable and no cached response exists.");
   }
 }
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok && !response.redirected && response.type === "basic") {
-    const cache = await caches.open(CACHE_NAME);
     cache.put(request, response.clone());
   }
   return response;
