@@ -124,6 +124,23 @@ test("recognized code rows use one shared renderer", () => {
   assert.match(functionBody("updateResultFromReviewSlots"), /renderRecognizedCodeRows\(\)/);
 });
 
+test("scanner counts matched review slots including duplicates before collection summary", () => {
+  const renderBody = functionBody("renderResults");
+  assert.match(renderBody, /const fallbackCodes = payloads\.flatMap/);
+  assert.match(renderBody, /const reviewCodes = renderPhotoReview\(payloads\[0\] \|\| null\)/);
+  assert.match(renderBody, /latestScanCodes = reviewCodes\.length \? reviewCodes : normalizeCodeList\(fallbackCodes\)/);
+  assert.match(renderBody, /status\.textContent = latestScanCodes\.length/);
+  assert.ok(
+    renderBody.indexOf("renderPhotoReview(payloads[0] || null)") < renderBody.indexOf("renderCollectionActions()"),
+    "review slot occurrences are selected before rendering collection counts",
+  );
+
+  const matchedBody = functionBody("matchedReviewSlotCodes");
+  assert.match(matchedBody, /slot\.code && slotStatus\(slot\) === "matched"/);
+  assert.match(matchedBody, /map\(\(slot\) => slot\.code\)/);
+  assert.match(matchedBody, /return normalizeCodeList/);
+});
+
 test("scanner add-to-collection is one-shot with undo", () => {
   assert.match(scannerHtml, /id="photoUndoCollectionButton"/);
   assert.match(source, /import \{[\s\S]*cancelTransaction[\s\S]*\} from "\/fifa-sticker-app\/v2\/assets\/trade_state\.js/);
