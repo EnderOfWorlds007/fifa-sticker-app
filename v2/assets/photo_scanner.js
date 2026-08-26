@@ -9,27 +9,30 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e61";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f1a5c4a9e027";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e61";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-a11b2c3d4e61";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-a11b2c3d4e61";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-f1a5c4a9e027";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-f1a5c4a9e027";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-f1a5c4a9e027";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-a11b2c3d4e61";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-a11b2c3d4e61";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-a11b2c3d4e61";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-f1a5c4a9e027";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-f1a5c4a9e027";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-f1a5c4a9e027";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-f1a5c4a9e027";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
 const scanButton = document.querySelector("#photoScannerButton");
+const cameraButton = document.querySelector("#photoScannerCameraButton");
+const cameraDiagnostics = document.querySelector("#photoCameraDiagnostics");
 const copyButton = document.querySelector("#photoScannerCopyButton");
 const status = document.querySelector("#photoScannerStatus");
 const result = document.querySelector("#photoScannerResult");
@@ -61,6 +64,7 @@ let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
 let latestInventoryProjection = null;
 let latestAppliedScan = { signature: "", transactionId: "" };
 let scanInFlight = false;
+let latestCaptureSummary = "";
 
 applyOcrBackendFromQuery();
 initializeBackendSettings();
@@ -71,6 +75,7 @@ refreshScannerCollectionProjection().then(() => {
   renderRecognizedCodeRows();
 });
 scanButton?.addEventListener("click", () => input?.click());
+cameraButton?.addEventListener("click", captureCameraPhoto);
 input?.addEventListener("change", scanSelectedPhotos);
 reviewImage?.addEventListener("load", () => drawPhotoReview());
 reviewStage?.addEventListener("click", selectReviewSlotAtEvent);
@@ -95,12 +100,34 @@ async function scanSelectedPhotos() {
   if (scanInFlight) return;
   const files = [...(input?.files || [])];
   if (!files.length) return;
+  latestCaptureSummary = "";
+  if (cameraDiagnostics) cameraDiagnostics.textContent = "Using photo-library image; in-app camera diagnostics do not apply.";
   scanInFlight = true;
   try {
     await scanPhotos(files);
   } finally {
     scanInFlight = false;
     if (input) input.value = "";
+  }
+}
+
+async function captureCameraPhoto() {
+  if (scanInFlight) return;
+  const capture = await openCameraCapture({
+    invoker: cameraButton,
+    onFallback: () => input?.click(),
+    onStatus: (message) => {
+      if (cameraDiagnostics) cameraDiagnostics.textContent = message;
+    },
+  });
+  if (!capture?.file) return;
+  latestCaptureSummary = capture.summary;
+  if (cameraDiagnostics) cameraDiagnostics.textContent = capture.summary;
+  scanInFlight = true;
+  try {
+    await scanPhotos([capture.file]);
+  } finally {
+    scanInFlight = false;
   }
 }
 
@@ -114,6 +141,7 @@ async function scanPhotos(files) {
     return;
   }
   scanButton.disabled = true;
+  if (cameraButton) cameraButton.disabled = true;
   copyButton.disabled = true;
   result.value = "";
   latestScanCodes = [];
@@ -150,6 +178,7 @@ async function scanPhotos(files) {
     codesList.replaceChildren(emptyRow("No result."));
   } finally {
     scanButton.disabled = false;
+    if (cameraButton) cameraButton.disabled = false;
     scanButton.classList.remove("scanning");
     scanButton.setAttribute("aria-busy", "false");
     scanButton.textContent = "Use Photos";
@@ -177,6 +206,7 @@ async function renderResults(payloads, options = {}) {
     : options.lastError instanceof Error
       ? options.lastError.message
       : "No cards recognized in those photos.";
+  if (latestCaptureSummary && cameraDiagnostics) cameraDiagnostics.textContent = latestCaptureSummary;
   renderCollectionActions();
   renderRecognizedCodeRows();
 }
