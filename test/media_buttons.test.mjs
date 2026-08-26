@@ -23,7 +23,8 @@ test("service worker does not app-shell-cache OCR backend config", () => {
 
   assert.match(sw, /assets\/recognition_config\.js/);
   assert.doesNotMatch(appShell, /assets\/site_config\.js/);
-  assert.match(sw, /assets\/site_config\.js"\) \{\n\s*event\.respondWith\(networkFirst\(request\)\)/);
+  assert.match(sw, /if \(shouldPreferNetwork\(url\)\) \{\n\s*event\.respondWith\(networkFirst\(request\)\)/);
+  assert.match(sw, /url\.pathname === "\/fifa-sticker-app\/assets\/site_config\.js"/);
 });
 
 test("production config does not hard-code quick tunnels", () => {

@@ -92,26 +92,26 @@ function shouldPreferNetwork(url) {
 }
 
 async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
   try {
     const response = await fetch(request, { cache: "no-store" });
     if (response.ok && !response.redirected && response.type === "basic") {
-      const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    const cached = await caches.match(request);
+    const cached = await cache.match(request);
     if (cached) return cached;
-    return caches.match(request, { ignoreSearch: true });
+    return cache.match(request, { ignoreSearch: true });
   }
 }
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok && !response.redirected && response.type === "basic") {
-    const cache = await caches.open(CACHE_NAME);
     cache.put(request, response.clone());
   }
   return response;
