@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-f1a5c4a9e027";
+} from "./backup_restore.js?v=build-0d8b7c2e6a41";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";

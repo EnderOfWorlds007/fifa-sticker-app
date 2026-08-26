@@ -1,5 +1,74 @@
 let activeSession = null;
 
+export const IMAGE_CAPTURE_TIMEOUT_MS = 6000;
+const CANVAS_ENCODE_TIMEOUT_MS = 12000;
+const IMAGE_DECODE_TIMEOUT_MS = 8000;
+
+export class CameraCaptureTimeoutError extends Error {
+  constructor(milliseconds) {
+    super(`The browser did not finish the still photo within ${milliseconds} ms.`);
+    this.name = "CameraCaptureTimeoutError";
+  }
+}
+
+export function takePhotoWithTimeout(imageCapture, settings, timeoutMs = IMAGE_CAPTURE_TIMEOUT_MS, environment = globalThis) {
+  let timeoutId = null;
+  const capture = Promise.resolve().then(() => (
+    settings === undefined ? imageCapture.takePhoto() : imageCapture.takePhoto(settings)
+  ));
+  const timeout = new Promise((_, reject) => {
+    timeoutId = environment.setTimeout(() => reject(new CameraCaptureTimeoutError(timeoutMs)), timeoutMs);
+  });
+  return Promise.race([capture, timeout]).finally(() => environment.clearTimeout(timeoutId));
+}
+
+export async function captureStillWithFallback({
+  imageCapture,
+  settings,
+  fallback,
+  beforeFallback,
+  shouldContinue = () => true,
+  timeoutMs = IMAGE_CAPTURE_TIMEOUT_MS,
+  environment = globalThis,
+}) {
+  try {
+    return {
+      blob: await takePhotoWithTimeout(imageCapture, settings, timeoutMs, environment),
+      source: "image-capture",
+      retried: false,
+      error: null,
+    };
+  } catch (configuredError) {
+    if (!shouldContinue()) throw configuredError;
+    if (!(configuredError instanceof CameraCaptureTimeoutError)) {
+      try {
+        return {
+          blob: await takePhotoWithTimeout(imageCapture, undefined, timeoutMs, environment),
+          source: "image-capture",
+          retried: true,
+          error: configuredError,
+        };
+      } catch (retryError) {
+        if (!shouldContinue()) throw retryError;
+        beforeFallback?.(retryError, true);
+        return {
+          blob: await fallback(),
+          source: "video-frame",
+          retried: true,
+          error: retryError,
+        };
+      }
+    }
+    beforeFallback?.(configuredError, false);
+    return {
+      blob: await fallback(),
+      source: "video-frame",
+      retried: false,
+      error: configuredError,
+    };
+  }
+}
+
 export async function openCameraCapture(options = {}) {
   if (activeSession) await activeSession.close("A new camera session was opened.");
 
@@ -243,28 +312,32 @@ function createCameraSession(options) {
     try {
       let blob;
       if (imageCapture?.takePhoto) {
-        try {
-          const settings = photoSettings(photoCapabilities, lightRequested && lightMode === "fill-light");
-          diagnostics.fillLightModeRequested = settings.fillLightMode === "flash";
-          if (diagnostics.fillLightModeRequested) diagnostics.fillLightModeSupported = true;
-          blob = await imageCapture.takePhoto(settings);
-          if (!isCurrent(token)) return;
-          diagnostics.source = "image-capture";
-        } catch (error) {
-          if (!isCurrent(token)) return;
-          diagnostics.fallbackReason = `Requested still settings failed: ${error instanceof Error ? error.message : "unknown error"}`;
+        let preservedFrame = null;
+        try { preservedFrame = snapshotVideoFrame(video); } catch { /* use the live preview if native capture fails immediately */ }
+        const settings = photoSettings(photoCapabilities, lightRequested && lightMode === "fill-light");
+        diagnostics.fillLightModeRequested = settings.fillLightMode === "flash";
+        if (diagnostics.fillLightModeRequested) diagnostics.fillLightModeSupported = true;
+        const result = await captureStillWithFallback({
+          imageCapture,
+          settings,
+          timeoutMs: options.imageCaptureTimeoutMs || IMAGE_CAPTURE_TIMEOUT_MS,
+          shouldContinue: () => isCurrent(token),
+          beforeFallback: (error) => showStatus(error instanceof CameraCaptureTimeoutError
+            ? "Native photo took too long; using the preserved camera preview…"
+            : "Native photo unavailable; using the preserved camera preview…"),
+          fallback: () => preservedFrame ? encodeCanvas(preservedFrame) : canvasFrame(video),
+        });
+        if (!isCurrent(token)) return;
+        blob = result.blob;
+        diagnostics.source = result.source;
+        if (result.retried || result.source === "video-frame") {
           diagnostics.fillLightModeRequested = false;
-          try {
-            blob = await imageCapture.takePhoto();
-            if (!isCurrent(token)) return;
-            diagnostics.source = "image-capture";
-          } catch (retryError) {
-            if (!isCurrent(token)) return;
-            diagnostics.fallbackReason = `Full-resolution still failed: ${retryError instanceof Error ? retryError.message : "unknown error"}`;
-            blob = await canvasFrame(video);
-            if (!isCurrent(token)) return;
-            diagnostics.source = "video-frame";
-          }
+        }
+        if (result.source === "video-frame") {
+          const timedOut = result.error instanceof CameraCaptureTimeoutError;
+          diagnostics.fallbackReason = timedOut
+            ? "Native still capture timed out; used a preserved camera preview frame."
+            : `Native still capture failed: ${result.error instanceof Error ? result.error.message : "unknown error"}`;
         }
       } else {
         diagnostics.fallbackReason = "ImageCapture is unavailable; used the camera preview frame.";
@@ -384,30 +457,40 @@ function waitForVideoDimensions(video) {
   });
 }
 
-function canvasFrame(video) {
+function snapshotVideoFrame(video) {
   const width = video.videoWidth;
   const height = video.videoHeight;
-  if (!width || !height) return Promise.reject(new Error("The camera preview is not ready."));
+  if (!width || !height) throw new Error("The camera preview is not ready.");
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   canvas.getContext("2d").drawImage(video, 0, 0, width, height);
-  return new Promise((resolve, reject) => canvas.toBlob(
+  return canvas;
+}
+
+function canvasFrame(video) {
+  return encodeCanvas(snapshotVideoFrame(video));
+}
+
+function encodeCanvas(canvas) {
+  const encoded = new Promise((resolve, reject) => canvas.toBlob(
     (blob) => blob ? resolve(blob) : reject(new Error("The browser could not encode the camera frame.")),
     "image/jpeg",
     0.97,
   ));
+  return promiseWithTimeout(encoded, CANVAS_ENCODE_TIMEOUT_MS, "Encoding the camera preview timed out.");
 }
 
 async function imageDimensions(blob) {
   const url = URL.createObjectURL(blob);
   try {
     const image = new Image();
-    await new Promise((resolve, reject) => {
+    const decoded = new Promise((resolve, reject) => {
       image.onload = resolve;
       image.onerror = () => reject(new Error("The captured image could not be decoded."));
       image.src = url;
     });
+    await promiseWithTimeout(decoded, IMAGE_DECODE_TIMEOUT_MS, "Decoding the captured image timed out.");
     return { width: image.naturalWidth, height: image.naturalHeight };
   } finally {
     URL.revokeObjectURL(url);
@@ -423,4 +506,12 @@ function friendlyCameraError(error) {
 
 function delay(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function promiseWithTimeout(promise, milliseconds, message, environment = globalThis) {
+  let timeoutId = null;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = environment.setTimeout(() => reject(new Error(message)), milliseconds);
+  });
+  return Promise.race([promise, timeout]).finally(() => environment.clearTimeout(timeoutId));
 }

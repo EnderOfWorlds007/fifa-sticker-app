@@ -2,7 +2,7 @@ import {
   applyOcrBackendFromQuery,
   ocrToken,
   recognitionUrl,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f1a5c4a9e027";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-0d8b7c2e6a41";
 
 const input = document.querySelector("#debugPhotoInput");
 const analyzeButton = document.querySelector("#debugAnalyzeButton");

@@ -2,10 +2,75 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  CameraCaptureTimeoutError,
   cameraAvailabilityMessage,
+  captureStillWithFallback,
   formatCameraDiagnostics,
   lightStatusLabel,
+  takePhotoWithTimeout,
 } from "../v2/assets/camera_capture.js";
+
+test("native still capture returns normally before the timeout", async () => {
+  const expected = new Blob(["photo"], { type: "image/jpeg" });
+  const actual = await takePhotoWithTimeout({
+    takePhoto(settings) {
+      assert.deepEqual(settings, { imageWidth: 4032 });
+      return Promise.resolve(expected);
+    },
+  }, { imageWidth: 4032 }, 50);
+
+  assert.equal(actual, expected);
+});
+
+test("native still capture rejects when the browser never settles", async () => {
+  await assert.rejects(
+    takePhotoWithTimeout({ takePhoto: () => new Promise(() => {}) }, undefined, 5),
+    (error) => error instanceof CameraCaptureTimeoutError && /within 5 ms/.test(error.message),
+  );
+});
+
+test("a timed-out configured capture uses fallback without a second native attempt", async () => {
+  let nativeAttempts = 0;
+  let fallbackAttempts = 0;
+  const fallbackBlob = new Blob(["preserved preview"], { type: "image/jpeg" });
+  const result = await captureStillWithFallback({
+    imageCapture: {
+      takePhoto() {
+        nativeAttempts += 1;
+        return new Promise(() => {});
+      },
+    },
+    settings: { fillLightMode: "flash" },
+    timeoutMs: 5,
+    fallback: async () => {
+      fallbackAttempts += 1;
+      return fallbackBlob;
+    },
+  });
+
+  assert.equal(nativeAttempts, 1);
+  assert.equal(fallbackAttempts, 1);
+  assert.equal(result.blob, fallbackBlob);
+  assert.equal(result.source, "video-frame");
+  assert.equal(result.retried, false);
+  assert.ok(result.error instanceof CameraCaptureTimeoutError);
+});
+
+test("a closed session suppresses retry and fallback after a native timeout", async () => {
+  let fallbackAttempts = 0;
+  await assert.rejects(captureStillWithFallback({
+    imageCapture: { takePhoto: () => new Promise(() => {}) },
+    settings: { fillLightMode: "flash" },
+    timeoutMs: 5,
+    shouldContinue: () => false,
+    fallback: async () => {
+      fallbackAttempts += 1;
+      return new Blob(["unused"]);
+    },
+  }), CameraCaptureTimeoutError);
+
+  assert.equal(fallbackAttempts, 0);
+});
 
 test("camera availability explains secure-context and browser fallbacks", () => {
   assert.match(cameraAvailabilityMessage({ isSecureContext: false, navigator: {} }), /secure HTTPS/);
@@ -44,7 +109,9 @@ test("scanner and shared paste boxes expose camera plus unchanged photo picker p
   assert.match(pasteBox, /cameraButton\.textContent = "Use Camera"/);
   assert.match(pasteBox, /photoButton\.textContent = "Use Photos"/);
   assert.match(camera, /facingMode: \{ ideal: "environment" \}/);
-  assert.match(camera, /imageCapture\.takePhoto\(settings\)/);
+  assert.match(camera, /captureStillWithFallback/);
+  assert.match(camera, /snapshotVideoFrame\(video\)/);
+  assert.match(camera, /Native still capture timed out; used a preserved camera preview frame/);
   assert.match(camera, /canvas\.width = width/);
   assert.match(camera, /track\.applyConstraints\(\{ advanced: \[\{ torch: false \}\] \}\)/);
   assert.match(serviceWorker, /v2\/assets\/camera_capture\.js/);
