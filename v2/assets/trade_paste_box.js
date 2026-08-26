@@ -2,11 +2,12 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-a11b2c3d4e61";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f1a5c4a9e027";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a11b2c3d4e61";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-f1a5c4a9e027";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-f1a5c4a9e027";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -152,8 +153,36 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
     photoInput.addEventListener("input", handlePhotoSelection);
     photoInput.addEventListener("change", handlePhotoSelection);
 
-    acquisitionButtons.push(photoButton);
-    row.append(photoButton, photoInput);
+    const cameraButton = document.createElement("button");
+    cameraButton.type = "button";
+    cameraButton.className = "cameraCaptureButton";
+    cameraButton.textContent = "Use Camera";
+    cameraButton.addEventListener("click", async () => {
+      if (photoScanRunning) return;
+      const capture = await openCameraCapture({
+        invoker: cameraButton,
+        onFallback: () => {
+          lastPhotoSelectionSignature = "";
+          photoInput.click();
+        },
+        onStatus: (message) => showCapabilityMessage(status, "Camera", message),
+      });
+      if (!capture?.file || photoScanRunning) return;
+      photoScanRunning = true;
+      setOtherAcquisitionButtonsDisabled(cameraButton, true);
+      await scanPhotosIntoText([capture.file], textarea, status, cameraButton, {
+        ...options,
+        buttonLabel: "Use Camera",
+        captureSummary: capture.summary,
+        source: "camera",
+      }).finally(() => {
+        photoScanRunning = false;
+        setOtherAcquisitionButtonsDisabled(cameraButton, false);
+      });
+    });
+
+    acquisitionButtons.push(cameraButton, photoButton);
+    row.append(cameraButton, photoButton, photoInput);
   }
 
   if (capabilities.voice) {
@@ -237,14 +266,15 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
     }
     const recognizedText = recognized.join("\n");
     appendText(textarea, recognizedText);
-    await options.onTextAcquired?.({ source: "photo", text: recognizedText });
+    await options.onTextAcquired?.({ source: options.source || "photo", text: recognizedText });
     const success = `Filled card codes from ${recognized.length}/${selected.length} photo${selected.length === 1 ? "" : "s"}.`;
     const failures = failureCount ? ` ${failureCount} photo${failureCount === 1 ? "" : "s"} could not be read.` : "";
-    showCapabilityMessage(status, "Photo scan", `${success}${failures}`);
+    const captureSummary = options.captureSummary ? ` ${options.captureSummary}` : "";
+    showCapabilityMessage(status, "Photo scan", `${success}${failures}${captureSummary}`);
   } catch (error) {
     showCapabilityMessage(status, "Photo scan", error instanceof Error ? error.message : "Photo scan failed.");
   } finally {
-    resetPhotoButton(button);
+    resetPhotoButton(button, options.buttonLabel);
     status.setAttribute("aria-busy", "false");
   }
 }
@@ -257,11 +287,11 @@ function setPhotoProgress(button, status, text) {
   showCapabilityMessage(status, "Photo scan", text, { busy: true });
 }
 
-function resetPhotoButton(button) {
+function resetPhotoButton(button, label = "Use Photos") {
   button.disabled = false;
   button.classList.remove("scanning");
   button.setAttribute("aria-busy", "false");
-  button.textContent = "Use Photos";
+  button.textContent = label;
 }
 
 function captureVoiceIntoText(textarea, status, button, state, options = {}) {
