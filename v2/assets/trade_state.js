@@ -268,6 +268,23 @@ export function sortCode(a, b) {
     || String(aMatch[3] || "").localeCompare(String(bMatch[3] || ""));
 }
 
+export function missingListText(cards) {
+  const groups = new Map();
+  for (const card of Array.isArray(cards) ? cards : []) {
+    if (!card?.missing) continue;
+    const code = String(card.code || "").toUpperCase();
+    const match = code.match(/^([A-Z]+)(\d+)(S)?$/);
+    const teamCode = match ? match[1] : code || String(card.team || "Other").trim();
+    const number = card.number || (match ? `${Number(match[2])}${match[3] || ""}` : code);
+    if (!groups.has(teamCode)) groups.set(teamCode, []);
+    groups.get(teamCode).push(number);
+  }
+  return [...groups.entries()]
+    .map(([teamCode, numbers]) => (numbers.length ? `${teamCode}: ${numbers.join(", ")}` : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function normalizeLedger(value) {
   const transactions = Array.isArray(value?.transactions) ? value.transactions : [];
   return {
