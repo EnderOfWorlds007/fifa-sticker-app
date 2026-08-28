@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="referrer" content="no-referrer">
   <title>Trade stickers</title>
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-63027806af42">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-1275c9cccb86">
 </head>
 <body>
   <main class="collectionPage sharePage">
@@ -22,9 +22,12 @@
     </div>
     <p id="shareUpdatedAt" class="hint" hidden></p>
 
-    <label class="collectionSearch" for="shareSearch">
-      <span>Search the shared lists</span>
-      <input id="shareSearch" type="search" placeholder="Sticker code, team, or name" autocomplete="off">
+    <label class="collectionSearch shareSearchPrompt" for="shareSearch">
+      <span class="shareSearchKicker">Quick match finder</span>
+      <span class="shareSearchTitle">Find the stickers you need</span>
+      <span id="shareSearchHelp" class="shareSearchHelp">Paste one sticker code—or an entire list. Search by player or country, too. Formatting doesn’t matter: spaces, commas, and new lines all work.</span>
+      <input id="shareSearch" type="search" placeholder="Paste or type what you need…" autocomplete="off" aria-describedby="shareSearchHelp shareSearchExamples">
+      <span id="shareSearchExamples" class="shareSearchExamples"><span class="shareSearchExamplesLabel">Try</span><span>HAI 3</span><span>Mbappé</span><span>France</span></span>
     </label>
 
     <details id="shareNeedsPanel" class="collectionUpdateCard shareListDisclosure">
@@ -50,6 +53,6 @@
     </details>
   </main>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/share.js?v=build-63027806af42" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/share.js?v=build-1275c9cccb86" type="module"></script>
 </body>
 </html>
