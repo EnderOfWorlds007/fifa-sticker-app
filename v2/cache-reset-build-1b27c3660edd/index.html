@@ -22,11 +22,11 @@
     <h1>Refreshing the scanner</h1>
     <p id="status" role="status" aria-live="polite">Removing old offline app files. Your collection and settings are not affected.</p>
     <button id="retry" type="button" hidden>Try refresh again</button>
-    <a href="/fifa-sticker-app/v2/scanner/?v=build-e05aae07cfc2">Open scanner</a>
+    <a href="/fifa-sticker-app/v2/scanner/?v=build-3a2d69ebaa05">Open scanner</a>
   </main>
   <script>
     (() => {
-      const BUILD_ID = "build-e05aae07cfc2";
+      const BUILD_ID = "build-3a2d69ebaa05";
       const CURRENT_CACHE = `fifa-card-apps-fifa-sticker-app-v2-${BUILD_ID}`;
       const WORKER_URL = `/fifa-sticker-app/v2/sw.js?v=${BUILD_ID}`;
       const status = document.querySelector("#status");

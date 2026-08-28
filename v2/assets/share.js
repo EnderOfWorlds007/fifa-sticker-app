@@ -1,11 +1,11 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-e05aae07cfc2";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-e05aae07cfc2";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e05aae07cfc2";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-3a2d69ebaa05";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-3a2d69ebaa05";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3a2d69ebaa05";
 import {
   buildSharedListQuery,
   disclosureControlState,
   sharedCardMatches,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-e05aae07cfc2";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-3a2d69ebaa05";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -115,11 +115,12 @@ function syncDisclosureControl(container, button) {
   button.disabled = state.disabled;
 }
 
-function toggleAllCountries(container, button, event) {
+function toggleAllCountries(panel, container, button, event) {
   event.preventDefault();
   event.stopPropagation();
   const countries = [...container.querySelectorAll("details.shareCountryDisclosure")];
   const state = disclosureControlState(countries);
+  if (state.nextOpen) panel.open = true;
   for (const country of countries) country.open = state.nextOpen;
   syncDisclosureControl(container, button);
 }
@@ -134,5 +135,5 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "recently" : date.toLocaleString();
 }
 
-needsToggleAll.addEventListener("click", (event) => toggleAllCountries(needsList, needsToggleAll, event));
-offersToggleAll.addEventListener("click", (event) => toggleAllCountries(offersList, offersToggleAll, event));
+needsToggleAll.addEventListener("click", (event) => toggleAllCountries(needsPanel, needsList, needsToggleAll, event));
+offersToggleAll.addEventListener("click", (event) => toggleAllCountries(offersPanel, offersList, offersToggleAll, event));
