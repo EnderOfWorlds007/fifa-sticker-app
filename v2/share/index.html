@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="referrer" content="no-referrer">
   <title>Trade stickers</title>
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-ea110a3c78a2">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-1fbffbba6425">
 </head>
 <body>
   <main class="collectionPage sharePage">
@@ -27,19 +27,19 @@
       <input id="shareSearch" type="search" placeholder="Sticker code, team, or name" autocomplete="off">
     </label>
 
-    <section class="collectionUpdateCard" aria-labelledby="shareNeedsHeading">
-      <h2 id="shareNeedsHeading">They need <span id="shareNeedsCount"></span></h2>
+    <details id="shareNeedsPanel" class="collectionUpdateCard shareListDisclosure" open>
+      <summary><span id="shareNeedsHeading" class="shareListHeading">They need <span id="shareNeedsCount"></span></span></summary>
       <div id="shareNeedsList" class="collectionTeamList"></div>
       <p id="shareNeedsEmpty" class="collectionEmpty" hidden>No matching needed stickers.</p>
-    </section>
+    </details>
 
-    <section class="collectionUpdateCard" aria-labelledby="shareOffersHeading">
-      <h2 id="shareOffersHeading">Available to trade <span id="shareOffersCount"></span></h2>
+    <details id="shareOffersPanel" class="collectionUpdateCard shareListDisclosure" open>
+      <summary><span id="shareOffersHeading" class="shareListHeading">They offer <span id="shareOffersCount"></span></span></summary>
       <div id="shareOffersList" class="collectionTeamList"></div>
       <p id="shareOffersEmpty" class="collectionEmpty" hidden>No matching stickers available to trade.</p>
-    </section>
+    </details>
   </main>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/share.js?v=build-ea110a3c78a2" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/share.js?v=build-1fbffbba6425" type="module"></script>
 </body>
 </html>

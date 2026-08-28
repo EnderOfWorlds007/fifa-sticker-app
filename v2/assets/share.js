@@ -1,6 +1,7 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-ea110a3c78a2";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-ea110a3c78a2";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-ea110a3c78a2";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-1fbffbba6425";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-1fbffbba6425";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-1fbffbba6425";
+import { buildSharedListQuery, sharedCardMatches } from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-1fbffbba6425";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -11,6 +12,8 @@ const needsEmpty = document.querySelector("#shareNeedsEmpty");
 const offersEmpty = document.querySelector("#shareOffersEmpty");
 const needsCount = document.querySelector("#shareNeedsCount");
 const offersCount = document.querySelector("#shareOffersCount");
+const needsPanel = document.querySelector("#shareNeedsPanel");
+const offersPanel = document.querySelector("#shareOffersPanel");
 let payload = null;
 let catalogByCode = new Map();
 
@@ -41,19 +44,23 @@ async function start() {
 }
 
 function render() {
-  const query = String(search.value || "").trim().toLowerCase();
+  const query = buildSharedListQuery(search.value);
   const needs = (Array.isArray(payload?.needs) ? payload.needs : [])
     .map((code) => cardView(code, 1))
-    .filter((card) => matches(card, query));
+    .filter((card) => sharedCardMatches(card, query));
   const offers = (Array.isArray(payload?.offers) ? payload.offers : [])
     .map((offer) => cardView(offer.code, offer.quantity))
-    .filter((card) => matches(card, query));
-  renderGroups(needsList, needs);
-  renderGroups(offersList, offers, { quantities: true });
+    .filter((card) => sharedCardMatches(card, query));
+  renderGroups(needsList, needs, { query });
+  renderGroups(offersList, offers, { quantities: true, query });
   needsCount.textContent = `(${needs.length})`;
   offersCount.textContent = `(${offers.length})`;
   needsEmpty.hidden = needs.length > 0;
   offersEmpty.hidden = offers.length > 0;
+  if (query.text) {
+    needsPanel.open = needs.length > 0;
+    offersPanel.open = offers.length > 0;
+  }
 }
 
 function cardView(code, quantity) {
@@ -61,11 +68,7 @@ function cardView(code, quantity) {
   return { code, quantity, team: card.team || "Other", name: card.name || "" };
 }
 
-function matches(card, query) {
-  return !query || `${card.code} ${card.team} ${card.name}`.toLowerCase().includes(query);
-}
-
-function renderGroups(container, cards, { quantities = false } = {}) {
+function renderGroups(container, cards, { quantities = false, query = { text: "" } } = {}) {
   container.textContent = "";
   const groups = new Map();
   for (const card of cards.sort((a, b) => sortCode(a.code, b.code))) {
@@ -73,10 +76,18 @@ function renderGroups(container, cards, { quantities = false } = {}) {
     groups.get(card.team).push(card);
   }
   for (const [team, groupCards] of groups) {
-    const section = document.createElement("section");
-    section.className = "collectionTeam";
-    const heading = document.createElement("h3");
+    const country = document.createElement("details");
+    country.className = "collectionTeam shareCountryDisclosure";
+    country.open = Boolean(query.text);
+    const summary = document.createElement("summary");
+    const summaryContent = document.createElement("span");
+    summaryContent.className = "shareCountrySummary";
+    const heading = document.createElement("strong");
     heading.textContent = team;
+    const count = document.createElement("span");
+    count.textContent = `${groupCards.length} sticker${groupCards.length === 1 ? "" : "s"}`;
+    summaryContent.append(heading, count);
+    summary.append(summaryContent);
     const list = document.createElement("ul");
     list.className = "tradeLookupResults";
     for (const card of groupCards) {
@@ -84,8 +95,8 @@ function renderGroups(container, cards, { quantities = false } = {}) {
       item.textContent = `${card.code}${card.name ? ` · ${card.name}` : ""}${quantities ? ` · ${card.quantity} available` : ""}`;
       list.append(item);
     }
-    section.append(heading, list);
-    container.append(section);
+    country.append(summary, list);
+    container.append(country);
   }
 }
 

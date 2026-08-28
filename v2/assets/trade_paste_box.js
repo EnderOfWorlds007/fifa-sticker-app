@@ -2,12 +2,12 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-ea110a3c78a2";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-1fbffbba6425";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-ea110a3c78a2";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-ea110a3c78a2";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-1fbffbba6425";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-1fbffbba6425";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [

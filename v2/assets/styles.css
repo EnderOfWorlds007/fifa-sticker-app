@@ -615,6 +615,52 @@
   font-size: 13px;
 }
 
+.shareListDisclosure > summary,
+.shareCountryDisclosure > summary {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.shareListDisclosure > summary {
+  min-height: 44px;
+  padding: 7px 2px;
+}
+
+.shareListHeading,
+.shareCountrySummary {
+  display: inline-flex;
+  width: calc(100% - 12px);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.shareListHeading {
+  font-size: 22px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.shareListHeading span,
+.shareCountrySummary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.shareCountryDisclosure {
+  display: block;
+  padding: 0;
+}
+
+.shareCountryDisclosure > summary {
+  min-height: 50px;
+  padding: 14px 12px;
+}
+
+.shareCountryDisclosure > .tradeLookupResults {
+  margin: 0 12px 12px;
+}
+
 .collectionCards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
