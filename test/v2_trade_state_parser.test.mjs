@@ -5,6 +5,7 @@ import {
   createTransaction,
   extractCodeOccurrences,
   extractDirectedCodeOccurrences,
+  missingListText,
   normalizePastedCardText,
   transactionDetailLines,
   transactionSummary,
@@ -147,6 +148,27 @@ test("v2 paste normalization visibly decodes text and replaces grouped country n
   assert.deepEqual(
     [...extractCodeOccurrences(normalized).entries()],
     EXPECTED_COUNTRY_NAME_CODES.map((code) => [code, 1]),
+  );
+});
+
+test("v2 copied missing list uses sticker prefixes instead of display country names", () => {
+  assert.equal(
+    missingListText([
+      { code: "RSA10", team: "South Africa", number: "10", missing: true },
+      { code: "CZE13", team: "Czechia", number: "13", missing: true },
+      { code: "BIH2", team: "Bosnia and Herzegovina", number: "2", missing: true },
+      { code: "QAT19", team: "Qatar", number: "19", missing: true },
+      { code: "HAI3", team: "Haiti", number: "3", missing: true },
+      { code: "HAI4", team: "Haiti", number: "4", missing: true },
+      { code: "ENG13", team: "England", number: "13", missing: false },
+    ]),
+    [
+      "RSA: 10",
+      "CZE: 13",
+      "BIH: 2",
+      "QAT: 19",
+      "HAI: 3, 4",
+    ].join("\n"),
   );
 });
 
