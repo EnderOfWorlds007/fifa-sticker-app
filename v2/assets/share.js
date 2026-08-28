@@ -1,7 +1,11 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-b1f8ab4abf3c";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-b1f8ab4abf3c";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b1f8ab4abf3c";
-import { buildSharedListQuery, sharedCardMatches } from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-b1f8ab4abf3c";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-e05aae07cfc2";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-e05aae07cfc2";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e05aae07cfc2";
+import {
+  buildSharedListQuery,
+  disclosureControlState,
+  sharedCardMatches,
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-e05aae07cfc2";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -14,6 +18,8 @@ const needsCount = document.querySelector("#shareNeedsCount");
 const offersCount = document.querySelector("#shareOffersCount");
 const needsPanel = document.querySelector("#shareNeedsPanel");
 const offersPanel = document.querySelector("#shareOffersPanel");
+const needsToggleAll = document.querySelector("#shareNeedsToggleAll");
+const offersToggleAll = document.querySelector("#shareOffersToggleAll");
 let payload = null;
 let catalogByCode = new Map();
 
@@ -51,8 +57,8 @@ function render() {
   const offers = (Array.isArray(payload?.offers) ? payload.offers : [])
     .map((offer) => cardView(offer.code, offer.quantity))
     .filter((card) => sharedCardMatches(card, query));
-  renderGroups(needsList, needs, { query });
-  renderGroups(offersList, offers, { quantities: true, query });
+  renderGroups(needsList, needs, { query, toggleButton: needsToggleAll });
+  renderGroups(offersList, offers, { quantities: true, query, toggleButton: offersToggleAll });
   needsCount.textContent = `(${needs.length})`;
   offersCount.textContent = `(${offers.length})`;
   needsEmpty.hidden = needs.length > 0;
@@ -68,7 +74,7 @@ function cardView(code, quantity) {
   return { code, quantity, team: card.team || "Other", name: card.name || "" };
 }
 
-function renderGroups(container, cards, { quantities = false, query = { text: "" } } = {}) {
+function renderGroups(container, cards, { quantities = false, query = { text: "" }, toggleButton } = {}) {
   container.textContent = "";
   const groups = new Map();
   for (const card of cards.sort((a, b) => sortCode(a.code, b.code))) {
@@ -79,6 +85,7 @@ function renderGroups(container, cards, { quantities = false, query = { text: ""
     const country = document.createElement("details");
     country.className = "collectionTeam shareCountryDisclosure";
     country.open = Boolean(query.text);
+    country.addEventListener("toggle", () => syncDisclosureControl(container, toggleButton));
     const summary = document.createElement("summary");
     const summaryContent = document.createElement("span");
     summaryContent.className = "shareCountrySummary";
@@ -98,6 +105,23 @@ function renderGroups(container, cards, { quantities = false, query = { text: ""
     country.append(summary, list);
     container.append(country);
   }
+  syncDisclosureControl(container, toggleButton);
+}
+
+function syncDisclosureControl(container, button) {
+  if (!button) return;
+  const state = disclosureControlState(container.querySelectorAll("details.shareCountryDisclosure"));
+  button.textContent = state.label;
+  button.disabled = state.disabled;
+}
+
+function toggleAllCountries(container, button, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const countries = [...container.querySelectorAll("details.shareCountryDisclosure")];
+  const state = disclosureControlState(countries);
+  for (const country of countries) country.open = state.nextOpen;
+  syncDisclosureControl(container, button);
 }
 
 function setStatus(message, severity) {
@@ -109,3 +133,6 @@ function formatDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "recently" : date.toLocaleString();
 }
+
+needsToggleAll.addEventListener("click", (event) => toggleAllCountries(needsList, needsToggleAll, event));
+offersToggleAll.addEventListener("click", (event) => toggleAllCountries(offersList, offersToggleAll, event));

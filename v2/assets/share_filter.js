@@ -1,4 +1,4 @@
-import { extractCodeOccurrences } from "./trade_state.js?v=build-b1f8ab4abf3c";
+import { extractCodeOccurrences } from "./trade_state.js?v=build-e05aae07cfc2";
 
 export function buildSharedListQuery(value) {
   const text = String(value || "").trim().toLowerCase();
@@ -13,4 +13,14 @@ export function sharedCardMatches(card, query) {
   const searchable = `${card?.code || ""} ${card?.team || ""} ${card?.name || ""}`.toLowerCase();
   return searchable.includes(query.text)
     || query.codes.includes(String(card?.code || "").toUpperCase());
+}
+
+export function disclosureControlState(disclosures) {
+  const items = [...(disclosures || [])];
+  const allOpen = items.length > 0 && items.every((item) => item?.open === true);
+  return {
+    nextOpen: !allOpen,
+    label: allOpen ? "Collapse all" : "Show all",
+    disabled: items.length === 0,
+  };
 }

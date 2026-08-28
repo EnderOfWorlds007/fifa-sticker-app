@@ -626,6 +626,7 @@
   padding: 7px 2px;
 }
 
+.shareListSummaryContent,
 .shareListHeading,
 .shareCountrySummary {
   display: inline-flex;
@@ -633,6 +634,21 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
+}
+
+.shareListSummaryContent {
+  align-items: center;
+}
+
+.shareListSummaryContent .shareListHeading {
+  width: auto;
+  justify-content: flex-start;
+}
+
+.shareToggleAll {
+  min-height: 36px;
+  padding: 6px 10px;
+  white-space: nowrap;
 }
 
 .shareListHeading {
