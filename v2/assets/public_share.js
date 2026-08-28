@@ -1,4 +1,4 @@
-import { deriveCollectionModel, sortCode } from "./trade_state.js?v=build-af5a63eea3b2";
+import { deriveCollectionModel, sortCode } from "./trade_state.js?v=build-be392feeb8ef";
 
 export const PUBLIC_SHARE_SETTINGS_KEY = "panini.publicShare.settings.v1";
 const TOKEN_PATTERN = /^PNP1_[A-Za-z0-9_-]{43}$/;
@@ -116,5 +116,5 @@ export function buildPublicProjection({ catalog, collectionState, ledger, invent
 function base64UrlEncode(bytes) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/fifa-sticker-app/v2/", "_").replace(/=+$/, "");
+  return btoa(binary).replaceAll("+", "-").replace(/\//g, "_").replace(/=+$/, "");
 }
