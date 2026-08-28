@@ -1,11 +1,11 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-3a2d69ebaa05";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-3a2d69ebaa05";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3a2d69ebaa05";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-63027806af42";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-63027806af42";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-63027806af42";
 import {
   buildSharedListQuery,
   disclosureControlState,
   sharedCardMatches,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-3a2d69ebaa05";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-63027806af42";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -41,7 +41,7 @@ async function start() {
     catalogByCode = new Map(catalog.cards.map((card) => [card.code, card]));
     updatedAt.textContent = `Shared revision ${projection.sourceRevision} · updated ${formatDate(projection.updatedAt)}`;
     updatedAt.hidden = false;
-    setStatus("This is the latest read-only trade list.", "ok");
+    setStatus("Fresh from their latest collection update.", "ok");
     render();
     search.addEventListener("input", render);
   } catch (error) {
