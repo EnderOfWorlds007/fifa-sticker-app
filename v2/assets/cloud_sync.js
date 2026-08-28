@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-be392feeb8ef";
+} from "./backup_restore.js?v=build-8d87627d1098";
 import {
   buildPublicProjection,
   generatePublicShareToken,
@@ -12,8 +12,8 @@ import {
   PUBLIC_SHARE_SETTINGS_KEY,
   publicShareTokenHash,
   savePublicShareSettings,
-} from "./public_share.js?v=build-be392feeb8ef";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-be392feeb8ef";
+} from "./public_share.js?v=build-8d87627d1098";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-8d87627d1098";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -755,11 +755,14 @@ function base32Encode(bytes) {
 
 function base64UrlEncode(bytes) {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  return btoa(binary).replaceAll("+", "-").replaceAll("/fifa-sticker-app/v2/", "_").replaceAll("=", "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function base64UrlDecode(value) {
-  const padded = String(value || "").replaceAll("-", "+").replaceAll("_", "/fifa-sticker-app/v2/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
+  const padded = String(value || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, String.fromCharCode(47))
+    .padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
   const binary = atob(padded);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }

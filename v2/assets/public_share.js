@@ -1,4 +1,4 @@
-import { deriveCollectionModel, sortCode } from "./trade_state.js?v=build-be392feeb8ef";
+import { deriveCollectionModel, sortCode } from "./trade_state.js?v=build-8d87627d1098";
 
 export const PUBLIC_SHARE_SETTINGS_KEY = "panini.publicShare.settings.v1";
 const TOKEN_PATTERN = /^PNP1_[A-Za-z0-9_-]{43}$/;
