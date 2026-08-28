@@ -3,10 +3,11 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-1fbffbba6425";
+} from "./backup_restore.js?v=build-b1f8ab4abf3c";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
+  publicShareControlState,
   publicShareNeedsRepublish,
   publicShareUrl,
   PUBLIC_SHARE_SETTINGS_KEY,
@@ -14,9 +15,9 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-1fbffbba6425";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-1fbffbba6425";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-1fbffbba6425";
+} from "./public_share.js?v=build-b1f8ab4abf3c";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-b1f8ab4abf3c";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-b1f8ab4abf3c";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -599,12 +600,12 @@ function bindCloudControls({ storage, location, windowRef }) {
       dispatchWindowEvent(windowRef, SYNC_EVENT, { message, severity });
     },
     setShareSettings(settings) {
-      const enabled = settings?.enabled === true;
-      if (createShareButton) createShareButton.hidden = enabled;
+      const state = publicShareControlState(settings);
+      if (createShareButton) createShareButton.hidden = state.enabled;
       for (const button of [copyShareButton, rotateShareButton, stopShareButton]) {
-        if (button) button.hidden = !enabled;
+        if (button) button.hidden = !state.enabled;
       }
-      if (shareStatus && !enabled) controls.setShareStatus("Public trade sharing is off.", "muted");
+      if (shareStatus) controls.setShareStatus(state.message, state.severity);
     },
     setShareStatus(message, severity = "muted") {
       if (!shareStatus) return;
