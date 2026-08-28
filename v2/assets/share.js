@@ -1,6 +1,6 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-8d87627d1098";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-8d87627d1098";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8d87627d1098";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-ea110a3c78a2";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-ea110a3c78a2";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-ea110a3c78a2";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");

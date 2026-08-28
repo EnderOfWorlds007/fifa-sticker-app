@@ -3,17 +3,20 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-8d87627d1098";
+} from "./backup_restore.js?v=build-ea110a3c78a2";
 import {
-  buildPublicProjection,
   generatePublicShareToken,
   loadPublicShareSettings,
+  publicShareNeedsRepublish,
   publicShareUrl,
   PUBLIC_SHARE_SETTINGS_KEY,
   publicShareTokenHash,
   savePublicShareSettings,
-} from "./public_share.js?v=build-8d87627d1098";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-8d87627d1098";
+  serializePublicTradeProjection,
+  withCurrentPublicProjectionModel,
+} from "./public_share.js?v=build-ea110a3c78a2";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-ea110a3c78a2";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-ea110a3c78a2";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -167,6 +170,13 @@ export function mountCollectionCloudSync({
       const checkpoint = createStorageCheckpoint({ storage, triggerKind: kind, deviceId: client.deviceId });
       const publicShare = await publicShareForCheckpoint(checkpoint, { fetchImpl, cryptoImpl });
       const result = await client.appendTransaction(checkpoint, { publicShare });
+      const publishedSettings = normalizeCheckpointShareSettings(checkpoint.storage.publicShareSettings);
+      const currentSettings = loadPublicShareSettings(storage);
+      if (publishedSettings.enabled && currentSettings.token === publishedSettings.token) {
+        savePublicShareSettings(storage, publishedSettings);
+        saveAccountProjection(storage, client.profileId);
+        refreshShareControls();
+      }
       controls.setStatus(`Cloud backup saved. Revision ${result.revision}.`, "ok");
       controls.setShareStatus(
         publicShare.enabled
@@ -269,6 +279,9 @@ export function mountCollectionCloudSync({
     initialized = true;
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     refreshShareControls();
+    if (publicShareNeedsRepublish(loadPublicShareSettings(storage))) {
+      queueAutosave("public-projection-upgrade");
+    }
   });
   return { client, syncDeltas, autosave };
 }
@@ -355,13 +368,17 @@ export class CloudSyncClient {
 }
 
 export function createStorageCheckpoint({ storage = globalThis.localStorage, triggerKind = "local", deviceId = "" } = {}) {
+  const projectedStorage = storageProjection(storage);
+  if (projectedStorage.publicShareSettings?.enabled) {
+    projectedStorage.publicShareSettings = withCurrentPublicProjectionModel(projectedStorage.publicShareSettings);
+  }
   return {
     schemaVersion: 1,
     kind: "storage-checkpoint",
     triggerKind,
     deviceId,
     createdAt: new Date().toISOString(),
-    storage: storageProjection(storage),
+    storage: projectedStorage,
   };
 }
 
@@ -369,15 +386,16 @@ export async function publicShareForCheckpoint(checkpoint, { fetchImpl = globalT
   const settings = normalizeCheckpointShareSettings(checkpoint?.storage?.publicShareSettings);
   if (!settings.enabled) return { enabled: false };
   const catalog = await loadCollectionCatalog({ fetch: fetchImpl });
+  const inventoryProjection = buildInventoryProjection({
+    catalog,
+    collectionState: checkpoint.storage.collectionState,
+    ledger: checkpoint.storage.ledger,
+    inventoryPayload: checkpoint.storage.inventorySnapshot,
+  });
   return {
     enabled: true,
     tokenHash: await publicShareTokenHash(settings.token, cryptoImpl),
-    projection: buildPublicProjection({
-      catalog,
-      collectionState: checkpoint.storage.collectionState,
-      ledger: checkpoint.storage.ledger,
-      inventory: checkpoint.storage.inventorySnapshot,
-    }),
+    projection: serializePublicTradeProjection({ catalog, inventoryProjection }),
   };
 }
 

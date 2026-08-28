@@ -1,11 +1,12 @@
 import {
   adjustedInventoryPayload,
   loadLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-1b27c3660edd";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-1b27c3660edd";
-import { loadInventoryCacheMeta, loadInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-1b27c3660edd";
-import { ensureImportedCollectionState, loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-1b27c3660edd";
-import { deriveResolvedCollectionModel } from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-1b27c3660edd";
+  sortCode,
+} from "./trade_state.js?v=build-ea110a3c78a2";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-ea110a3c78a2";
+import { loadInventoryCacheMeta, loadInventoryPayload } from "./inventory_source.js?v=build-ea110a3c78a2";
+import { ensureImportedCollectionState, loadCollectionState } from "./collection_state.js?v=build-ea110a3c78a2";
+import { deriveResolvedCollectionModel } from "./collection_model.js?v=build-ea110a3c78a2";
 
 export async function loadInventoryProjection(options = {}) {
   const catalog = options.catalog || await loadCatalogFallback();
@@ -46,6 +47,9 @@ export function buildInventoryProjection({
   inventoryCacheMeta = {},
   excludeTransactionId,
 } = {}) {
+  if (inventoryPayload?.stats?.adjusted === true) {
+    throw new Error("Inventory projections require the raw inventory snapshot.");
+  }
   const legacyCollected = Array.isArray(collectionState?.collected) ? collectionState.collected : [];
   const adjustedInventory = adjustedInventoryPayload(inventoryPayload || {}, ledger, {
     catalog,
@@ -68,6 +72,20 @@ export function buildInventoryProjection({
     adjustedInventory,
     collectionModel,
   };
+}
+
+export function selectNeededCodes(projection) {
+  return (Array.isArray(projection?.collectionModel?.cards) ? projection.collectionModel.cards : [])
+    .filter((card) => card.missing)
+    .map((card) => card.code)
+    .sort(sortCode);
+}
+
+export function selectAvailableTradeOffers(projection) {
+  return (Array.isArray(projection?.collectionModel?.cards) ? projection.collectionModel.cards : [])
+    .filter((card) => card.inventory.availableToTradeQuantity > 0)
+    .map((card) => ({ code: card.code, quantity: card.inventory.availableToTradeQuantity }))
+    .sort((a, b) => sortCode(a.code, b.code));
 }
 
 async function loadCatalogFallback() {
