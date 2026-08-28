@@ -1,4 +1,4 @@
-export const COLLECTION_CATALOG_URL = "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-1275c9cccb86";
+export const COLLECTION_CATALOG_URL = "/fifa-sticker-app/v2/data/collection_catalog.json?v=build-41d70d86169b";
 
 export async function loadCollectionCatalog(options = {}) {
   const fetchImpl = options.fetch || globalThis.fetch;
