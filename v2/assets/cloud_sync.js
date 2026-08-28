@@ -3,7 +3,17 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-1b27c3660edd";
+} from "./backup_restore.js?v=build-af5a63eea3b2";
+import {
+  buildPublicProjection,
+  generatePublicShareToken,
+  loadPublicShareSettings,
+  publicShareUrl,
+  PUBLIC_SHARE_SETTINGS_KEY,
+  publicShareTokenHash,
+  savePublicShareSettings,
+} from "./public_share.js?v=build-af5a63eea3b2";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-af5a63eea3b2";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -37,6 +47,7 @@ export function mountCollectionCloudSync({
   let applyingRemote = false;
   let pendingTimer = null;
   let lastTriggerKind = "manual";
+  const refreshShareControls = () => controls.setShareSettings(loadPublicShareSettings(storage));
 
   const syncDeltas = async ({ apply = true } = {}) => {
     try {
@@ -53,6 +64,7 @@ export function mountCollectionCloudSync({
           }
           saveAccountProjection(storage, client.profileId);
           client.setLastRevision(result.revision);
+          refreshShareControls();
         } finally {
           applyingRemote = false;
         }
@@ -113,6 +125,7 @@ export function mountCollectionCloudSync({
           }
           saveAccountProjection(storage, client.profileId);
           client.setLastRevision(result.revision);
+          refreshShareControls();
         } finally {
           applyingRemote = false;
         }
@@ -122,6 +135,7 @@ export function mountCollectionCloudSync({
       }
       if (cachedProjection) {
         applyAccountProjection(storage, cachedProjection);
+        refreshShareControls();
         controls.setStatus("Cloud account switched using this browser's saved copy.", "ok");
         dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
         return true;
@@ -129,6 +143,7 @@ export function mountCollectionCloudSync({
     } catch (error) {
       if (cachedProjection) {
         applyAccountProjection(storage, cachedProjection);
+        refreshShareControls();
         controls.setStatus("Cloud account switched using this browser's saved copy.", "warning");
         dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
         return true;
@@ -150,16 +165,28 @@ export function mountCollectionCloudSync({
     try {
       await syncDeltas({ apply: true });
       const checkpoint = createStorageCheckpoint({ storage, triggerKind: kind, deviceId: client.deviceId });
-      const result = await client.appendTransaction(checkpoint);
+      const publicShare = await publicShareForCheckpoint(checkpoint, { fetchImpl, cryptoImpl });
+      const result = await client.appendTransaction(checkpoint, { publicShare });
       controls.setStatus(`Cloud backup saved. Revision ${result.revision}.`, "ok");
+      controls.setShareStatus(
+        publicShare.enabled
+          ? `Trade link updated with cloud backup revision ${result.revision}.`
+          : "Public trade sharing is off.",
+        "ok",
+      );
+      return true;
     } catch (error) {
       if (error?.status === 409 || error?.status === 412) {
         controls.setStatus("Cloud backup changed elsewhere. Loading newest changes first.", "warning");
         await syncDeltas({ apply: true });
         queueAutosave(kind);
-        return;
+        return false;
       }
       controls.setStatus(error?.message || "Cloud backup save failed.", "warning");
+      if (loadPublicShareSettings(storage).enabled) {
+        controls.setShareStatus("Trade link was not updated because the cloud backup failed.", "warning");
+      }
+      return false;
     }
   };
 
@@ -191,10 +218,44 @@ export function mountCollectionCloudSync({
     if (client.profileId) saveAccountProjection(storage, client.profileId);
     await client.useRestoreCode(generateUserSecretId(cryptoImpl));
     applyAccountProjection(storage, emptyAccountProjection({ importedCollectionSnapshotVersion }));
+    refreshShareControls();
     saveAccountProjection(storage, client.profileId);
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     await autosave("new-account");
     dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
+  };
+  controls.onCreateShare = async () => {
+    const settings = savePublicShareSettings(storage, { enabled: true, token: generatePublicShareToken(cryptoImpl) });
+    refreshShareControls();
+    saveAccountProjection(storage, client.profileId);
+    controls.setShareStatus("Creating the link and saving the matching cloud revision…", "muted");
+    await autosave("share-create");
+    return settings;
+  };
+  controls.onCopyShare = async () => {
+    const url = publicShareUrl(loadPublicShareSettings(storage).token, location);
+    try {
+      await navigator.clipboard?.writeText(url);
+      controls.setShareStatus("Trade link copied. Anyone with it can see the shared lists.", "ok");
+    } catch {
+      controls.setShareStatus(url || "No active trade link.", "warning");
+    }
+  };
+  controls.onRotateShare = async () => {
+    if (!confirmAccountSwitch(windowRef, "Replace the current trade link? The old link will stop working after this cloud save.")) return;
+    savePublicShareSettings(storage, { enabled: true, token: generatePublicShareToken(cryptoImpl) });
+    refreshShareControls();
+    saveAccountProjection(storage, client.profileId);
+    controls.setShareStatus("Rotating the link and saving the matching cloud revision…", "muted");
+    await autosave("share-rotate");
+  };
+  controls.onStopShare = async () => {
+    if (!confirmAccountSwitch(windowRef, "Stop public trade sharing? The current link will stop working after this cloud save.")) return;
+    savePublicShareSettings(storage, { enabled: false, token: "" });
+    refreshShareControls();
+    saveAccountProjection(storage, client.profileId);
+    controls.setShareStatus("Revoking the link with the next cloud revision…", "muted");
+    await autosave("share-revoke");
   };
 
   const pendingRestoreCode = restoreCodeFromLocation(location);
@@ -207,6 +268,7 @@ export function mountCollectionCloudSync({
   syncDeltas({ apply: true }).finally(() => {
     initialized = true;
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
+    refreshShareControls();
   });
   return { client, syncDeltas, autosave };
 }
@@ -256,7 +318,7 @@ export class CloudSyncClient {
     return { transactions, revision: remoteRevision };
   }
 
-  async appendTransaction(payload) {
+  async appendTransaction(payload, { publicShare } = {}) {
     if (!this.profileId) await this.ensureIdentity();
     const encryptedPayload = await encryptPayload(payload, this.userSecretId, this.crypto);
     const response = await this.fetchImpl(`${this.baseUrl}/v1/profiles/${this.profileId}/transactions`, {
@@ -268,6 +330,7 @@ export class CloudSyncClient {
         clientCreatedAt: new Date().toISOString(),
         baseRevision: this.lastRevision,
         encryptedPayload,
+        ...(publicShare ? { publicShare } : {}),
       }),
     });
     const result = await readJsonResponse(response);
@@ -302,12 +365,29 @@ export function createStorageCheckpoint({ storage = globalThis.localStorage, tri
   };
 }
 
+export async function publicShareForCheckpoint(checkpoint, { fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto } = {}) {
+  const settings = normalizeCheckpointShareSettings(checkpoint?.storage?.publicShareSettings);
+  if (!settings.enabled) return { enabled: false };
+  const catalog = await loadCollectionCatalog({ fetch: fetchImpl });
+  return {
+    enabled: true,
+    tokenHash: await publicShareTokenHash(settings.token, cryptoImpl),
+    projection: buildPublicProjection({
+      catalog,
+      collectionState: checkpoint.storage.collectionState,
+      ledger: checkpoint.storage.ledger,
+      inventory: checkpoint.storage.inventorySnapshot,
+    }),
+  };
+}
+
 export function storageProjection(storage = globalThis.localStorage) {
   return {
     collectionState: parseStoredJson(storage.getItem(COLLECTION_KEY), {}),
     ledger: parseStoredJson(storage.getItem(LEDGER_KEY), { schemaVersion: 1, transactions: [] }),
     inventorySnapshot: parseStoredJson(storage.getItem(INVENTORY_SNAPSHOT_KEY), {}),
     inventoryCacheMeta: parseStoredJson(storage.getItem(INVENTORY_CACHE_META_KEY), {}),
+    publicShareSettings: parseStoredJson(storage.getItem(PUBLIC_SHARE_SETTINGS_KEY), { schemaVersion: 1, enabled: false, token: "" }),
   };
 }
 
@@ -324,6 +404,7 @@ export function emptyAccountProjection({ importedCollectionSnapshotVersion = 1 }
     ledger: { schemaVersion: 1, transactions: [] },
     inventorySnapshot: { schema_version: 1, updated_at: new Date(0).toISOString(), cards: {}, stats: { empty_account: true } },
     inventoryCacheMeta: { sourceLabel: "empty cloud account", emptyAccount: true },
+    publicShareSettings: { schemaVersion: 1, enabled: false, token: "" },
   };
 }
 
@@ -452,11 +533,20 @@ function bindCloudControls({ storage, location, windowRef }) {
   const restoreInput = documentRef?.querySelector?.("#cloudRestoreIdInput");
   const codeOutput = documentRef?.querySelector?.("#cloudUserId");
   const accountSelect = documentRef?.querySelector?.("#cloudAccountSelect");
+  const shareStatus = documentRef?.querySelector?.("#publicShareStatus");
+  const createShareButton = documentRef?.querySelector?.("#createPublicShareButton");
+  const copyShareButton = documentRef?.querySelector?.("#copyPublicShareButton");
+  const rotateShareButton = documentRef?.querySelector?.("#rotatePublicShareButton");
+  const stopShareButton = documentRef?.querySelector?.("#stopPublicShareButton");
   const controls = {
     onCopyCode: null,
     onRestoreCode: null,
     onSelectAccount: null,
     onNewAccount: null,
+    onCreateShare: null,
+    onCopyShare: null,
+    onRotateShare: null,
+    onStopShare: null,
     prefillRestoreCode(code) {
       if (restoreInput) restoreInput.value = code || "";
     },
@@ -490,11 +580,29 @@ function bindCloudControls({ storage, location, windowRef }) {
       } catch {}
       dispatchWindowEvent(windowRef, SYNC_EVENT, { message, severity });
     },
+    setShareSettings(settings) {
+      const enabled = settings?.enabled === true;
+      if (createShareButton) createShareButton.hidden = enabled;
+      for (const button of [copyShareButton, rotateShareButton, stopShareButton]) {
+        if (button) button.hidden = !enabled;
+      }
+      if (shareStatus && !enabled) controls.setShareStatus("Public trade sharing is off.", "muted");
+    },
+    setShareStatus(message, severity = "muted") {
+      if (!shareStatus) return;
+      shareStatus.dataset.severity = severity;
+      shareStatus.querySelector("strong").textContent = "Trade link";
+      shareStatus.querySelector("span").textContent = message;
+    },
   };
   copyButton?.addEventListener?.("click", () => controls.onCopyCode?.());
   restoreButton?.addEventListener?.("click", () => controls.onRestoreCode?.(restoreInput?.value || ""));
   newAccountButton?.addEventListener?.("click", () => controls.onNewAccount?.());
   accountSelect?.addEventListener?.("change", () => controls.onSelectAccount?.(accountSelect.value));
+  createShareButton?.addEventListener?.("click", () => controls.onCreateShare?.());
+  copyShareButton?.addEventListener?.("click", () => controls.onCopyShare?.());
+  rotateShareButton?.addEventListener?.("click", () => controls.onRotateShare?.());
+  stopShareButton?.addEventListener?.("click", () => controls.onStopShare?.());
   return controls;
 }
 
@@ -525,6 +633,7 @@ function applyAccountProjection(storage, projection) {
   storage.setItem(LEDGER_KEY, JSON.stringify(projection.ledger || { schemaVersion: 1, transactions: [] }));
   storage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(projection.inventorySnapshot || {}));
   storage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify(projection.inventoryCacheMeta || {}));
+  storage.setItem(PUBLIC_SHARE_SETTINGS_KEY, JSON.stringify(projection.publicShareSettings || { schemaVersion: 1, enabled: false, token: "" }));
   return true;
 }
 
@@ -599,6 +708,15 @@ function parseStoredJson(text, fallback) {
   }
 }
 
+function normalizeCheckpointShareSettings(value) {
+  const storage = {
+    getItem(key) {
+      return key === PUBLIC_SHARE_SETTINGS_KEY ? JSON.stringify(value || null) : null;
+    },
+  };
+  return loadPublicShareSettings(storage);
+}
+
 async function readJsonResponse(response) {
   try {
     return await response.json();
@@ -637,11 +755,11 @@ function base32Encode(bytes) {
 
 function base64UrlEncode(bytes) {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  return btoa(binary).replaceAll("+", "-").replaceAll("/fifa-sticker-app/v2/", "_").replaceAll("=", "");
 }
 
 function base64UrlDecode(value) {
-  const padded = String(value || "").replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
+  const padded = String(value || "").replaceAll("-", "+").replaceAll("_", "/fifa-sticker-app/v2/").padEnd(Math.ceil(String(value || "").length / 4) * 4, "=");
   const binary = atob(padded);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }

@@ -2,7 +2,6 @@ export const INVENTORY_SNAPSHOT_KEY = "panini.inventorySnapshot.v1";
 export const INVENTORY_CACHE_META_KEY = "panini.inventorySnapshotMeta.v1";
 export const DEFAULT_INVENTORY_SOURCES = [
   { url: "/api/trade-inventory", label: "local scanner server" },
-  { url: "/data/trade_inventory.json", label: "static snapshot" },
 ];
 
 export function isUsableInventoryPayload(payload) {

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Trade stickers</title>
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-af5a63eea3b2">
+</head>
+<body>
+  <main class="collectionPage sharePage">
+    <header class="collectionHero">
+      <p class="eyebrow">Read-only trade list</p>
+      <h1>Stickers to trade</h1>
+      <p>This page shows what this collector needs and what they currently have available.</p>
+    </header>
+
+    <div id="shareStatus" class="localTrustStatus" data-severity="muted" aria-live="polite">
+      <strong>Trade list</strong>
+      <span>Loading the latest shared revision…</span>
+    </div>
+    <p id="shareUpdatedAt" class="hint" hidden></p>
+
+    <label class="collectionSearch" for="shareSearch">
+      <span>Search the shared lists</span>
+      <input id="shareSearch" type="search" placeholder="Sticker code, team, or name" autocomplete="off">
+    </label>
+
+    <section class="collectionUpdateCard" aria-labelledby="shareNeedsHeading">
+      <h2 id="shareNeedsHeading">They need <span id="shareNeedsCount"></span></h2>
+      <div id="shareNeedsList" class="collectionTeamList"></div>
+      <p id="shareNeedsEmpty" class="collectionEmpty" hidden>No matching needed stickers.</p>
+    </section>
+
+    <section class="collectionUpdateCard" aria-labelledby="shareOffersHeading">
+      <h2 id="shareOffersHeading">Available to trade <span id="shareOffersCount"></span></h2>
+      <div id="shareOffersList" class="collectionTeamList"></div>
+      <p id="shareOffersEmpty" class="collectionEmpty" hidden>No matching stickers available to trade.</p>
+    </section>
+  </main>
+  <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
+  <script src="/fifa-sticker-app/v2/assets/share.js?v=build-af5a63eea3b2" type="module"></script>
+</body>
+</html>

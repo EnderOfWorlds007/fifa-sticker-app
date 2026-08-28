@@ -119,6 +119,17 @@
           <input id="cloudRestoreIdInput" type="text" inputmode="latin" autocomplete="off" spellcheck="false" placeholder="Paste restore code">
           <button id="restoreCloudIdButton" class="secondaryButton" type="button">Add account</button>
         </div>
+        <div id="publicShareStatus" class="localTrustStatus" data-severity="muted" aria-live="polite">
+          <strong>Trade link</strong>
+          <span>Public trade sharing is off.</span>
+        </div>
+        <p class="hint">A trade link publishes only the stickers you need and the quantities available to trade. It never exposes your restore code.</p>
+        <div class="collectionBackupActions">
+          <button id="createPublicShareButton" type="button">Create trade link</button>
+          <button id="copyPublicShareButton" class="secondaryButton" type="button" hidden>Copy trade link</button>
+          <button id="rotatePublicShareButton" class="secondaryButton" type="button" hidden>Rotate link</button>
+          <button id="stopPublicShareButton" class="secondaryButton" type="button" hidden>Stop sharing</button>
+        </div>
       </section>
       <div class="collectionBackupActions">
         <button id="backupButton" type="button">Create JSON backup</button>
