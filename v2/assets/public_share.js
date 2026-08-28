@@ -1,7 +1,7 @@
 import {
   selectAvailableTradeOffers,
   selectNeededCodes,
-} from "./inventory_projection.js?v=build-41d70d86169b";
+} from "./inventory_projection.js?v=build-2808667cc553";
 
 export const PUBLIC_SHARE_SETTINGS_KEY = "panini.publicShare.settings.v1";
 export const PUBLIC_PROJECTION_MODEL_VERSION = 2;

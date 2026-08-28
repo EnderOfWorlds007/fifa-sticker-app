@@ -1,11 +1,13 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-41d70d86169b";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-41d70d86169b";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-41d70d86169b";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-2808667cc553";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-2808667cc553";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-2808667cc553";
 import {
-  buildSharedListQuery,
+  buildPublicTradeMatch,
+  publicTradeMatchMessage,
+} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-2808667cc553";
+import {
   disclosureControlState,
-  sharedCardMatches,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-41d70d86169b";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-2808667cc553";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -20,6 +22,12 @@ const needsPanel = document.querySelector("#shareNeedsPanel");
 const offersPanel = document.querySelector("#shareOffersPanel");
 const needsToggleAll = document.querySelector("#shareNeedsToggleAll");
 const offersToggleAll = document.querySelector("#shareOffersToggleAll");
+const matchOfferButton = document.querySelector("#shareMatchOfferButton");
+const matchNeedButton = document.querySelector("#shareMatchNeedButton");
+const matchClearButton = document.querySelector("#shareMatchClearButton");
+const matchResult = document.querySelector("#shareMatchResult");
+const matchText = document.querySelector("#shareMatchText");
+const copyMatchButton = document.querySelector("#shareCopyMatchButton");
 let payload = null;
 let catalogByCode = new Map();
 
@@ -43,30 +51,24 @@ async function start() {
     updatedAt.hidden = false;
     setStatus("Fresh from their latest collection update.", "ok");
     render();
-    search.addEventListener("input", render);
+    matchOfferButton.disabled = false;
+    matchNeedButton.disabled = false;
   } catch (error) {
     setStatus(error?.message || "The shared trade list could not be loaded.", "warning");
   }
 }
 
 function render() {
-  const query = buildSharedListQuery(search.value);
   const needs = (Array.isArray(payload?.needs) ? payload.needs : [])
-    .map((code) => cardView(code, 1))
-    .filter((card) => sharedCardMatches(card, query));
+    .map((code) => cardView(code, 1));
   const offers = (Array.isArray(payload?.offers) ? payload.offers : [])
-    .map((offer) => cardView(offer.code, offer.quantity))
-    .filter((card) => sharedCardMatches(card, query));
-  renderGroups(needsList, needs, { query, toggleButton: needsToggleAll });
-  renderGroups(offersList, offers, { quantities: true, query, toggleButton: offersToggleAll });
+    .map((offer) => cardView(offer.code, offer.quantity));
+  renderGroups(needsList, needs, { toggleButton: needsToggleAll });
+  renderGroups(offersList, offers, { quantities: true, toggleButton: offersToggleAll });
   needsCount.textContent = `(${needs.length})`;
   offersCount.textContent = `(${offers.length})`;
   needsEmpty.hidden = needs.length > 0;
   offersEmpty.hidden = offers.length > 0;
-  if (query.text) {
-    needsPanel.open = needs.length > 0;
-    offersPanel.open = offers.length > 0;
-  }
 }
 
 function cardView(code, quantity) {
@@ -74,7 +76,7 @@ function cardView(code, quantity) {
   return { code, quantity, team: card.team || "Other", name: card.name || "" };
 }
 
-function renderGroups(container, cards, { quantities = false, query = { text: "" }, toggleButton } = {}) {
+function renderGroups(container, cards, { quantities = false, toggleButton } = {}) {
   container.textContent = "";
   const groups = new Map();
   for (const card of cards.sort((a, b) => sortCode(a.code, b.code))) {
@@ -84,7 +86,7 @@ function renderGroups(container, cards, { quantities = false, query = { text: ""
   for (const [team, groupCards] of groups) {
     const country = document.createElement("details");
     country.className = "collectionTeam shareCountryDisclosure";
-    country.open = Boolean(query.text);
+    country.open = false;
     country.addEventListener("toggle", () => syncDisclosureControl(container, toggleButton));
     const summary = document.createElement("summary");
     const summaryContent = document.createElement("span");
@@ -134,6 +136,61 @@ function formatDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "recently" : date.toLocaleString();
 }
+
+function showMatch(mode) {
+  if (!payload) return;
+  const result = buildPublicTradeMatch({
+    value: search.value,
+    mode,
+    needs: payload.needs,
+    offers: payload.offers,
+  });
+  matchText.value = publicTradeMatchMessage(result);
+  matchResult.dataset.status = result.status;
+  matchResult.hidden = false;
+  copyMatchButton.disabled = result.status !== "match";
+  setSelectedMatchMode(mode);
+}
+
+function resetMatch() {
+  matchText.value = "";
+  matchResult.hidden = true;
+  matchResult.removeAttribute("data-status");
+  copyMatchButton.disabled = true;
+  copyMatchButton.textContent = "Copy match";
+  setSelectedMatchMode("");
+}
+
+function setSelectedMatchMode(mode) {
+  for (const [button, buttonMode] of [
+    [matchOfferButton, "offer"],
+    [matchNeedButton, "need"],
+  ]) {
+    const selected = mode === buttonMode;
+    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("selected", selected);
+  }
+}
+
+matchOfferButton.addEventListener("click", () => showMatch("offer"));
+matchNeedButton.addEventListener("click", () => showMatch("need"));
+matchClearButton.addEventListener("click", () => {
+  search.value = "";
+  resetMatch();
+  search.focus();
+});
+search.addEventListener("input", resetMatch);
+copyMatchButton.addEventListener("click", async () => {
+  if (!matchText.value || copyMatchButton.disabled) return;
+  try {
+    await navigator.clipboard.writeText(matchText.value);
+    copyMatchButton.textContent = "Copied";
+    window.setTimeout(() => { copyMatchButton.textContent = "Copy match"; }, 1200);
+  } catch {
+    matchText.focus();
+    matchText.select();
+  }
+});
 
 needsToggleAll.addEventListener("click", (event) => toggleAllCountries(needsPanel, needsList, needsToggleAll, event));
 offersToggleAll.addEventListener("click", (event) => toggleAllCountries(offersPanel, offersList, offersToggleAll, event));
