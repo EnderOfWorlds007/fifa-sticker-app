@@ -1,4 +1,4 @@
-import { extractCodeOccurrences, sortCode } from "./trade_state.js?v=build-464035228714";
+import { extractCodeOccurrences, sortCode } from "./trade_state.js?v=build-5a39f5ae9c88";
 
 export function buildPublicTradeMatch({ value, mode, needs = [], offers = [] } = {}) {
   const parsedCodes = [...extractCodeOccurrences(value).keys()].sort(sortCode);

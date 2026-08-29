@@ -9,24 +9,24 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-464035228714";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-5a39f5ae9c88";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-464035228714";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-464035228714";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-464035228714";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5a39f5ae9c88";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-5a39f5ae9c88";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-5a39f5ae9c88";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-464035228714";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-464035228714";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-464035228714";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-464035228714";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-5a39f5ae9c88";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-5a39f5ae9c88";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-5a39f5ae9c88";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-5a39f5ae9c88";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");

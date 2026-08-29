@@ -1,13 +1,12 @@
 import {
   selectAvailableTradeOffers,
   selectNeededCodes,
-} from "./inventory_projection.js?v=build-464035228714";
+} from "./inventory_projection.js?v=build-5a39f5ae9c88";
 
 export const PUBLIC_SHARE_SETTINGS_KEY = "panini.publicShare.settings.v1";
 export const PUBLIC_PROJECTION_MODEL_VERSION = 2;
 const TOKEN_PATTERN = /^PNP1_[A-Za-z0-9_-]{43}$/;
 const TOKEN_HASH_CONTEXT = "panini-public-share-token-v1:";
-const PUBLIC_SHARE_SESSION_TOKEN_KEY = "panini.publicShare.viewerToken.v1";
 
 export function generatePublicShareToken(cryptoImpl = globalThis.crypto) {
   const bytes = new Uint8Array(32);
@@ -95,22 +94,9 @@ export function publicShareUrl(token, location = globalThis.location) {
   return url.toString();
 }
 
-export function publicShareTokenFromLocation(location = globalThis.location, historyRef = globalThis.history, storage) {
-  const hash = String(location?.hash || "");
-  const params = new URLSearchParams(hash.replace(/^#/, ""));
-  const hasFragmentToken = params.has("token");
-  const fragmentToken = normalizePublicShareToken(params.get("token"));
-  const sessionStorage = storage || safeSessionStorage();
-  if (hasFragmentToken) {
-    storeViewerToken(sessionStorage, fragmentToken);
-  }
-  if (hash && location?.href && typeof historyRef?.replaceState === "function") {
-    const url = new URL(location.href);
-    url.hash = "";
-    historyRef.replaceState(null, "", url);
-  }
-  if (hasFragmentToken) return fragmentToken;
-  return readViewerToken(sessionStorage);
+export function publicShareTokenFromLocation(location = globalThis.location) {
+  const params = new URLSearchParams(String(location?.hash || "").replace(/^#/, ""));
+  return normalizePublicShareToken(params.get("token"));
 }
 
 export async function fetchPublicProjection({ baseUrl, token, fetchImpl = globalThis.fetch } = {}) {
@@ -155,27 +141,4 @@ function base64UrlEncode(bytes) {
 function normalizePublishedModelVersion(value) {
   const version = Number(value);
   return Number.isSafeInteger(version) && version >= 0 ? version : 0;
-}
-
-function safeSessionStorage() {
-  try {
-    return globalThis.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
-function storeViewerToken(storage, token) {
-  try {
-    if (token) storage?.setItem(PUBLIC_SHARE_SESSION_TOKEN_KEY, token);
-    else storage?.removeItem(PUBLIC_SHARE_SESSION_TOKEN_KEY);
-  } catch {}
-}
-
-function readViewerToken(storage) {
-  try {
-    return normalizePublicShareToken(storage?.getItem(PUBLIC_SHARE_SESSION_TOKEN_KEY));
-  } catch {
-    return "";
-  }
 }
