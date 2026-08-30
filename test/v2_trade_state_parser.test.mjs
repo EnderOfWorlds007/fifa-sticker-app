@@ -94,6 +94,93 @@ TUN 1,12,27,20`;
   ]);
 });
 
+test("v2 parser expands x-quantity counts in full dash-grouped duplicate lists", () => {
+  const text = `FWC — 1, 9 (x2), 15 (x2), 17, 19
+MEX — 3, 4, 9, 19
+RSA — 13
+KOR — 1, 3, 12, 14 (x2), 19
+CZE — 5, 14, 15
+CAN — 2, 8, 9, 11, 12, 13, 14, 18
+BIH — 1, 4 (x2), 7, 8, 11, 12, 17
+QAT — 4, 8 (x3), 15
+SUI — 8, 10, 11, 15 (x2), 19
+BRA — 3, 4, 7, 9, 11
+MAR — 1, 5, 10, 11
+HAI — 1 (x2), 6, 12, 13, 18
+SCO — 1, 8, 12, 18
+USA — 1, 12, 16 (x3)
+PAR — 1, 3, 19
+AUS — 1, 2, 5, 6, 8, 13
+TUR — 1, 2, 3, 9, 11, 17, 19
+GER — 4, 5, 8, 16
+CUW — 1, 3, 5, 19
+CIV — 3, 4
+ECU — 1, 3
+NED — 4, 6, 7 (x5), 8, 15, 16, 18
+JPN — 1, 7 (x3), 15, 18 (x2), 20 (x2)
+SWE — 1 (x2), 3, 7, 11 (x2), 16 (x2), 18, 20
+TUN — 1, 3, 4, 13, 14, 16, 18
+BEL — 1 (x2), 3, 7, 11, 20
+EGY — 6 (x2), 8, 11, 16
+IRN — 8, 9, 11, 13, 14, 15
+NZL — 2 (x3), 5 (x2), 9 (x4), 10 (x2), 14 (x3), 15 (x2), 17 (x3)
+ESP — 9, 17, 20 (x2)
+CPV — 3, 6 (x2), 14, 16 (x3)
+KSA — 1, 2, 3 (x2), 12 (x5), 14 (x2), 15 (x3), 17
+URU — 3 (x2), 6, 7 (x2), 9, 12, 13, 15 (x4)
+FRA — 2 (x2), 6, 8 (x3), 13 (x2), 14, 15, 16, 18, 20
+SEN — 1 (x2), 2 (x2), 5, 8, 15 (x2), 17 (x2)
+IRQ — 1 (x3), 8, 12, 15 (x2), 20
+NOR — 3 (x2), 4 (x4), 12, 14, 18 (x2)
+ARG — 1, 3 (x2), 5, 11, 13, 14
+ALG — 9, 10 (x4), 13
+AUT — 1 (x2), 4, 11 (x2), 19, 20
+JOR — 4, 8, 12, 14, 17
+POR — 1, 2, 6, 16, 19 (x2)
+COD — 3, 5, 14 (x2), 16
+UZB — 3, 4, 6 (x2), 8 (x3), 10 (x2), 11, 15
+COL — 1 (x2), 3, 4, 5 (x3), 9, 11 (x2), 18, 20
+ENG — 7, 9, 10 (x2), 20
+CRO — 1, 3, 11, 14, 15, 18
+GHA — 1 (x3), 5, 9 (x2), 11, 13, 14, 17, 19
+PAN — 1, 7 (x2), 8, 9, 11, 18`;
+  const occurrences = extractCodeOccurrences(text);
+
+  assert.equal(occurrences.size, 251);
+  assert.equal([...occurrences.values()].reduce((sum, quantity) => sum + quantity, 0), 340);
+  assert.deepEqual(
+    Object.fromEntries([
+      "FWC9", "FWC15", "KOR14", "BIH4", "QAT8", "SUI15", "USA16", "NED7",
+      "JPN7", "JPN18", "JPN20", "SWE1", "SWE11", "SWE16", "NZL9", "KSA12",
+      "URU15", "FRA8", "NOR4", "ALG10", "GHA1", "PAN7",
+    ].map((code) => [code, occurrences.get(code)])),
+    {
+      FWC9: 2,
+      FWC15: 2,
+      KOR14: 2,
+      BIH4: 2,
+      QAT8: 3,
+      SUI15: 2,
+      USA16: 3,
+      NED7: 5,
+      JPN7: 3,
+      JPN18: 2,
+      JPN20: 2,
+      SWE1: 2,
+      SWE11: 2,
+      SWE16: 2,
+      NZL9: 4,
+      KSA12: 5,
+      URU15: 4,
+      FRA8: 3,
+      NOR4: 4,
+      ALG10: 4,
+      GHA1: 3,
+      PAN7: 2,
+    },
+  );
+});
+
 test("v2 parser preserves separate inline hyphenated codes", () => {
   assert.deepEqual([...extractCodeOccurrences("ENG-7, POR-11").entries()], [
     ["ENG7", 1],
