@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  compareParsedCodes,
   createTransaction,
   extractCodeOccurrences,
   extractDirectedCodeOccurrences,
@@ -10,6 +11,58 @@ import {
   transactionDetailLines,
   transactionSummary,
 } from "../v2/assets/trade_state.js";
+
+const USER_DOUBLES_LIST = `Doubles:
+USA 9,15,18
+MEX 3, 7, 14,16,18,19
+RSA 1,5,8,12,4
+KOR 1,2,5,17
+CZE 1,7,9,10,12,4
+BRA 1,2,4,12,16
+MAR 9,10,11,14,15,2
+HAI 1,5,7,13,18,15,3
+SCO 1, 3,6,8,12,15,19,13,20
+GER 7,8,9,13,3
+CUW 12,18
+CIV 2,4,11
+ECU 1,13,5
+BEL 1,6,7,13,16,20,2,9
+EGY 6,10,12,13,18
+IRN 3,5,9 ,11,20
+NZL 2,4,7,12,16
+Sen 6,9
+IRQ 1,20,5,14
+NOR 2,5,11
+POR 4,8,9,20,10,13
+COD,,9, 16,15,
+UZB 4,7,10,12,18,19,14
+COL 1,4,5,6,8,9,11,16,15,17
+CAN  3,2,7,14,16,19,20,8
+FRA 5,11,17,7,
+BIH 1,3,18
+QAT 1,3,8,12,13,20
+SUI 4,5,13
+PAR1,3, 7,11,14,15,6,
+AUS 4,5,11,19,6,1
+TUR 1,4,10,12,13,17,18,19
+NED ,4,5,7
+JPN 1,2,6,8,9
+SWE 1,5,9,10,16,19,13
+TUN 1,12,27,20
+ESP 2,8,20
+CPV 11,16,7
+KSA 2,3,8,14,16,6
+URU,6,15
+ARG 18,9,17
+ALG 4, 8,15,16,18,20,3,17,19
+AUT 1,11,12,15,20
+JOR 3,15,17,20
+ENG 5,14,15,19
+CRO 1, 8, 20,19
+GHA 1,2,7
+PAN 1,11,14,18,5
+FWC 3,12,17
+CC 1,3,4,5, 6,7,8,10,11,12`;
 
 test("v2 parser handles grouped country codes with flag emoji before colons", () => {
   const text = `Sorry, we got Tur 7 from a friend , belie is updated list.
@@ -92,6 +145,30 @@ TUN 1,12,27,20`;
     ["USA15", 1],
     ["USA18", 1],
   ]);
+});
+
+test("v2 parser covers the full reported doubles list, not only each line's first number", () => {
+  const occurrences = extractCodeOccurrences(USER_DOUBLES_LIST);
+
+  assert.equal(occurrences.size, 250);
+  assert.equal(occurrences.get("SUI13"), 1);
+  assert.equal(occurrences.get("COD16"), 1);
+  assert.equal(occurrences.get("URU15"), 1);
+  assert.equal(occurrences.get("PAR15"), 1);
+  assert.equal(occurrences.get("USA15"), 1);
+  assert.equal(occurrences.get("USA18"), 1);
+});
+
+test("v2 compare treats reported doubles as cards I need when they match missing codes", () => {
+  const occurrences = extractCodeOccurrences(USER_DOUBLES_LIST);
+  const result = compareParsedCodes(
+    occurrences,
+    { cards: {} },
+    new Set(["SUI13", "COD16", "URU15", "PAR15"]),
+  );
+
+  assert.deepEqual(result.needFromThem.map((item) => item.code), ["COD16", "PAR15", "SUI13", "URU15"]);
+  assert.ok(!result.other.some((item) => item.code === "SUI13"), "SUI13 must not be classified as other");
 });
 
 test("v2 parser preserves separate inline hyphenated codes", () => {
