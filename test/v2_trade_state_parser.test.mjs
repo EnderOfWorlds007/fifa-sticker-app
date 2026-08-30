@@ -52,6 +52,48 @@ test("v2 parser handles dash-grouped codes with x-before-copy counts", () => {
   );
 });
 
+test("v2 parser handles messy space and comma grouped duplicate lists", () => {
+  const text = `Doubles:
+USA 9,15,18
+MEX 3, 7, 14,16,18,19
+COD,,9, 16,15,
+SUI 4,5,13
+PAR1,3, 7,11,14,15,6,
+URU,6,15
+TUN 1,12,27,20`;
+
+  assert.deepEqual([...extractCodeOccurrences(text).entries()], [
+    ["COD9", 1],
+    ["COD15", 1],
+    ["COD16", 1],
+    ["MEX3", 1],
+    ["MEX7", 1],
+    ["MEX14", 1],
+    ["MEX16", 1],
+    ["MEX18", 1],
+    ["MEX19", 1],
+    ["PAR1", 1],
+    ["PAR3", 1],
+    ["PAR6", 1],
+    ["PAR7", 1],
+    ["PAR11", 1],
+    ["PAR14", 1],
+    ["PAR15", 1],
+    ["SUI4", 1],
+    ["SUI5", 1],
+    ["SUI13", 1],
+    ["TUN1", 1],
+    ["TUN12", 1],
+    ["TUN20", 1],
+    ["TUN27", 1],
+    ["URU6", 1],
+    ["URU15", 1],
+    ["USA9", 1],
+    ["USA15", 1],
+    ["USA18", 1],
+  ]);
+});
+
 test("v2 parser preserves separate inline hyphenated codes", () => {
   assert.deepEqual([...extractCodeOccurrences("ENG-7, POR-11").entries()], [
     ["ENG7", 1],
