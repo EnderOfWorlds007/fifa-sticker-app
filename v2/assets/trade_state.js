@@ -178,12 +178,6 @@ export function extractCodeOccurrences(value) {
       for (const token of match[1].matchAll(groupedTokenPattern)) add(team, token[1], token[2], token[3] || token[4]);
       countryNameSpans.push([match.index, match.index + match[0].length]);
     }
-    const inlineCountryPattern = new RegExp(`(?<![A-Z0-9])${namePattern}\\s*[-–—_./]?\\s*([1-9]\\d?)(S)?(?:\\s*\\(\\s*(?:(\\d{1,2})\\s*[X×]|[X×]\\s*(\\d{1,2}))\\s*\\))?(?![A-Z0-9])`, "g");
-    for (const match of upper.matchAll(inlineCountryPattern)) {
-      if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)) continue;
-      add(team, match[1], match[2], match[3] || match[4]);
-      countryNameSpans.push([match.index, match.index + match[0].length]);
-    }
   }
   const zeroPattern = /(?<![A-Z0-9])00(?:\s*\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\))?(?![A-Z0-9])/g;
   for (const match of upper.matchAll(zeroPattern)) {
@@ -195,6 +189,29 @@ export function extractCodeOccurrences(value) {
     if (countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)) continue;
     for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3] || token[4]);
     groupedSpans.push([start, match.index + match[0].length]);
+  }
+  const looseGroupedPattern = /(?:^|\n)[\t ]*([A-Z]{2,3})[\t ,-]*([1-9][0-9S\t ,/&+().X×-]*)(?=$|\n)/gm;
+  for (const match of upper.matchAll(looseGroupedPattern)) {
+    const start = match.index + match[0].indexOf(match[1]);
+    if (
+      countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)
+      || groupedSpans.some(([spanStart, spanEnd]) => spanStart <= start && start < spanEnd)
+    ) continue;
+    for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3] || token[4]);
+    groupedSpans.push([start, match.index + match[0].length]);
+  }
+  for (const [name, team] of COUNTRY_NAME_CODES) {
+    if (team === "00") continue;
+    const namePattern = countryNamePattern(name);
+    const inlineCountryPattern = new RegExp(`(?<![A-Z0-9])${namePattern}\\s*[-–—_./]?\\s*([1-9]\\d?)(S)?(?:\\s*\\(\\s*(?:(\\d{1,2})\\s*[X×]|[X×]\\s*(\\d{1,2}))\\s*\\))?(?![A-Z0-9])`, "g");
+    for (const match of upper.matchAll(inlineCountryPattern)) {
+      if (
+        countryNameSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)
+        || groupedSpans.some(([spanStart, spanEnd]) => spanStart <= match.index && match.index < spanEnd)
+      ) continue;
+      add(team, match[1], match[2], match[3] || match[4]);
+      countryNameSpans.push([match.index, match.index + match[0].length]);
+    }
   }
   const inlinePattern = /(?<![A-Z0-9])([A-Z]{2,3})\s*[-–—_./]?\s*([1-9]\d?)(S)?(?:\s*\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\))?(?![A-Z0-9])/g;
   for (const match of upper.matchAll(inlinePattern)) {
