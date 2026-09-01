@@ -1,4 +1,4 @@
-import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-8948f03f90fb";
+import { applyOcrBackendFromQuery, ocrToken, recognitionBaseUrl, recognitionUrl } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-9b64394de344";
 
 const status = document.querySelector("#albumReviewStatus");
 const photoSelect = document.querySelector("#albumPhotoSelect");

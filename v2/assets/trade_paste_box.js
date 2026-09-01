@@ -2,12 +2,12 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-8948f03f90fb";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-9b64394de344";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8948f03f90fb";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-8948f03f90fb";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-9b64394de344";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-9b64394de344";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -44,6 +44,7 @@ export function mountTradePasteBox(target, options) {
   const enabledCapabilities = {
     photo: capabilities.photo === true,
     voice: capabilities.voice === true,
+    clear: capabilities.clear === true,
   };
 
   root.replaceChildren();
@@ -67,7 +68,7 @@ export function mountTradePasteBox(target, options) {
   capabilityStatus.setAttribute("aria-live", "polite");
   capabilityStatus.hidden = true;
   const voiceTranscriptStatus = enabledCapabilities.voice ? buildVoiceTranscriptStatus() : null;
-  if (enabledCapabilities.photo || enabledCapabilities.voice) {
+  if (enabledCapabilities.photo || enabledCapabilities.voice || enabledCapabilities.clear) {
     if (voiceTranscriptStatus) root.append(voiceTranscriptStatus);
     if (enabledCapabilities.photo) root.append(capabilityStatus);
     root.append(buildCapabilityRow(textarea, capabilityStatus, voiceTranscriptStatus || capabilityStatus, enabledCapabilities, { onTextAcquired }));
@@ -91,6 +92,13 @@ export function mountTradePasteBox(target, options) {
   for (const noticeConfig of notices || (notice ? [notice] : [])) root.append(buildNotice(noticeConfig));
 
   return { root, textarea, actionRow, capabilityStatus, voiceTranscriptStatus };
+}
+
+export function clearTradePasteText(textarea) {
+  if (!textarea) return;
+  textarea.value = "";
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  textarea.focus?.();
 }
 
 function normalizeEncodedTextareaValue(textarea) {
@@ -198,12 +206,36 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
     }));
     acquisitionButtons.push(button);
     row.append(button);
+    if (capabilities.clear) {
+      const clearButton = buildClearButton(textarea, voiceStatus, voiceState);
+      acquisitionButtons.push(clearButton);
+      row.append(clearButton);
+    }
     const languageSelect = buildVoiceLanguageSelect();
     voiceState.languageSelect = languageSelect;
     row.append(buildVoiceLanguageControl(languageSelect));
+  } else if (capabilities.clear) {
+    const clearButton = buildClearButton(textarea, status, voiceState);
+    acquisitionButtons.push(clearButton);
+    row.append(clearButton);
   }
 
   return row;
+}
+
+function buildClearButton(textarea, status, voiceState) {
+  const button = document.createElement("button");
+  button.id = `${textarea.id}ClearButton`;
+  button.type = "button";
+  button.className = "secondaryButton";
+  button.setAttribute("aria-label", "Clear card numbers");
+  button.textContent = "Clear";
+  button.addEventListener("click", () => {
+    voiceState.liveText = "";
+    clearTradePasteText(textarea);
+    showVoiceMessage(status, "Card numbers cleared.", { label: "Clear" });
+  });
+  return button;
 }
 
 function buildVoiceTranscriptStatus() {

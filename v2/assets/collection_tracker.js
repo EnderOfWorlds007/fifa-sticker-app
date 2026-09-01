@@ -17,27 +17,27 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8948f03f90fb";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-9b64394de344";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-8948f03f90fb";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-8948f03f90fb";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-9b64394de344";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-9b64394de344";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-8948f03f90fb";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-9b64394de344";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8948f03f90fb";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-8948f03f90fb";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-8948f03f90fb";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-9b64394de344";
+import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-9b64394de344";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-9b64394de344";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -126,7 +126,7 @@ mountTradePasteBox('[data-trade-paste-box="collection-update"]', {
   textareaId: "collectionUpdateText",
   rows: 5,
   placeholder: "Paste any message or list, e.g. I got MEX7 and CZE 5, traded away ENG13.",
-  capabilities: { photo: true, voice: true },
+  capabilities: { photo: true, voice: true, clear: true },
   actions: [
     { id: "gotCardsButton", label: "I got these cards" },
     { id: "tradedAwayButton", label: "I traded them away", secondary: true },
@@ -359,6 +359,7 @@ function markGotCards() {
       newCount ? `${newCount} new to collection` : "",
       duplicateCount ? `${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"} added to inventory` : "",
     ].filter(Boolean).join(" · ") + untrackedText + ".";
+    clearTradePasteText(updateText);
   } else {
     status.textContent = `No tracked card codes found${untrackedText}.`;
   }
@@ -377,6 +378,7 @@ async function markTradedAway() {
     status.textContent = pendingIgnoredTradedAwayLines.length
       ? `${tradeLineQuantityTotal(given)} cards recorded as traded away, ${tradeLineQuantityTotal(pendingIgnoredTradedAwayLines)} skipped because you do not have them.`
       : `Recorded ${tradeLineQuantityTotal(given)} traded-away card${tradeLineQuantityTotal(given) === 1 ? "" : "s"} in Activity.`;
+    clearTradePasteText(updateText);
   } else if (pendingIgnoredTradedAwayLines.length) {
     status.textContent = "Those cards were skipped because you do not have them. Use Add all anyway only if you still want to record them.";
   } else {
@@ -419,7 +421,7 @@ function addIgnoredGotCards() {
   const received = recordReceivedLines(pendingIgnoredGotLines, { allowAlreadyOwned: true });
   const count = tradeLineQuantityTotal(received);
   clearGotIgnoredNotice();
-  updateText.value = "";
+  clearTradePasteText(updateText);
   render();
   status.textContent = `${count} already-owned cards recorded anyway.`;
 }
@@ -429,7 +431,7 @@ function addIgnoredTradedAwayCards() {
   const given = recordTradedAwayLines(pendingIgnoredTradedAwayLines);
   const count = tradeLineQuantityTotal(given);
   clearTradedAwayIgnoredNotice();
-  updateText.value = "";
+  clearTradePasteText(updateText);
   render();
   status.textContent = `${count} unavailable cards recorded as traded away anyway.`;
 }
