@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00c2a8">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>Refresh Sticker Scanner</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #080d0f; color: #f4f7f8; }
+    main { width: min(34rem, calc(100% - 2rem)); padding: 1.5rem; border: 1px solid #344047; border-radius: 1rem; background: #12191d; }
+    h1 { margin-top: 0; font-size: 1.5rem; }
+    p { color: #b9c2c7; line-height: 1.5; }
+    button, a { display: inline-block; box-sizing: border-box; padding: .8rem 1rem; border: 0; border-radius: .7rem; font: inherit; font-weight: 700; text-decoration: none; }
+    button { background: #00c2a8; color: #031310; }
+    a { margin-left: .5rem; background: #293239; color: #f4f7f8; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Refreshing the scanner</h1>
+    <p id="status" role="status" aria-live="polite">Removing old offline app files. Your collection and settings are not affected.</p>
+    <button id="retry" type="button" hidden>Try refresh again</button>
+    <a href="/fifa-sticker-app/v2/scanner/?v=build-9b64394de344">Open scanner</a>
+  </main>
+  <script>
+    (() => {
+      const BUILD_ID = "build-9b64394de344";
+      const CURRENT_CACHE = `fifa-card-apps-fifa-sticker-app-v2-${BUILD_ID}`;
+      const WORKER_URL = `/fifa-sticker-app/v2/sw.js?v=${BUILD_ID}`;
+      const status = document.querySelector("#status");
+      const retry = document.querySelector("#retry");
+      const target = () => `/fifa-sticker-app/v2/scanner/?v=${BUILD_ID}&cache-reset=${Date.now()}`;
+
+      function workerUsesBuild(worker) {
+        if (!worker?.scriptURL) return false;
+        try { return new URL(worker.scriptURL).searchParams.get("v") === BUILD_ID; } catch { return false; }
+      }
+
+      function waitForCurrentWorker(registration, timeoutMs = 30000) {
+        return new Promise((resolve, reject) => {
+          let timer = null;
+          const watched = new Set();
+          const cleanup = () => {
+            clearTimeout(timer);
+            registration.removeEventListener("updatefound", check);
+            navigator.serviceWorker.removeEventListener("controllerchange", check);
+            for (const worker of watched) worker.removeEventListener("statechange", check);
+          };
+          const finish = (callback, value) => { cleanup(); callback(value); };
+          function check() {
+            for (const worker of [registration.installing, registration.waiting, registration.active]) {
+              if (worker && !watched.has(worker)) {
+                watched.add(worker);
+                worker.addEventListener("statechange", check);
+              }
+            }
+            if (workerUsesBuild(registration.active) && registration.active.state === "activated") {
+              finish(resolve, registration.active);
+              return;
+            }
+            const current = [registration.installing, registration.waiting].find((worker) => workerUsesBuild(worker));
+            if (current?.state === "redundant") finish(reject, new Error("The current offline app could not be installed."));
+          }
+          registration.addEventListener("updatefound", check);
+          navigator.serviceWorker.addEventListener("controllerchange", check);
+          timer = setTimeout(() => finish(reject, new Error("Timed out preparing the current offline app.")), timeoutMs);
+          check();
+        });
+      }
+
+      async function resetAppCache() {
+        retry.hidden = true;
+        status.textContent = "Preparing the current offline app before removing old files. Your collection and settings are not affected.";
+        try {
+          if (!("serviceWorker" in navigator) || !("caches" in window)) throw new Error("Offline app storage is unavailable in this browser.");
+          const currentRegistration = await navigator.serviceWorker.register(WORKER_URL, { updateViaCache: "none" });
+          await currentRegistration.update();
+          currentRegistration.waiting?.postMessage({ type: "SKIP_WAITING" });
+          await waitForCurrentWorker(currentRegistration);
+          const stagedNames = await caches.keys();
+          if (!stagedNames.includes(CURRENT_CACHE)) throw new Error("The current offline app was not staged; old files were kept.");
+
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          const oldRegistrations = registrations.filter((registration) => (
+            new URL(registration.scope).pathname.startsWith("/fifa-sticker-app/")
+            && registration.scope !== currentRegistration.scope
+          ));
+          const unregistered = await Promise.all(oldRegistrations.map((registration) => registration.unregister()));
+          if (unregistered.some((removed) => !removed)) throw new Error("One old app worker could not be removed; current files were kept.");
+
+          const staleNames = (await caches.keys()).filter((name) => name.startsWith("fifa-card-apps") && name !== CURRENT_CACHE);
+          const deleted = await Promise.all(staleNames.map((name) => caches.delete(name)));
+          if (deleted.some((removed) => !removed)) throw new Error("One old app cache could not be removed; try again.");
+          status.textContent = "Old app cache removed. Opening the current scanner…";
+          window.location.replace(target());
+        } catch (error) {
+          status.textContent = `Automatic refresh failed: ${error instanceof Error ? error.message : "unknown error"}`;
+          retry.hidden = false;
+        }
+      }
+
+      retry.addEventListener("click", resetAppCache);
+      resetAppCache();
+    })();
+  </script>
+</body>
+</html>
