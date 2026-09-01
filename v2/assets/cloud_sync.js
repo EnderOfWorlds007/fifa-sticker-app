@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-f173f9065809";
+} from "./backup_restore.js?v=build-8948f03f90fb";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,9 +15,9 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-f173f9065809";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-f173f9065809";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-f173f9065809";
+} from "./public_share.js?v=build-8948f03f90fb";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-8948f03f90fb";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-8948f03f90fb";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";

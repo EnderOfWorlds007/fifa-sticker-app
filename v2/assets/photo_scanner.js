@@ -9,24 +9,24 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-f173f9065809";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-8948f03f90fb";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-f173f9065809";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-f173f9065809";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-f173f9065809";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8948f03f90fb";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-8948f03f90fb";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-8948f03f90fb";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-f173f9065809";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-f173f9065809";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-f173f9065809";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-f173f9065809";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-8948f03f90fb";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8948f03f90fb";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-8948f03f90fb";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-8948f03f90fb";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -743,14 +743,18 @@ async function testBackend() {
     const response = await fetch(recognitionUrl("/readyz"), { cache: "no-store" });
     if (!response.ok) throw new Error(`Backend check failed (${response.status}).`);
     const payload = await response.json();
-    const auth = payload.ocr_auth_required ? "token required" : "no token required";
-    const sideText = payload.expected_side || photoOcrSide();
     const selectedSide = side?.value || photoOcrSide();
     if (payload.expected_side && payload.expected_side !== selectedSide) {
       updateBackendStatus(`Backend is ${payload.expected_side} OCR, but this page is set to ${selectedSide}.`, { mirror: true });
       return;
     }
-    updateBackendStatus(`Backend ready: ${sideText} OCR, ${auth}.`, { mirror: true });
+    let message = "OCR backend connected. No token is needed.";
+    if (payload.ocr_auth_required) {
+      message = ocrToken()
+        ? "OCR backend connected. A token is saved on this phone."
+        : "OCR backend connected. Enter the laptop OCR token below, then tap Save backend.";
+    }
+    updateBackendStatus(message, { mirror: true });
   } catch {
     updateBackendStatus("Could not reach that backend.", { mirror: true });
   } finally {

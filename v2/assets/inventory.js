@@ -1,8 +1,8 @@
 import {
   adjustedInventoryCsv,
   inventoryFreshnessSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-f173f9065809";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-f173f9065809";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8948f03f90fb";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8948f03f90fb";
 
 const totalCards = document.querySelector("#inventoryTotalCards");
 const uniqueCodes = document.querySelector("#inventoryUniqueCodes");
