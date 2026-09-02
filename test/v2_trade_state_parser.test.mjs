@@ -52,6 +52,111 @@ test("v2 parser handles dash-grouped codes with x-before-copy counts", () => {
   );
 });
 
+test("v2 parser handles bare multiplication counts and continues along each grouped line", () => {
+  assert.deepEqual(
+    [...extractCodeOccurrences("* ARG — 2 ×2, 7, 15, 19, 20 ×2").entries()],
+    [
+      ["ARG2", 2],
+      ["ARG7", 1],
+      ["ARG15", 1],
+      ["ARG19", 1],
+      ["ARG20", 2],
+    ],
+  );
+  assert.deepEqual(
+    [...extractCodeOccurrences("* KOR — 1, 5, 7 x2, 8 x2, 12, 16").entries()],
+    [
+      ["KOR1", 1],
+      ["KOR5", 1],
+      ["KOR7", 2],
+      ["KOR8", 2],
+      ["KOR12", 1],
+      ["KOR16", 1],
+    ],
+  );
+});
+
+const SHARED_DOUBLES_LIST = `👋, I have just updated my list of doubles, sharing here if anyone is interested, I am still exchanging
+* ALG — 3, 5
+* ARG — 2 ×2, 7, 15, 19, 20 ×2
+* AUS — 2, 11, 12
+* BEL — 2, 3, 8, 9, 10, 14 ×2, 15 ×2, 16, 17, 20
+* BIH — 5, 7, 10, 13
+* BRA — 1 ×3, 5, 9 ×2, 11, 12 ×3, 13, 18
+* CAN — 2 ×2, 5 ×2, 6, 7, 8, 11, 12, 14, 17, 19, 20
+* CHI — 10
+* CHN — 2, 4, 5, 9, 11, 12 ×3, 20
+* CIV — 2 ×2, 4, 5, 6, 7, 11, 12, 15, 17, 19
+* CMR — 2
+* COL — 15, 17, 18, 20
+* CRO — 3, 12
+* CZE — 2, 8, 9, 10, 20
+* ECU — 9, 11, 12
+* EGY — 3, 5, 9, 20
+* ESP — 1, 6, 8, 12, 16, 18, 20
+* FRA — 5
+* HAI — 9, 15
+* IRN — 2, 4, 11, 12
+* JAM — 16, 18 ×2
+* KAZ — 2, 3
+* KOR — 1, 5, 7 ×2, 8 ×2, 12, 16
+* KSA — 8, 13, 15, 17 ×3
+* MAR — 2, 3, 4, 5, 8, 14, 19, 20
+* MEX — 1, 4 ×2, 6, 7, 9, 14, 20
+* PAR — 1 ×2, 7, 9
+* POL — 1, 2
+* POR — 20
+* QAT — 8, 15, 16, 20
+* RSA — 5, 8, 9, 14 ×2, 15, 17, 18
+* SCO — 8, 19
+* SRB — 8, 12, 16, 18, 20 ×2
+* SUI — 2, 17
+* SWE — 1, 2, 8, 11, 12 ×2, 16, 17
+* TUN — 2 ×2, 3, 4, 5 ×2, 11, 13, 20
+* URU — 13 ×2, 15`;
+
+test("v2 parser preserves every card and quantity in a shared multiline doubles list", () => {
+  assert.deepEqual(Object.fromEntries(extractCodeOccurrences(SHARED_DOUBLES_LIST)), {
+    ALG3: 1, ALG5: 1,
+    ARG2: 2, ARG7: 1, ARG15: 1, ARG19: 1, ARG20: 2,
+    AUS2: 1, AUS11: 1, AUS12: 1,
+    BEL2: 1, BEL3: 1, BEL8: 1, BEL9: 1, BEL10: 1, BEL14: 2, BEL15: 2, BEL16: 1, BEL17: 1, BEL20: 1,
+    BIH5: 1, BIH7: 1, BIH10: 1, BIH13: 1,
+    BRA1: 3, BRA5: 1, BRA9: 2, BRA11: 1, BRA12: 3, BRA13: 1, BRA18: 1,
+    CAN2: 2, CAN5: 2, CAN6: 1, CAN7: 1, CAN8: 1, CAN11: 1, CAN12: 1, CAN14: 1, CAN17: 1, CAN19: 1, CAN20: 1,
+    CHI10: 1,
+    CHN2: 1, CHN4: 1, CHN5: 1, CHN9: 1, CHN11: 1, CHN12: 3, CHN20: 1,
+    CIV2: 2, CIV4: 1, CIV5: 1, CIV6: 1, CIV7: 1, CIV11: 1, CIV12: 1, CIV15: 1, CIV17: 1, CIV19: 1,
+    CMR2: 1,
+    COL15: 1, COL17: 1, COL18: 1, COL20: 1,
+    CRO3: 1, CRO12: 1,
+    CZE2: 1, CZE8: 1, CZE9: 1, CZE10: 1, CZE20: 1,
+    ECU9: 1, ECU11: 1, ECU12: 1,
+    EGY3: 1, EGY5: 1, EGY9: 1, EGY20: 1,
+    ESP1: 1, ESP6: 1, ESP8: 1, ESP12: 1, ESP16: 1, ESP18: 1, ESP20: 1,
+    FRA5: 1,
+    HAI9: 1, HAI15: 1,
+    IRN2: 1, IRN4: 1, IRN11: 1, IRN12: 1,
+    JAM16: 1, JAM18: 2,
+    KAZ2: 1, KAZ3: 1,
+    KOR1: 1, KOR5: 1, KOR7: 2, KOR8: 2, KOR12: 1, KOR16: 1,
+    KSA8: 1, KSA13: 1, KSA15: 1, KSA17: 3,
+    MAR2: 1, MAR3: 1, MAR4: 1, MAR5: 1, MAR8: 1, MAR14: 1, MAR19: 1, MAR20: 1,
+    MEX1: 1, MEX4: 2, MEX6: 1, MEX7: 1, MEX9: 1, MEX14: 1, MEX20: 1,
+    PAR1: 2, PAR7: 1, PAR9: 1,
+    POL1: 1, POL2: 1,
+    POR20: 1,
+    QAT8: 1, QAT15: 1, QAT16: 1, QAT20: 1,
+    RSA5: 1, RSA8: 1, RSA9: 1, RSA14: 2, RSA15: 1, RSA17: 1, RSA18: 1,
+    SCO8: 1, SCO19: 1,
+    SRB8: 1, SRB12: 1, SRB16: 1, SRB18: 1, SRB20: 2,
+    SUI2: 1, SUI17: 1,
+    SWE1: 1, SWE2: 1, SWE8: 1, SWE11: 1, SWE12: 2, SWE16: 1, SWE17: 1,
+    TUN2: 2, TUN3: 1, TUN4: 1, TUN5: 2, TUN11: 1, TUN13: 1, TUN20: 1,
+    URU13: 2, URU15: 1,
+  });
+});
+
 test("v2 parser handles messy space and comma grouped duplicate lists", () => {
   const text = `Doubles:
 USA 9,15,18

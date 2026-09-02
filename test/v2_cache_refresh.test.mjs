@@ -11,7 +11,7 @@ import {
 } from "../v2/assets/pwa.js";
 
 test("V2 reload URL and worker checks require the current build", () => {
-  assert.equal(V2_BUILD_ID, "build-9b64394de344");
+  assert.equal(V2_BUILD_ID, "build-90e1e19dc443");
   assert.equal(serviceWorkerUsesBuild({ scriptURL: `https://example.test/v2/sw.js?v=${V2_BUILD_ID}` }), true);
   assert.equal(serviceWorkerUsesBuild({ scriptURL: "https://example.test/v2/sw.js?v=old" }), false);
   const url = new URL(buildReloadUrl("https://example.test/fifa-sticker-app/v2/scanner/?foo=bar", V2_BUILD_ID, 123));
@@ -89,7 +89,7 @@ test("V2 updater bypasses the HTTP cache and reloads when the new worker control
 });
 
 test("emergency reset uses a unique path and preserves local collection data", () => {
-  const resetPage = readFileSync("v2/cache-reset-build-9b64394de344/index.html", "utf8");
+  const resetPage = readFileSync("v2/cache-reset-build-90e1e19dc443/index.html", "utf8");
   const serviceWorker = readFileSync("v2/sw.js", "utf8");
   const rootServiceWorker = readFileSync("sw.js", "utf8");
   const appShellPaths = serviceWorker.match(/APP_SHELL_PATHS = \[([\s\S]*?)\];/)?.[1] || "";
@@ -102,7 +102,7 @@ test("emergency reset uses a unique path and preserves local collection data", (
   assert.match(resetPage, /collection and settings are not affected/i);
   assert.doesNotMatch(resetPage, /localStorage\.clear|indexedDB\.deleteDatabase/);
   assert.match(resetPage, /cache-reset=\$\{Date\.now\(\)\}/);
-  assert.match(resetPage, /build-9b64394de344/);
+  assert.match(resetPage, /build-90e1e19dc443/);
   assert.doesNotMatch(appShellPaths, /cache-reset-build/);
   assert.match(serviceWorker, /APP_SHELL_PATHS\.map/);
   assert.match(serviceWorker, /v=\$\{BUILD_ID\}/);
@@ -119,7 +119,7 @@ test("every V2 HTML entry loads the current updater except the inline reset page
   for (const path of htmlFiles("v2")) {
     if (path.includes("/cache-reset-build-")) continue;
     const html = readFileSync(path, "utf8");
-    assert.match(html, /\/v2\/assets\/pwa\.js\?v=build-9b64394de344/, path);
+    assert.match(html, /\/v2\/assets\/pwa\.js\?v=build-90e1e19dc443/, path);
   }
 });
 
