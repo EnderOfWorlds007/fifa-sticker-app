@@ -113,7 +113,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-9b64394de344", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-90e1e19dc443", "1");
     window.__cameraTorch = false;
     window.__cameraTracksStopped = false;
     window.__nativeTakePhotoCalls = 0;
