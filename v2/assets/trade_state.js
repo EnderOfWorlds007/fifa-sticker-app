@@ -72,6 +72,9 @@ const COUNTRY_NAME_CODES = [
 const COUNTRY_NAME_CODE_BY_LABEL = new Map(
   COUNTRY_NAME_CODES.map(([name, code]) => [normalizedCountryLabel(name), code]),
 );
+const PASTED_TEAM_CODE_CORRECTIONS = new Map([
+  ["BHI", "BIH"],
+]);
 
 const VOICE_TEAM_ALIASES = aliasMap({
   alg: "ALG", algeria: "ALG", argelia: "ALG", algerie: "ALG", algerien: "ALG",
@@ -164,11 +167,13 @@ export function extractCodeOccurrences(value) {
   const countryNameSpans = [];
   const groupedSpans = [];
   const add = (team, number = "", suffix = "", quantity = 1) => {
-    const code = normalizeCardCode(`${team}${number}${suffix}`);
+    const normalizedTeam = String(team || "").toUpperCase();
+    const correctedTeam = PASTED_TEAM_CODE_CORRECTIONS.get(normalizedTeam) || normalizedTeam;
+    const code = normalizeCardCode(`${correctedTeam}${number}${suffix}`);
     if (!code) return;
     occurrences.set(code, (occurrences.get(code) || 0) + Math.max(1, Number(quantity || 1)));
   };
-  const groupedTokenPattern = /(?:^|[,\s;/&+])([1-9]\d?)(S)?(?:\s*(?:\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\)|[X×]\s*(\d{1,2})))?(?=\s*(?:[,;/&+]|$))/g;
+  const groupedTokenPattern = /(?:^|[,\s;/&+\-–—])([1-9]\d?)(S)?(?:\s*(?:\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\)|[X×]\s*(\d{1,2})))?(?=\s*(?:[,;/&+\-–—]|$))/g;
   for (const [name, team] of COUNTRY_NAME_CODES) {
     if (team === "00") continue;
     const namePattern = countryNamePattern(name);

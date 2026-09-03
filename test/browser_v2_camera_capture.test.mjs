@@ -131,7 +131,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-0a56c86805e3", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-c6df73a9142b", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
