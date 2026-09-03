@@ -9,24 +9,29 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-90e1e19dc443";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-778c59436da3";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-90e1e19dc443";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-90e1e19dc443";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-90e1e19dc443";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-778c59436da3";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-778c59436da3";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-778c59436da3";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-90e1e19dc443";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-90e1e19dc443";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-90e1e19dc443";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-90e1e19dc443";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-778c59436da3";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-778c59436da3";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-778c59436da3";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-778c59436da3";
+import {
+  classifyScannedCards,
+  SCANNED_CARD_STATUS,
+  summarizeScannedCardStatuses,
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-778c59436da3";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -61,6 +66,7 @@ const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
 let latestScanCodes = [];
 let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
+let latestScanStatuses = [];
 let latestInventoryProjection = null;
 let latestAppliedScan = { signature: "", transactionId: "" };
 let scanInFlight = false;
@@ -71,6 +77,7 @@ initializeBackendSettings();
 initializeSideSelection();
 refreshScannerCollectionProjection().then(() => {
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  latestScanStatuses = classifyCurrentScan();
   renderCollectionActions();
   renderRecognizedCodeRows();
 });
@@ -146,6 +153,7 @@ async function scanPhotos(files) {
   result.value = "";
   latestScanCodes = [];
   latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
+  latestScanStatuses = [];
   latestAppliedScan = { signature: "", transactionId: "" };
   renderCollectionActions();
   codesList.replaceChildren(emptyRow("Scanning..."));
@@ -196,6 +204,7 @@ async function renderResults(payloads, options = {}) {
   latestScanCodes = reviewCodes.length ? reviewCodes : normalizeCodeList(fallbackCodes);
   await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  latestScanStatuses = classifyCurrentScan();
   const text = copyTextForCodes(latestScanCodes);
   result.value = text;
   copyButton.disabled = !text;
@@ -471,6 +480,7 @@ async function updateResultFromReviewSlots() {
   latestScanCodes = normalizeCodeList(codes);
   await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  latestScanStatuses = classifyCurrentScan();
   result.value = copyTextForCodes(latestScanCodes);
   copyButton.disabled = !result.value;
   renderCollectionActions();
@@ -496,6 +506,21 @@ function splitCollectionCodes(codes) {
   });
 }
 
+function classifyCurrentScan() {
+  return classifyScannedCards(latestScanCodes, latestInventoryProjection?.collectionModel || fallbackCollectionModel());
+}
+
+function fallbackCollectionModel() {
+  const newCodes = new Set(latestCollectionSplit.newCodes);
+  return {
+    byCode: Object.fromEntries([...new Set(latestScanCodes)].map((code) => [code, {
+      code,
+      missing: newCodes.has(code),
+      inventory: { availableToTradeQuantity: 0 },
+    }])),
+  };
+}
+
 async function refreshScannerCollectionProjection() {
   try {
     latestInventoryProjection = await loadInventoryProjection();
@@ -518,8 +543,7 @@ function renderCollectionActions() {
     collectionSummary.textContent = "";
     return;
   }
-  const newCount = latestCollectionSplit.newCodes.length;
-  const inventoryCount = latestCollectionSplit.inventoryCodes.length;
+  const scanSummary = summarizeScannedCardStatuses(latestScanStatuses);
   const applied = isCurrentScanApplied();
   collectionActions.hidden = false;
   addCollectionButton.disabled = applied;
@@ -530,11 +554,11 @@ function renderCollectionActions() {
   }
   collectionSummary.textContent = applied
     ? `${total} scanned card${total === 1 ? "" : "s"} already added · Undo to add again`
-    : `${newCount} new for album · ${inventoryCount} already owned / inventory`;
+    : `${scanSummary.newForAlbum} new for album · ${scanSummary.newTradingCards} new trading card${scanSummary.newTradingCards === 1 ? "" : "s"} · ${scanSummary.duplicateTradingCards} duplicate trading card${scanSummary.duplicateTradingCards === 1 ? "" : "s"}`;
 }
 
 function renderRecognizedCodeRows() {
-  codesList.replaceChildren(...(latestScanCodes.length ? latestScanCodes.map(codeRow) : [emptyRow("No recognized codes.")]));
+  codesList.replaceChildren(...(latestScanStatuses.length ? latestScanStatuses.map(codeRow) : [emptyRow("No recognized codes.")]));
 }
 
 function addScanToCollection() {
@@ -690,11 +714,19 @@ function pointInPolygon(point, polygon) {
   return inside;
 }
 
-function codeRow(code) {
+function codeRow(scanCard) {
   const row = document.createElement("li");
-  const isNew = latestCollectionSplit.newCodes.includes(code);
-  row.className = isNew ? "found newForAlbum" : "found inventoryDuplicate";
-  row.innerHTML = `<strong>${code}</strong><span>${isNew ? "New for album" : "Already owned / inventory"}</span>`;
+  const label = document.createElement("span");
+  row.className = `found ${scanCard.status}`;
+  if (scanCard.status === SCANNED_CARD_STATUS.NEW_FOR_ALBUM) label.textContent = "New for album";
+  if (scanCard.status === SCANNED_CARD_STATUS.NEW_TRADING_CARD) label.textContent = "New trading card · first spare";
+  if (scanCard.status === SCANNED_CARD_STATUS.DUPLICATE_TRADING_CARD) {
+    const prior = scanCard.priorTradingQuantity;
+    label.textContent = `Duplicate trading card · ${prior} spare${prior === 1 ? "" : "s"} already available`;
+  }
+  const code = document.createElement("strong");
+  code.textContent = scanCard.code;
+  row.append(code, label);
   return row;
 }
 

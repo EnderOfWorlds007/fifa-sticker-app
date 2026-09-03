@@ -54,6 +54,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       const result = await evaluate(cdp, `({
         upload: window.__cameraUpload,
         diagnostics: document.querySelector("#photoCameraDiagnostics").textContent,
+        cardStatus: document.querySelector("#photoScannerCodes li span")?.textContent,
         tracksStopped: window.__cameraTracksStopped,
         torch: window.__cameraTorch,
         cameraButtonDisabled: document.querySelector("#photoScannerCameraButton").disabled,
@@ -64,6 +65,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       assert.match(result.diagnostics, /captured 1×1/);
       assert.match(result.diagnostics, /native still photo/);
       assert.match(result.diagnostics, /still-photo flash requested/);
+      assert.equal(result.cardStatus, "Duplicate trading card · 1 spare already available");
       assert.equal(result.tracksStopped, true);
       assert.equal(result.torch, false, "cleanup should turn the torch off");
       assert.equal(result.cameraButtonDisabled, false);
@@ -113,7 +115,15 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-90e1e19dc443", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-778c59436da3", "1");
+    localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
+      updated_at: "2026-09-03T00:00:00Z",
+      cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
+    }));
+    localStorage.setItem("panini.inventorySnapshotMeta.v1", JSON.stringify({
+      cachedAt: "2026-09-03T00:00:00Z",
+      sourceLabel: "browser test",
+    }));
     window.__cameraTorch = false;
     window.__cameraTracksStopped = false;
     window.__nativeTakePhotoCalls = 0;
