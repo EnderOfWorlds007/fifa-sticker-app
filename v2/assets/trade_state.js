@@ -75,6 +75,20 @@ const COUNTRY_NAME_CODE_BY_LABEL = new Map(
 const PASTED_TEAM_CODE_CORRECTIONS = new Map([
   ["BHI", "BIH"],
 ]);
+const COCA_COLA_PLAYER_CODES = new Map(Object.entries({
+  "LAMINE YAMAL": "CC1",
+  "JOSHUA KIMMICH": "CC2",
+  "EDUARDO CAMAVINGA": "CC3",
+  "JOSKO GVARDIOL": "CC4",
+  "FEDERICO VALVERDE": "CC5",
+  "VIRGIL VAN DIJK": "CC6",
+  "ALPHONSO DAVIES": "CC7",
+  "RAUL JIMENEZ": "CC8",
+  "WILLIAM SALIBA": "CC9",
+  "LAUTARO MARTINEZ": "CC10",
+  "HARRY KANE": "CC11",
+  "ANTONEE ROBINSON": "CC12",
+}));
 
 const VOICE_TEAM_ALIASES = aliasMap({
   alg: "ALG", algeria: "ALG", argelia: "ALG", algerie: "ALG", algerien: "ALG",
@@ -174,6 +188,22 @@ export function extractCodeOccurrences(value) {
     occurrences.set(code, (occurrences.get(code) || 0) + Math.max(1, Number(quantity || 1)));
   };
   const groupedTokenPattern = /(?:^|[,\s;/&+\-–—])([1-9]\d?)(S)?(?:\s*(?:\(\s*(?:(\d{1,2})\s*[X×]|[X×]\s*(\d{1,2}))\s*\)|[X×]\s*(\d{1,2})))?(?=\s*(?:[,;/&+\-–—]|$))/g;
+  let inCocaColaSection = false;
+  for (const line of upper.split("\n")) {
+    const trimmed = line.trim();
+    if (/^COCA[\s-]*COLA\s*:?$/.test(trimmed)) {
+      inCocaColaSection = true;
+      continue;
+    }
+    if (!trimmed) {
+      inCocaColaSection = false;
+      continue;
+    }
+    if (!inCocaColaSection) continue;
+    const playerName = trimmed.replace(/^(?:[-*•]\s*)/, "");
+    const code = COCA_COLA_PLAYER_CODES.get(playerName);
+    if (code) add("CC", code.slice(2));
+  }
   for (const [name, team] of COUNTRY_NAME_CODES) {
     if (team === "00") continue;
     const namePattern = countryNamePattern(name);
@@ -269,6 +299,16 @@ export function extractDirectedCodeOccurrences(value) {
     for (const [code, quantity] of occurrences.entries()) {
       target.set(code, (target.get(code) || 0) + quantity);
     }
+  }
+  const accounted = new Map();
+  for (const source of [wants, offers, ambiguous]) {
+    for (const [code, quantity] of source.entries()) {
+      accounted.set(code, (accounted.get(code) || 0) + quantity);
+    }
+  }
+  for (const [code, quantity] of extractCodeOccurrences(value).entries()) {
+    const unaccountedQuantity = quantity - (accounted.get(code) || 0);
+    if (unaccountedQuantity > 0) ambiguous.set(code, (ambiguous.get(code) || 0) + unaccountedQuantity);
   }
   return {
     wants: sortOccurrenceMap(wants),
