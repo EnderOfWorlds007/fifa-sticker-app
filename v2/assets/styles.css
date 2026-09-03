@@ -1256,6 +1256,65 @@
   display: none;
 }
 
+.pasteCardStatusPreview {
+  display: grid;
+  gap: 8px;
+  max-width: min(100%, 760px);
+  padding: 12px;
+  border: 1px solid rgba(125, 138, 148, 0.42);
+  border-radius: 8px;
+  background: #0f1418;
+}
+
+.pasteCardStatusPreview[hidden] {
+  display: none;
+}
+
+.pasteCardStatusHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pasteCardStatusHeader > span,
+.pasteCardStatusPreview > p {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.pasteCardStatusPreview > p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.pasteCardStatusList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 8px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.pasteCardStatusList li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 7px;
+  background: var(--panel);
+}
+
+.pasteCardStatusList li.new-for-album { border-left-color: var(--accent); }
+.pasteCardStatusList li.new-trading-card { border-left-color: #4aa8ff; background: rgba(74, 168, 255, 0.10); }
+.pasteCardStatusList li.duplicate-trading-card { border-left-color: #ffc457; background: rgba(255, 196, 87, 0.08); }
+.pasteCardStatusList li > span { color: var(--muted); font-size: 0.8rem; line-height: 1.25; }
+
 .textInventoryPreview {
   display: grid;
   gap: 10px;
@@ -1309,6 +1368,13 @@
   font-size: 0.86rem;
   font-weight: 800;
   text-align: center;
+}
+
+.textInventoryCodeList.pasteCardStatusList li {
+  display: grid;
+  gap: 4px;
+  border-left-width: 5px;
+  text-align: left;
 }
 
 .textInventoryActions {

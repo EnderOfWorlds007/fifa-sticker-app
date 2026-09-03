@@ -7,14 +7,22 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-778c59436da3";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-0a56c86805e3";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
   applyTextInventoryCodesToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-778c59436da3";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-778c59436da3";
-import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-778c59436da3";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-0a56c86805e3";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-0a56c86805e3";
+import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-0a56c86805e3";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-0a56c86805e3";
+import {
+  classifyScannedCards,
+  groupScannedCardStatuses,
+  scannedCardStatusSummaryText,
+  summarizeScannedCardStatuses,
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-0a56c86805e3";
+import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-0a56c86805e3";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");
@@ -32,6 +40,7 @@ let albumScanRunning = false;
 let lastAlbumSelectionSignature = "";
 let parsedTextCodes = [];
 let parseTextTimer = null;
+let parseTextRequestId = 0;
 let backendTestRunning = false;
 
 applyOcrBackendFromQuery();
@@ -42,6 +51,7 @@ const pasteBox = mountTradePasteBox('[data-trade-paste-box="getting-started"]', 
   autofocus: true,
   placeholder: "Paste a card list, dictate card codes, scan album pages, or scan loose card backs. Recognized cards are added here before you save them.",
   capabilities: { voice: true },
+  cardStatusPreview: false,
   hint: {
     id: "gettingStartedHint",
     text: "Album photos should show two facing roster pages. The laptop backend crops, orients, and estimates filled vs empty slots.",
@@ -76,7 +86,7 @@ function installTextParsePreview() {
       <h2>Parsed text</h2>
       <span data-text-inventory-count></span>
     </div>
-    <ol class="textInventoryCodeList" data-text-inventory-list></ol>
+    <ol class="textInventoryCodeList pasteCardStatusList" data-text-inventory-list></ol>
     <div class="tradeLookupActions textInventoryActions">
       <button class="secondaryButton" data-apply-text-inventory type="button" disabled>Apply parsed cards</button>
       <span class="hint" data-text-inventory-status></span>
@@ -94,9 +104,10 @@ function scheduleTextParsePreview() {
   parseTextTimer = setTimeout(updateTextParsePreview, 120);
 }
 
-function updateTextParsePreview() {
+async function updateTextParsePreview() {
   if (!textParsePreview || !pasteBox?.textarea) return;
   const value = pasteBox.textarea.value.trim();
+  const requestId = ++parseTextRequestId;
   const list = textParsePreview.querySelector("[data-text-inventory-list]");
   const count = textParsePreview.querySelector("[data-text-inventory-count]");
   const statusNode = textParsePreview.querySelector("[data-text-inventory-status]");
@@ -108,16 +119,29 @@ function updateTextParsePreview() {
     return;
   }
   textParsePreview.hidden = false;
-  list?.replaceChildren(...parsedTextCodes.slice(0, 120).map((code) => {
-    const item = document.createElement("li");
-    item.textContent = code;
-    return item;
-  }));
-  if (count) count.textContent = parsedTextCodes.length ? `${parsedTextCodes.length} found` : "None found";
-  if (statusNode) {
-    statusNode.textContent = parsedTextCodes.length
-      ? "Review the recognized cards, then apply them to this phone's inventory."
-      : "No card codes recognized yet.";
+  if (count) count.textContent = parsedTextCodes.length ? `${parsedTextCodes.length} parsed` : "None found";
+  if (!parsedTextCodes.length) {
+    list?.replaceChildren();
+    if (statusNode) statusNode.textContent = "No card codes recognized yet.";
+  } else {
+    if (statusNode) statusNode.textContent = "Checking your collection…";
+    try {
+      const model = (await loadInventoryProjection()).collectionModel;
+      if (requestId !== parseTextRequestId || pasteBox.textarea.value.trim() !== value) return;
+      const statuses = classifyScannedCards(parsedTextCodes, model);
+      renderPastedCardStatusList(list, groupScannedCardStatuses(statuses));
+      if (statusNode) {
+        statusNode.textContent = `${scannedCardStatusSummaryText(summarizeScannedCardStatuses(statuses))}. Review, then apply these cards.`;
+      }
+    } catch {
+      if (requestId !== parseTextRequestId || pasteBox.textarea.value.trim() !== value) return;
+      list?.replaceChildren(...[...new Set(parsedTextCodes)].slice(0, 120).map((code) => {
+        const item = document.createElement("li");
+        item.textContent = code;
+        return item;
+      }));
+      if (statusNode) statusNode.textContent = "Cards parsed, but collection status is unavailable.";
+    }
   }
   if (applyButton) applyButton.disabled = parsedTextCodes.length === 0;
 }

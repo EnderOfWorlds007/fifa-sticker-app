@@ -27,7 +27,7 @@ V2 also overlaps the legacy root worker scope. Root and V2 workers must never de
 ### Build identity
 
 - V2 uses one build identifier in the form `build-<12 lowercase hex characters>`.
-- The current deployed identifier is `build-778c59436da3`.
+- The current deployed identifier is `build-0a56c86805e3`.
 - The identifier appears consistently in V2 HTML asset URLs, JavaScript module imports, data URLs, `v2/assets/pwa.js`, `v2/sw.js`, cache tests, and the current recovery page.
 - Every deployable change to cached V2 assets gets a new identifier. Never reuse an identifier, even for a reverted or amended deployment.
 
@@ -116,7 +116,7 @@ Recovery is two-phase:
 The current live recovery URL is:
 
 ```text
-https://enderofworlds007.github.io/fifa-sticker-app/v2/cache-reset-build-778c59436da3/
+https://enderofworlds007.github.io/fifa-sticker-app/v2/cache-reset-build-0a56c86805e3/
 ```
 
 Create a new recovery pathname whenever the build changes and stale installed clients need an explicit escape route. Do not overwrite or reuse an older recovery pathname.

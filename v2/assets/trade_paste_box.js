@@ -2,12 +2,13 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-778c59436da3";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-0a56c86805e3";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-778c59436da3";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-778c59436da3";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-0a56c86805e3";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-0a56c86805e3";
+import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-0a56c86805e3";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -40,6 +41,7 @@ export function mountTradePasteBox(target, options) {
     notices,
     capabilities = {},
     onTextAcquired,
+    cardStatusPreview = true,
   } = options;
   const enabledCapabilities = {
     photo: capabilities.photo === true,
@@ -61,6 +63,17 @@ export function mountTradePasteBox(target, options) {
   if (autofocus) textarea.autofocus = true;
   textarea.addEventListener("input", () => normalizeEncodedTextareaValue(textarea));
   root.append(textarea);
+  const parsedCardStatus = cardStatusPreview
+    ? mountPasteCardStatusPreview({
+      textarea,
+      title: typeof cardStatusPreview === "object" && cardStatusPreview.title
+        ? cardStatusPreview.title
+        : "Parsed status against your collection",
+      getCollectionModel: typeof cardStatusPreview === "object" && cardStatusPreview.getCollectionModel
+        ? cardStatusPreview.getCollectionModel
+        : undefined,
+    })
+    : null;
 
   const capabilityStatus = document.createElement("div");
   capabilityStatus.className = "hint pasteCapabilityStatus";
@@ -91,7 +104,7 @@ export function mountTradePasteBox(target, options) {
   if (summary) root.append(buildParagraph(summary.id, "hint", summary.text || "", { ariaLive: summary.ariaLive }));
   for (const noticeConfig of notices || (notice ? [notice] : [])) root.append(buildNotice(noticeConfig));
 
-  return { root, textarea, actionRow, capabilityStatus, voiceTranscriptStatus };
+  return { root, textarea, actionRow, capabilityStatus, voiceTranscriptStatus, parsedCardStatus };
 }
 
 export function clearTradePasteText(textarea) {

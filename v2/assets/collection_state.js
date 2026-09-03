@@ -1,4 +1,4 @@
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-778c59436da3";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-0a56c86805e3";
 
 export const COLLECTION_KEY = "panini.collectionTracker.v1";
 export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 6;
