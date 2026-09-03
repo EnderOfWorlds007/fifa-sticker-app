@@ -124,6 +124,23 @@ test("recognized code rows use one shared renderer", () => {
   assert.match(functionBody("updateResultFromReviewSlots"), /renderRecognizedCodeRows\(\)/);
 });
 
+test("scanner labels album additions, first trading copies, and existing trading duplicates", () => {
+  assert.match(source, /scan_card_status\.js/);
+  assert.match(source, /classifyScannedCards/);
+  assert.match(source, /summarizeScannedCardStatuses/);
+  const rowBody = functionBody("codeRow");
+  assert.match(rowBody, /New for album/);
+  assert.match(rowBody, /New trading card · first spare/);
+  assert.match(rowBody, /Duplicate trading card/);
+  assert.match(rowBody, /spares?\$\{prior === 1/);
+});
+
+test("adding a scan preserves its scan-time trading classification", () => {
+  const body = functionBody("addScanToCollection");
+  assert.doesNotMatch(body, /latestScanStatuses\s*=/);
+  assert.match(body, /renderRecognizedCodeRows\(\)/);
+});
+
 test("scanner counts matched review slots including duplicates before collection summary", () => {
   const renderBody = functionBody("renderResults");
   assert.match(renderBody, /const fallbackCodes = payloads\.flatMap/);
