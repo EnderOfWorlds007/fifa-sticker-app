@@ -101,6 +101,22 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       await clickCenter(cdp, fallbackRect);
       const chooser = await chooserPromise;
       assert.equal(chooser.mode, "selectMultiple");
+
+      await send(cdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/compare/` });
+      await waitForExpression(cdp, `document.querySelector("#compareText")`);
+      await evaluate(cdp, `(() => {
+        const input = document.querySelector("#compareText");
+        input.value = "TUR5 ×2, AUS16";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`);
+      await waitForExpression(cdp, `document.querySelector(".pasteCardStatusPreview [data-paste-card-summary]")?.textContent.includes("duplicate trading cards")`);
+      const pasteSummary = await evaluate(cdp, `document.querySelector(".pasteCardStatusPreview [data-paste-card-summary]").textContent`);
+      assert.equal(pasteSummary, "1 new for album · 0 new trading cards · 2 duplicate trading cards");
+      const pasteRows = await evaluate(cdp, `[...document.querySelectorAll(".pasteCardStatusList li")].map((row) => row.textContent)`);
+      assert.deepEqual(pasteRows, [
+        "AUS161 new for album",
+        "TUR5 ×22 duplicate trading cards",
+      ]);
     } finally {
       cdp.close();
     }
@@ -115,7 +131,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-778c59436da3", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-0a56c86805e3", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },

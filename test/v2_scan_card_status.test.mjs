@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyScannedCards,
+  dominantScannedCardStatus,
+  expandCodeOccurrences,
+  groupScannedCardStatuses,
   SCANNED_CARD_STATUS,
+  scannedCardGroupDetail,
+  scannedCardStatusSummaryText,
   summarizeScannedCardStatuses,
 } from "../v2/assets/scan_card_status.js";
 
@@ -64,4 +69,28 @@ test("scan status summary counts each physical card occurrence", () => {
     newTradingCards: 1,
     duplicateTradingCards: 2,
   });
+});
+
+test("pasted quantities expand and aggregate without hiding mixed statuses", () => {
+  const codes = expandCodeOccurrences(new Map([["AUS16", 3], ["COD2", 1]]));
+  const statuses = classifyScannedCards(codes, collectionModel([
+    { code: "AUS16", missing: true },
+    { code: "COD2", missing: false },
+  ]));
+  const groups = groupScannedCardStatuses(statuses);
+  assert.deepEqual(codes, ["AUS16", "AUS16", "AUS16", "COD2"]);
+  assert.deepEqual(groups[0], {
+    code: "AUS16",
+    quantity: 3,
+    newForAlbum: 1,
+    newTradingCards: 1,
+    duplicateTradingCards: 1,
+    priorTradingQuantity: 1,
+  });
+  assert.equal(scannedCardGroupDetail(groups[0]), "1 new for album · 1 new trading card · 1 duplicate trading card");
+  assert.equal(dominantScannedCardStatus(groups[0]), NEW_FOR_ALBUM);
+  assert.equal(
+    scannedCardStatusSummaryText(summarizeScannedCardStatuses(statuses)),
+    "1 new for album · 2 new trading cards · 1 duplicate trading card",
+  );
 });
