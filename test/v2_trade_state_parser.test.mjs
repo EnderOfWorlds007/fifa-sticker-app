@@ -157,6 +157,117 @@ test("v2 parser preserves every card and quantity in a shared multiline doubles 
   });
 });
 
+const HYPHEN_SEPARATED_DOUBLES_LIST = `Hi! Here are our doubles to exchange:
+
+COCA COLA:
+Virgil Van Dijk
+Josko Gvardiol
+William Saliba
+Lautaro Martinez
+
+FWC 6-15
+
+MEX 8-11-15-16-17
+RSA 7
+KOR 1-4-5-6-13-17
+CZE 1-2-5-7
+BRA 17
+CAN 1-5-14-20
+BHI 4-7-11-14-20
+QAT 8-11-12
+SUI 14-15
+MAR 1
+HAI 13
+SCO 1-3-7-20
+USA 1-16-17-19
+PAR 4-5-7
+AUS 12
+TUR 1-4-6-14-15-19
+GER 3-6
+CUW 3-11-15-16
+CIV 14-20
+ECU 7-17
+NED 3-7-13-15
+JPN 3-4-17-18-20
+SWE 1-8-9-11-18-19
+TUN 1-7
+BEL -4-6-10-14
+EGY 8-11-13-14-15-17-20
+IRN 1-2-5-11-15-16-17-18-20
+NZL 2-7-9-15-20
+CPV 11-16
+KSA 5-14-18
+URU 3-10-12-13-15
+FRA 7-10-18
+SEN 2-15-17-19
+IRQ 1-6-12-20
+NOR 6-9
+ARG 3
+ALG 5-9-12-18
+AUT 14
+JOR 1-9
+POR 6
+COD 3-13-16-17-19
+UZB 1
+COL 3-12-17
+ENG 9-18-20
+CRO 1
+GHA 1-2-13-14-17
+PAN 1`;
+
+test("v2 parser handles a complete hyphen-separated doubles list", () => {
+  assert.deepEqual(Object.fromEntries(extractCodeOccurrences(HYPHEN_SEPARATED_DOUBLES_LIST)), {
+    ALG5: 1, ALG9: 1, ALG12: 1, ALG18: 1,
+    ARG3: 1,
+    AUS12: 1,
+    AUT14: 1,
+    BEL4: 1, BEL6: 1, BEL10: 1, BEL14: 1,
+    BIH4: 1, BIH7: 1, BIH11: 1, BIH14: 1, BIH20: 1,
+    BRA17: 1,
+    CAN1: 1, CAN5: 1, CAN14: 1, CAN20: 1,
+    CIV14: 1, CIV20: 1,
+    COD3: 1, COD13: 1, COD16: 1, COD17: 1, COD19: 1,
+    COL3: 1, COL12: 1, COL17: 1,
+    CPV11: 1, CPV16: 1,
+    CRO1: 1,
+    CUW3: 1, CUW11: 1, CUW15: 1, CUW16: 1,
+    CZE1: 1, CZE2: 1, CZE5: 1, CZE7: 1,
+    ECU7: 1, ECU17: 1,
+    EGY8: 1, EGY11: 1, EGY13: 1, EGY14: 1, EGY15: 1, EGY17: 1, EGY20: 1,
+    ENG9: 1, ENG18: 1, ENG20: 1,
+    FRA7: 1, FRA10: 1, FRA18: 1,
+    FWC6: 1, FWC15: 1,
+    GER3: 1, GER6: 1,
+    GHA1: 1, GHA2: 1, GHA13: 1, GHA14: 1, GHA17: 1,
+    HAI13: 1,
+    IRN1: 1, IRN2: 1, IRN5: 1, IRN11: 1, IRN15: 1, IRN16: 1, IRN17: 1, IRN18: 1, IRN20: 1,
+    IRQ1: 1, IRQ6: 1, IRQ12: 1, IRQ20: 1,
+    JOR1: 1, JOR9: 1,
+    JPN3: 1, JPN4: 1, JPN17: 1, JPN18: 1, JPN20: 1,
+    KOR1: 1, KOR4: 1, KOR5: 1, KOR6: 1, KOR13: 1, KOR17: 1,
+    KSA5: 1, KSA14: 1, KSA18: 1,
+    MAR1: 1,
+    MEX8: 1, MEX11: 1, MEX15: 1, MEX16: 1, MEX17: 1,
+    NED3: 1, NED7: 1, NED13: 1, NED15: 1,
+    NOR6: 1, NOR9: 1,
+    NZL2: 1, NZL7: 1, NZL9: 1, NZL15: 1, NZL20: 1,
+    PAN1: 1,
+    PAR4: 1, PAR5: 1, PAR7: 1,
+    POR6: 1,
+    QAT8: 1, QAT11: 1, QAT12: 1,
+    RSA7: 1,
+    SCO1: 1, SCO3: 1, SCO7: 1, SCO20: 1,
+    SEN2: 1, SEN15: 1, SEN17: 1, SEN19: 1,
+    SUI14: 1, SUI15: 1,
+    SWE1: 1, SWE8: 1, SWE9: 1, SWE11: 1, SWE18: 1, SWE19: 1,
+    TUN1: 1, TUN7: 1,
+    TUR1: 1, TUR4: 1, TUR6: 1, TUR14: 1, TUR15: 1, TUR19: 1,
+    URU3: 1, URU10: 1, URU12: 1, URU13: 1, URU15: 1,
+    USA1: 1, USA16: 1, USA17: 1, USA19: 1,
+    UZB1: 1,
+  });
+});
+
 test("v2 parser handles messy space and comma grouped duplicate lists", () => {
   const text = `Doubles:
 USA 9,15,18
