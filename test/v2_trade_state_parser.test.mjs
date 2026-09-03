@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -225,6 +226,7 @@ test("v2 parser handles a complete hyphen-separated doubles list", () => {
     BIH4: 1, BIH7: 1, BIH11: 1, BIH14: 1, BIH20: 1,
     BRA17: 1,
     CAN1: 1, CAN5: 1, CAN14: 1, CAN20: 1,
+    CC4: 1, CC6: 1, CC9: 1, CC10: 1,
     CIV14: 1, CIV20: 1,
     COD3: 1, COD13: 1, COD16: 1, COD17: 1, COD19: 1,
     COL3: 1, COL12: 1, COL17: 1,
@@ -266,6 +268,50 @@ test("v2 parser handles a complete hyphen-separated doubles list", () => {
     USA1: 1, USA16: 1, USA17: 1, USA19: 1,
     UZB1: 1,
   });
+});
+
+test("v2 parser recognizes European Coca-Cola cards listed by player name", () => {
+  const text = `COCA-COLA:
+Virgil van Dijk
+Joško Gvardiol
+William Saliba
+Lautaro Martínez`;
+
+  assert.deepEqual([...extractCodeOccurrences(text).entries()], [
+    ["CC4", 1],
+    ["CC6", 1],
+    ["CC9", 1],
+    ["CC10", 1],
+  ]);
+  assert.deepEqual([...extractDirectedCodeOccurrences(text).ambiguous.entries()], [
+    ["CC4", 1],
+    ["CC6", 1],
+    ["CC9", 1],
+    ["CC10", 1],
+  ]);
+});
+
+test("v2 catalogue tracks the complete European Coca-Cola set", () => {
+  const catalog = JSON.parse(readFileSync(new URL("../v2/data/collection_catalog.json", import.meta.url), "utf8"));
+  assert.deepEqual(
+    catalog.cards.filter((card) => /^CC\d+$/.test(card.code)).map(({ code, name }) => ({ code, name })),
+    [
+      { code: "CC1", name: "Lamine Yamal" },
+      { code: "CC2", name: "Joshua Kimmich" },
+      { code: "CC3", name: "Eduardo Camavinga" },
+      { code: "CC4", name: "Josko Gvardiol" },
+      { code: "CC5", name: "Federico Valverde" },
+      { code: "CC6", name: "Virgil van Dijk" },
+      { code: "CC7", name: "Alphonso Davies" },
+      { code: "CC8", name: "Raul Jimenez" },
+      { code: "CC9", name: "William Saliba" },
+      { code: "CC10", name: "Lautaro Martinez" },
+      { code: "CC11", name: "Harry Kane" },
+      { code: "CC12", name: "Antonee Robinson" },
+    ],
+  );
+  assert.equal(catalog.count, catalog.cards.length);
+  assert.equal(catalog.canonical_count, catalog.cards.length);
 });
 
 test("v2 parser handles messy space and comma grouped duplicate lists", () => {

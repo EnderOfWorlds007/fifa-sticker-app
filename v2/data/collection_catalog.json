@@ -3,9 +3,9 @@
   "source": "v1 collection_inventory import",
   "generated_from": "web/data/collection_inventory.json",
   "edition": "FIFA World Cup 2026 physical",
-  "count": 1034,
-  "raw_count": 1034,
-  "canonical_count": 1034,
+  "count": 1046,
+  "raw_count": 1046,
+  "canonical_count": 1046,
   "alias_count": 0,
   "aliases": {},
   "cards": [
@@ -5178,6 +5178,66 @@
       "code": "FWC19",
       "name": "Argentina 2022",
       "team": "FIFA World Cup History"
+    },
+    {
+      "code": "CC1",
+      "name": "Lamine Yamal",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC2",
+      "name": "Joshua Kimmich",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC3",
+      "name": "Eduardo Camavinga",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC4",
+      "name": "Josko Gvardiol",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC5",
+      "name": "Federico Valverde",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC6",
+      "name": "Virgil van Dijk",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC7",
+      "name": "Alphonso Davies",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC8",
+      "name": "Raul Jimenez",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC9",
+      "name": "William Saliba",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC10",
+      "name": "Lautaro Martinez",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC11",
+      "name": "Harry Kane",
+      "team": "Coca-Cola Europe"
+    },
+    {
+      "code": "CC12",
+      "name": "Antonee Robinson",
+      "team": "Coca-Cola Europe"
     }
   ]
 }
