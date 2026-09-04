@@ -1,14 +1,13 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-a82f4c19d6e7";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-a82f4c19d6e7";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-a82f4c19d6e7";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-d13e6b8f204a";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-d13e6b8f204a";
+import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
 import {
   buildPublicTradeMatch,
   publicTradeMatchMessage,
-} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-a82f4c19d6e7";
+} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-d13e6b8f204a";
 import {
   disclosureControlState,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-a82f4c19d6e7";
-import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-a82f4c19d6e7";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-d13e6b8f204a";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -29,15 +28,8 @@ const matchClearButton = document.querySelector("#shareMatchClearButton");
 const matchResult = document.querySelector("#shareMatchResult");
 const matchText = document.querySelector("#shareMatchText");
 const copyMatchButton = document.querySelector("#shareCopyMatchButton");
-const matchActions = document.querySelector(".shareMatchActions");
 let payload = null;
 let catalogByCode = new Map();
-const shareCardStatusPreview = mountPasteCardStatusPreview({
-  textarea: search,
-  insertAfter: matchActions,
-  title: "Parsed status against this shared collection",
-  getCollectionModel: sharedCollectionModel,
-});
 
 start();
 
@@ -61,24 +53,9 @@ async function start() {
     render();
     matchOfferButton.disabled = false;
     matchNeedButton.disabled = false;
-    shareCardStatusPreview?.refresh();
   } catch (error) {
     setStatus(error?.message || "The shared trade list could not be loaded.", "warning");
   }
-}
-
-function sharedCollectionModel() {
-  if (!payload || !catalogByCode.size) throw new Error("Shared collection is still loading.");
-  const missing = new Set(Array.isArray(payload.needs) ? payload.needs : []);
-  const offers = new Map((Array.isArray(payload.offers) ? payload.offers : [])
-    .map((offer) => [offer.code, Math.max(0, Number(offer.quantity || 0))]));
-  return {
-    byCode: Object.fromEntries([...catalogByCode.keys()].map((code) => [code, {
-      code,
-      missing: missing.has(code),
-      inventory: { availableToTradeQuantity: offers.get(code) || 0 },
-    }])),
-  };
 }
 
 function render() {
@@ -200,7 +177,6 @@ matchNeedButton.addEventListener("click", () => showMatch("need"));
 matchClearButton.addEventListener("click", () => {
   search.value = "";
   resetMatch();
-  shareCardStatusPreview?.refresh();
   search.focus();
 });
 search.addEventListener("input", resetMatch);

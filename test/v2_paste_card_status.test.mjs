@@ -24,12 +24,12 @@ test("Getting Started enriches its existing parsed-text review instead of showin
   assert.match(gettingStartedSource, /scannedCardStatusSummaryText/);
 });
 
-test("read-only shared collection parsing uses the published collector model", () => {
-  assert.match(shareSource, /mountPasteCardStatusPreview/);
-  assert.match(shareSource, /Parsed status against this shared collection/);
-  assert.match(shareSource, /function sharedCollectionModel/);
-  assert.match(shareSource, /availableToTradeQuantity: offers\.get\(code\) \|\| 0/);
-  assert.match(shareSource, /missing: missing\.has\(code\)/);
+test("read-only shared collection omits the parsed collection-status preview", () => {
+  assert.doesNotMatch(shareSource, /mountPasteCardStatusPreview/);
+  assert.doesNotMatch(shareSource, /Parsed status against this shared collection/);
+  assert.doesNotMatch(shareSource, /sharedCollectionModel/);
+  assert.match(shareSource, /buildPublicTradeMatch/);
+  assert.match(shareSource, /publicTradeMatchMessage/);
 });
 
 test("offline V2 app shell includes both status modules", () => {
