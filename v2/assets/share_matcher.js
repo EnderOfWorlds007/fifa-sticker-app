@@ -1,17 +1,18 @@
 import {
   allocateInsigniaQuantities,
   extractCodeOccurrences,
+  insigniaFilterIsStrict,
   insigniaQuantity,
   normalizeInsigniaFilter,
   sortCode,
-} from "./trade_state.js?v=build-7fedfc50626d";
+} from "./trade_state.js?v=build-6fbb7fadf697";
 
 export function buildPublicTradeMatch({ value, mode, needs = [], offers = [], insigniaFilter = "both" } = {}) {
   const normalizedFilter = normalizeInsigniaFilter(insigniaFilter);
   const occurrences = extractCodeOccurrences(value);
   const parsedCodes = [...occurrences.keys()].sort(sortCode);
   const colourUnavailable = mode === "need"
-    && normalizedFilter !== "both"
+    && insigniaFilterIsStrict(normalizedFilter)
     && !publicOffersHaveInsigniaData(offers);
   const eligibleCodes = mode === "need"
     ? offers
