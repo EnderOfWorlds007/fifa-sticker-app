@@ -218,6 +218,27 @@ test("read-only matching explains stale shared projections instead of reporting 
   assert.match(publicTradeMatchMessage(result), /colours have not reached this shared list/i);
 });
 
+test("read-only preference modes keep matching when shared card-back colours are unavailable", () => {
+  const oldOffers = [
+    { code: "JOR1", quantity: 1 },
+    { code: "POR11", quantity: 2 },
+  ];
+  for (const insigniaFilter of ["prefer-green", "prefer-blue"]) {
+    const result = buildPublicTradeMatch({
+      value: "JOR1 POR11",
+      mode: "need",
+      offers: oldOffers,
+      insigniaFilter,
+    });
+    assert.equal(result.status, "match");
+    assert.deepEqual(result.matchedCodes, ["JOR1", "POR11"]);
+    assert.equal(
+      publicTradeMatchMessage(result),
+      "Hi! I found a match.\nI need:\nBack not recorded: JOR1, POR11.",
+    );
+  }
+});
+
 test("all five V2 query surfaces mount the shared five-state filter", () => {
   const surfaces = ["collection", "inventory", "compare", "trade", "share"];
   for (const surface of surfaces) {
