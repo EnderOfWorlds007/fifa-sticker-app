@@ -2,9 +2,9 @@ import {
   adjustedInventoryCsv,
   insigniaQuantity,
   inventoryFreshnessSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-248100b59333";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-248100b59333";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7fedfc50626d";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7fedfc50626d";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-7fedfc50626d";
 
 const totalCards = document.querySelector("#inventoryTotalCards");
 const uniqueCodes = document.querySelector("#inventoryUniqueCodes");
@@ -110,9 +110,13 @@ function render() {
 function inventoryCardDetail(card, captures) {
   const modelCard = collectionModel?.byCode?.[card.code];
   const visibleQuantity = insigniaQuantity(card, insigniaFilter?.value);
-  const colour = insigniaFilter?.value === "both"
+  const filter = insigniaFilter?.value || "both";
+  const preferredColour = filter === "prefer-green" ? "green" : filter === "prefer-blue" ? "blue" : "";
+  const colour = filter === "both"
     ? cardColour(card.back_insignia_type)
-    : `${insigniaFilter.value} backs`;
+    : preferredColour
+      ? `prefer ${preferredColour} · ${insigniaQuantity(card, preferredColour)} ${preferredColour} available`
+      : `${filter} backs`;
   const parts = [
     `${visibleQuantity} saved`,
     colour,

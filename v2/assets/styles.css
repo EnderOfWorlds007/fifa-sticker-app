@@ -854,12 +854,35 @@
   line-height: 1.35;
 }
 
+.insigniaFilterButtons {
+  display: grid;
+  gap: 7px;
+}
+
+.insigniaFilterButtons .insigniaExactButtons {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.insigniaFilterButtons .insigniaPreferenceButtons {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .insigniaFilterButtons button[data-insignia-value="green"].active {
   background: #28d17c;
   color: #06130c;
 }
 
 .insigniaFilterButtons button[data-insignia-value="blue"].active {
+  background: #4fa3ff;
+  color: #06101a;
+}
+
+.insigniaFilterButtons button[data-insignia-value="prefer-green"].active {
+  background: #28d17c;
+  color: #06130c;
+}
+
+.insigniaFilterButtons button[data-insignia-value="prefer-blue"].active {
   background: #4fa3ff;
   color: #06101a;
 }

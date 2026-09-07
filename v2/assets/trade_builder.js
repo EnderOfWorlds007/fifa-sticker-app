@@ -1,10 +1,12 @@
 import {
+  assignOutgoingVariants,
   createTradeDraft,
   extractCodeOccurrences,
   loadLedger,
   insigniaQuantity,
   insigniaVariantForFilter,
   partitionOutgoingLinesByAvailability,
+  preferredInsigniaVariant,
   saveLedger,
   sortCode,
   tradeAvailabilityIssues,
@@ -14,13 +16,13 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7fedfc50626d";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-248100b59333";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-248100b59333";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7fedfc50626d";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-7fedfc50626d";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-7fedfc50626d";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -405,7 +407,14 @@ function parsedReceivedLines(occurrences) {
 
 function splitGivenLines(lines, existing = []) {
   const adjusted = currentInventoryProjection().adjustedInventory;
-  return partitionOutgoingLinesByAvailability({ additions: lines, existing, inventory: adjusted });
+  const split = partitionOutgoingLinesByAvailability({ additions: lines, existing, inventory: adjusted });
+  if (String(insigniaFilter?.value || "").startsWith("prefer-")) {
+    split.added = assignOutgoingVariants(split.added, adjusted, {
+      existing,
+      preferredVariant: preferredInsigniaVariant(insigniaFilter.value),
+    });
+  }
+  return split;
 }
 
 function splitReceivedLines(lines) {
