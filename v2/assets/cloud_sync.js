@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-6fbb7fadf697";
+} from "./backup_restore.js?v=build-cf1e606d819a";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,9 +15,10 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-6fbb7fadf697";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-6fbb7fadf697";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-6fbb7fadf697";
+} from "./public_share.js?v=build-cf1e606d819a";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-cf1e606d819a";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-cf1e606d819a";
+import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-cf1e606d819a";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -285,10 +286,18 @@ export function mountCollectionCloudSync({
     initialized = true;
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     refreshShareControls();
-    const upgradeNeeded = publicShareNeedsRepublish(loadPublicShareSettings(storage));
+    const shareSettings = loadPublicShareSettings(storage);
+    const upgradeNeeded = publicShareNeedsRepublish(shareSettings);
+    const pageRefreshNeeded = publicShareRefreshNeededOnPage(shareSettings, location);
     const pendingKind = pendingInitializationSave;
     pendingInitializationSave = "";
-    if (upgradeNeeded || pendingKind) queueAutosave(upgradeNeeded ? "public-projection-upgrade" : pendingKind);
+    if (upgradeNeeded || pageRefreshNeeded || pendingKind) {
+      queueAutosave(upgradeNeeded
+        ? "public-projection-upgrade"
+        : pageRefreshNeeded
+          ? "public-projection-page-refresh"
+          : pendingKind);
+    }
   });
   return { client, syncDeltas, autosave };
 }
