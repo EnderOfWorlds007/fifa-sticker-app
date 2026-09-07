@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-e115ae4d55ae";
+} from "./backup_restore.js?v=build-248100b59333";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,9 +15,9 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-e115ae4d55ae";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-e115ae4d55ae";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-e115ae4d55ae";
+} from "./public_share.js?v=build-248100b59333";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-248100b59333";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-248100b59333";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -51,6 +51,7 @@ export function mountCollectionCloudSync({
   let applyingRemote = false;
   let pendingTimer = null;
   let lastTriggerKind = "manual";
+  let pendingInitializationSave = "";
   const refreshShareControls = () => controls.setShareSettings(loadPublicShareSettings(storage));
 
   const syncDeltas = async ({ apply = true } = {}) => {
@@ -88,7 +89,11 @@ export function mountCollectionCloudSync({
   };
 
   const queueAutosave = (kind = "local") => {
-    if (!initialized || applyingRemote) return;
+    if (!initialized) {
+      pendingInitializationSave = kind || "local";
+      return;
+    }
+    if (applyingRemote) return;
     if (client.profileId) saveAccountProjection(storage, client.profileId);
     lastTriggerKind = kind || "local";
     clearTimeout(pendingTimer);
@@ -280,9 +285,10 @@ export function mountCollectionCloudSync({
     initialized = true;
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     refreshShareControls();
-    if (publicShareNeedsRepublish(loadPublicShareSettings(storage))) {
-      queueAutosave("public-projection-upgrade");
-    }
+    const upgradeNeeded = publicShareNeedsRepublish(loadPublicShareSettings(storage));
+    const pendingKind = pendingInitializationSave;
+    pendingInitializationSave = "";
+    if (upgradeNeeded || pendingKind) queueAutosave(upgradeNeeded ? "public-projection-upgrade" : pendingKind);
   });
   return { client, syncDeltas, autosave };
 }

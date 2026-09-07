@@ -8,7 +8,8 @@ import {
   insigniaVariantForFilter,
   partitionOutgoingLinesByAvailability,
 } from "../v2/assets/trade_state.js";
-import { buildPublicTradeMatch, publicTradeMatchMessage } from "../v2/assets/share_matcher.js";
+import { buildPublicTradeMatch, publicOffersHaveInsigniaData, publicTradeMatchMessage } from "../v2/assets/share_matcher.js";
+import { cacheInventoryPayload, INVENTORY_SNAPSHOT_KEY } from "../v2/assets/inventory_source.js";
 
 const mixedCard = {
   code: "ARG10",
@@ -59,6 +60,42 @@ test("read-only matching filters only the shared collector's offers", () => {
   assert.deepEqual(offer.matchedCodes, ["FRA7"]);
 });
 
+test("an inventory refresh notifies cloud sharing only when its snapshot changes", () => {
+  const values = new Map();
+  const events = [];
+  class TestCustomEvent {
+    constructor(type, options) { this.type = type; this.detail = options.detail; }
+  }
+  const storage = {
+    getItem: (key) => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const eventTarget = {
+    CustomEvent: TestCustomEvent,
+    dispatchEvent: (event) => events.push(event),
+  };
+  const payload = { cards: { ARG10: mixedCard } };
+  cacheInventoryPayload(storage, payload, { sourceLabel: "scanner" }, { eventTarget });
+  cacheInventoryPayload(storage, payload, { sourceLabel: "scanner" }, { eventTarget });
+  assert.equal(values.get(INVENTORY_SNAPSHOT_KEY), JSON.stringify(payload));
+  assert.deepEqual(events.map((event) => [event.type, event.detail.kind]), [
+    ["panini:local-state-saved", "inventory-refresh"],
+  ]);
+});
+
+test("read-only matching explains stale shared projections instead of reporting no matches", () => {
+  const oldOffers = [{ code: "ARG10", quantity: 2 }];
+  assert.equal(publicOffersHaveInsigniaData(oldOffers), false);
+  const result = buildPublicTradeMatch({
+    value: "ARG10",
+    mode: "need",
+    offers: oldOffers,
+    insigniaFilter: "green",
+  });
+  assert.equal(result.status, "colour-unavailable");
+  assert.match(publicTradeMatchMessage(result), /colours have not reached this shared list/i);
+});
+
 test("all five V2 query surfaces mount the shared three-state filter", () => {
   const surfaces = ["collection", "inventory", "compare", "trade", "share"];
   for (const surface of surfaces) {
@@ -79,6 +116,9 @@ test("public projections are versioned for colour quantities", () => {
   assert.match(projectionSource, /variants:\s*\{/);
   assert.match(projectionSource, /green: insigniaQuantity/);
   assert.match(projectionSource, /blue: insigniaQuantity/);
-  assert.match(shareSource, /PUBLIC_PROJECTION_MODEL_VERSION = 3/);
+  assert.match(shareSource, /PUBLIC_PROJECTION_MODEL_VERSION = 4/);
   assert.match(shareSource, /modelVersion: PUBLIC_PROJECTION_MODEL_VERSION/);
+  const cloudSource = readFileSync(new URL("../v2/assets/cloud_sync.js", import.meta.url), "utf8");
+  assert.match(cloudSource, /pendingInitializationSave = kind/);
+  assert.match(cloudSource, /if \(upgradeNeeded \|\| pendingKind\) queueAutosave/);
 });

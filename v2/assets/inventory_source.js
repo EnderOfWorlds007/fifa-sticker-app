@@ -40,7 +40,7 @@ export async function loadInventoryPayload(options = {}) {
       cacheInventoryPayload(storage, selected.payload, {
         cachedAt: now(),
         sourceLabel: selected.source.label,
-      });
+      }, { eventTarget: options.eventTarget || globalThis });
     }
     return { payload: selected.payload, source: selected.source };
   }
@@ -74,10 +74,20 @@ function inventoryTimestamp(payload) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function cacheInventoryPayload(storage, payload, meta) {
+export function cacheInventoryPayload(storage, payload, meta, { eventTarget = globalThis } = {}) {
   try {
-    storage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(payload));
+    const serialized = JSON.stringify(payload);
+    const changed = storage.getItem(INVENTORY_SNAPSHOT_KEY) !== serialized;
+    storage.setItem(INVENTORY_SNAPSHOT_KEY, serialized);
     storage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify(meta));
+    if (changed && typeof eventTarget?.dispatchEvent === "function") {
+      const EventConstructor = eventTarget.CustomEvent || globalThis.CustomEvent;
+      if (typeof EventConstructor === "function") {
+        eventTarget.dispatchEvent(new EventConstructor("panini:local-state-saved", {
+          detail: { kind: "inventory-refresh" },
+        }));
+      }
+    }
   } catch {
     // Inventory reads should still work when browser storage is unavailable.
   }
