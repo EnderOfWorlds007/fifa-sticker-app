@@ -9,10 +9,10 @@ import {
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6fbb7fadf697";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6fbb7fadf697";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-6fbb7fadf697";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-6fbb7fadf697";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-cf1e606d819a";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-cf1e606d819a";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-cf1e606d819a";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-cf1e606d819a";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -74,6 +74,7 @@ let lastInventoryPayload = null;
 let lastComparedText = "";
 let compareDirectionMode = "auto";
 let compareRequestId = 0;
+let publicShareRefreshRequested = false;
 const insigniaFilter = mountInsigniaFilter("#compareInsigniaFilter", {
   label: "My available card backs",
   help: "Green and blue refer to the insignia on the back of cards you can give.",
@@ -101,6 +102,7 @@ async function compare(mode = "offers") {
   summary.textContent = "Loading adjusted inventory...";
   try {
     const projection = await loadInventory();
+    requestPublicShareRefresh();
     if (requestId !== compareRequestId || text.value.trim() !== comparedValue) return;
     lastInventoryPayload = projection.inventoryPayload;
     const adjusted = projection.adjustedInventory;
@@ -141,6 +143,18 @@ async function compare(mode = "offers") {
     }
   } finally {
     if (requestId === compareRequestId) setDirectionButtonsDisabled(false);
+  }
+}
+
+function requestPublicShareRefresh() {
+  if (publicShareRefreshRequested) return;
+  publicShareRefreshRequested = true;
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent("panini:local-state-saved", {
+      detail: { kind: "compare-public-share-refresh" },
+    }));
+  } catch {
+    // A comparison should still work if optional cloud sharing is unavailable.
   }
 }
 
@@ -385,7 +399,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-6fbb7fadf697");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-cf1e606d819a");
 }
 
 function reservedQuantity(code) {

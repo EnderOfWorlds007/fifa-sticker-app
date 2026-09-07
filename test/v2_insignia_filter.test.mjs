@@ -15,6 +15,7 @@ import {
 } from "../v2/assets/trade_state.js";
 import { buildPublicTradeMatch, publicOffersHaveInsigniaData, publicTradeMatchMessage } from "../v2/assets/share_matcher.js";
 import { cacheInventoryPayload, INVENTORY_SNAPSHOT_KEY } from "../v2/assets/inventory_source.js";
+import { publicShareRefreshNeededOnPage } from "../v2/assets/public_share_refresh.js";
 
 const mixedCard = {
   code: "ARG10",
@@ -265,5 +266,16 @@ test("public projections are versioned for colour quantities", () => {
   assert.match(shareSource, /modelVersion: PUBLIC_PROJECTION_MODEL_VERSION/);
   const cloudSource = readFileSync(new URL("../v2/assets/cloud_sync.js", import.meta.url), "utf8");
   assert.match(cloudSource, /pendingInitializationSave = kind/);
-  assert.match(cloudSource, /if \(upgradeNeeded \|\| pendingKind\) queueAutosave/);
+  assert.match(cloudSource, /upgradeNeeded \|\| pageRefreshNeeded \|\| pendingKind/);
+});
+
+test("enabled shares republish automatically from Compare and Collection", () => {
+  const enabled = { enabled: true, token: "present" };
+  assert.equal(publicShareRefreshNeededOnPage(enabled, { pathname: "/fifa-sticker-app/v2/compare/" }), true);
+  assert.equal(publicShareRefreshNeededOnPage(enabled, { pathname: "/fifa-sticker-app/v2/collection/" }), true);
+  assert.equal(publicShareRefreshNeededOnPage(enabled, { pathname: "/fifa-sticker-app/v2/share/" }), false);
+  assert.equal(publicShareRefreshNeededOnPage({ enabled: false }, { pathname: "/fifa-sticker-app/v2/compare/" }), false);
+  const compareSource = readFileSync(new URL("../v2/assets/compare.js", import.meta.url), "utf8");
+  assert.match(compareSource, /compare-public-share-refresh/);
+  assert.match(compareSource, /if \(publicShareRefreshRequested\) return/);
 });
