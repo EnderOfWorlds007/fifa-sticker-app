@@ -1,8 +1,10 @@
 import {
   adjustedInventoryCsv,
+  insigniaQuantity,
   inventoryFreshnessSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e115ae4d55ae";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-e115ae4d55ae";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-e115ae4d55ae";
 
 const totalCards = document.querySelector("#inventoryTotalCards");
 const uniqueCodes = document.querySelector("#inventoryUniqueCodes");
@@ -19,6 +21,11 @@ let inventorySourceLabel = "local scanner server";
 let adjustedInventorySnapshot = null;
 let inventoryCacheMeta = null;
 let collectionModel = null;
+const insigniaFilter = mountInsigniaFilter("#inventoryInsigniaFilter", {
+  label: "Card back",
+  help: "Show saved cards with a green or blue insignia on the back.",
+  onChange: render,
+});
 
 function cardColour(type) {
   if (type === "united_edition") return "Green card";
@@ -83,6 +90,7 @@ function downloadAdjustedInventory() {
 function render() {
   const query = search.value.trim().toUpperCase();
   const visible = inventoryCards.filter((card) => {
+    if (insigniaQuantity(card, insigniaFilter?.value) <= 0) return false;
     if (!query) return true;
     return [card.code, card.team, card.name].some((value) => String(value || "").toUpperCase().includes(query));
   });
@@ -101,9 +109,13 @@ function render() {
 
 function inventoryCardDetail(card, captures) {
   const modelCard = collectionModel?.byCode?.[card.code];
+  const visibleQuantity = insigniaQuantity(card, insigniaFilter?.value);
+  const colour = insigniaFilter?.value === "both"
+    ? cardColour(card.back_insignia_type)
+    : `${insigniaFilter.value} backs`;
   const parts = [
-    `${card.count ?? 0} saved`,
-    cardColour(card.back_insignia_type),
+    `${visibleQuantity} saved`,
+    colour,
   ];
   if (modelCard?.inventory) {
     parts.push(`${modelCard.inventory.availableToTradeQuantity} trade-ready`);

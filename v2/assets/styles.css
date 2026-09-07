@@ -837,6 +837,33 @@
   color: #061312;
 }
 
+.insigniaFilter {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.insigniaFilterLabel {
+  color: var(--text);
+  font-weight: 850;
+}
+
+.insigniaFilterHelp {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.insigniaFilterButtons button[data-insignia-value="green"].active {
+  background: #28d17c;
+  color: #06130c;
+}
+
+.insigniaFilterButtons button[data-insignia-value="blue"].active {
+  background: #4fa3ff;
+  color: #06101a;
+}
+
 .collectionSortToggle {
   grid-template-columns: repeat(2, minmax(118px, 1fr));
 }

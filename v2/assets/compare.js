@@ -7,9 +7,10 @@ import {
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-d13e6b8f204a";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e115ae4d55ae";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-e115ae4d55ae";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-e115ae4d55ae";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-e115ae4d55ae";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -71,6 +72,13 @@ let lastInventoryPayload = null;
 let lastComparedText = "";
 let compareDirectionMode = "auto";
 let compareRequestId = 0;
+const insigniaFilter = mountInsigniaFilter("#compareInsigniaFilter", {
+  label: "My available card backs",
+  help: "Green and blue refer to the insignia on the back of cards you can give.",
+  onChange: () => {
+    if (text.value.trim()) compare(compareDirectionMode);
+  },
+});
 
 async function compare(mode = "offers") {
   const value = text.value.trim();
@@ -97,7 +105,7 @@ async function compare(mode = "offers") {
     const missing = missingCodes(projection);
     const directed = extractDirectedCodeOccurrences(value);
     const direction = resolveCompareDirection(directed, compareDirectionMode);
-    const giveResult = compareParsedCodes(direction.wants, adjusted, new Set());
+    const giveResult = compareParsedCodes(direction.wants, adjusted, new Set(), { insigniaFilter: insigniaFilter?.value });
     const needResult = compareParsedCodes(direction.offers, { cards: {} }, missing);
     const ambiguousResult = compareParsedCodes(directed.ambiguous, adjusted, missing);
     const result = annotateIncomingTradeRows(
@@ -221,8 +229,9 @@ function rows(items, type) {
 
 function rowDetail(item, type) {
   const parts = [];
-  if (type === "give") parts.push(`${item.available} available`);
+  if (type === "give") parts.push(`${item.available} ${insigniaFilter?.value === "both" ? "" : `${insigniaFilter.value} `}available`.replace(/\s+/g, " "));
   else if (type === "need") parts.push(item.incomingTradeQuantity ? "Still missing, but incoming" : "Still missing");
+  else if (insigniaFilter?.value !== "both" && item.card) parts.push(`No ${insigniaFilter.value} copy available`);
   else parts.push(item.incomingTradeQuantity ? "Parsed; incoming in another trade" : "Parsed but not available or needed");
   if (item.mentions > 1) parts.push(`mentioned ${item.mentions}x`);
   if (item.incomingTradeQuantity) parts.push(incomingTradeDetail(item));
@@ -277,7 +286,8 @@ function pendingIncomingByCode() {
 function replyFor(result) {
   const parts = [];
   if (result.canGive.length) {
-    parts.push(`I can give: ${groupCodes(result.canGive.map((item) => item.code))}.`);
+    const colour = insigniaFilter?.value === "both" ? "" : ` (${insigniaFilter.value} backs)`;
+    parts.push(`I can give${colour}: ${groupCodes(result.canGive.map((item) => item.code))}.`);
   }
   if (result.needFromThem.length) {
     parts.push(`I need: ${groupCodes(result.needFromThem.map((item) => item.code))}.`);
@@ -321,6 +331,7 @@ function buildTradeDraft() {
   const given = lastCompareResult.canGive.map((item) => ({
     code: item.code,
     quantity: Math.max(1, Math.min(Number(item.mentions || 1), Number(item.available || 1))),
+    ...(item.variant ? { variant: item.variant } : {}),
     available: item.available,
     owned: Number(lastInventoryPayload?.cards?.[item.code]?.count || item.available || 0),
     reserved: reservedQuantity(item.code),
@@ -340,7 +351,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-d13e6b8f204a");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-e115ae4d55ae");
 }
 
 function reservedQuantity(code) {
