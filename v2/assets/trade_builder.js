@@ -2,6 +2,8 @@ import {
   createTradeDraft,
   extractCodeOccurrences,
   loadLedger,
+  insigniaQuantity,
+  insigniaVariantForFilter,
   partitionOutgoingLinesByAvailability,
   saveLedger,
   sortCode,
@@ -12,12 +14,13 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e115ae4d55ae";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-d13e6b8f204a";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-e115ae4d55ae";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-e115ae4d55ae";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-e115ae4d55ae";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -107,6 +110,10 @@ let activeTradeId = null;
 let activeTradeStatus = null;
 let pendingIgnoredGivenLines = [];
 let pendingIgnoredReceivedLines = [];
+const insigniaFilter = mountInsigniaFilter("#tradeInsigniaFilter", {
+  label: "Outgoing card backs",
+  help: "Applies when you choose Add to I give. Incoming cards are unchanged.",
+});
 
 function loadTradeSeed() {
   const match = String(location.hash || "").match(/^#trade=(.+)$/);
@@ -376,11 +383,13 @@ function parsedGivenLines(occurrences) {
   const adjusted = currentInventoryProjection().adjustedInventory;
   const cards = adjusted.cards || {};
   return [...occurrences.entries()].map(([code, mentions]) => {
-    const available = Number(cards[code]?.count || 0);
+    const available = insigniaQuantity(cards[code], insigniaFilter?.value);
+    const variant = insigniaVariantForFilter(insigniaFilter?.value);
     return {
       code,
       quantity: Math.max(1, Number(mentions || 1)),
       available,
+      ...(variant ? { variant } : {}),
       owned: Number(inventorySnapshot?.cards?.[code]?.count || available || 0),
       reserved: reservedQuantity(code),
     };

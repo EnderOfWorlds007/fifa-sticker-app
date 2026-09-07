@@ -1,13 +1,14 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-d13e6b8f204a";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-d13e6b8f204a";
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-e115ae4d55ae";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-e115ae4d55ae";
+import { insigniaQuantity, sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e115ae4d55ae";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-e115ae4d55ae";
 import {
   buildPublicTradeMatch,
   publicTradeMatchMessage,
-} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-e115ae4d55ae";
 import {
   disclosureControlState,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-e115ae4d55ae";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -30,6 +31,15 @@ const matchText = document.querySelector("#shareMatchText");
 const copyMatchButton = document.querySelector("#shareCopyMatchButton");
 let payload = null;
 let catalogByCode = new Map();
+let selectedMatchMode = "";
+const insigniaFilter = mountInsigniaFilter("#shareInsigniaFilter", {
+  label: "Their offered card backs",
+  help: "Green and blue refer to the insignia on the back. Needed stickers are unchanged.",
+  onChange: () => {
+    render();
+    if (selectedMatchMode) showMatch(selectedMatchMode);
+  },
+});
 
 start();
 
@@ -62,13 +72,23 @@ function render() {
   const needs = (Array.isArray(payload?.needs) ? payload.needs : [])
     .map((code) => cardView(code, 1));
   const offers = (Array.isArray(payload?.offers) ? payload.offers : [])
-    .map((offer) => cardView(offer.code, offer.quantity));
+    .map((offer) => cardView(offer.code, insigniaQuantity(offer, insigniaFilter?.value)))
+    .filter((offer) => offer.quantity > 0);
   renderGroups(needsList, needs, { toggleButton: needsToggleAll });
   renderGroups(offersList, offers, { quantities: true, toggleButton: offersToggleAll });
   needsCount.textContent = `(${needs.length})`;
   offersCount.textContent = `(${offers.length})`;
   needsEmpty.hidden = needs.length > 0;
   offersEmpty.hidden = offers.length > 0;
+  if (!offers.length) {
+    const colour = insigniaFilter?.value;
+    const hasColourData = (payload?.offers || []).some((offer) => offer?.variants);
+    offersEmpty.textContent = colour === "both"
+      ? "No matching stickers available to trade."
+      : hasColourData
+        ? `No ${colour}-backed stickers available to trade.`
+        : "This shared list needs a refresh before it can be filtered by card back.";
+  }
 }
 
 function cardView(code, quantity) {
@@ -144,6 +164,7 @@ function showMatch(mode) {
     mode,
     needs: payload.needs,
     offers: payload.offers,
+    insigniaFilter: insigniaFilter?.value,
   });
   matchText.value = publicTradeMatchMessage(result);
   matchResult.dataset.status = result.status;
@@ -162,6 +183,7 @@ function resetMatch() {
 }
 
 function setSelectedMatchMode(mode) {
+  selectedMatchMode = mode;
   for (const [button, buttonMode] of [
     [matchOfferButton, "offer"],
     [matchNeedButton, "need"],

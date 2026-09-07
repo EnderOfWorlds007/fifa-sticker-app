@@ -1,12 +1,13 @@
 import {
   adjustedInventoryPayload,
+  insigniaQuantity,
   loadLedger,
   sortCode,
-} from "./trade_state.js?v=build-d13e6b8f204a";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-d13e6b8f204a";
-import { loadInventoryCacheMeta, loadInventoryPayload } from "./inventory_source.js?v=build-d13e6b8f204a";
-import { ensureImportedCollectionState, loadCollectionState } from "./collection_state.js?v=build-d13e6b8f204a";
-import { deriveResolvedCollectionModel } from "./collection_model.js?v=build-d13e6b8f204a";
+} from "./trade_state.js?v=build-e115ae4d55ae";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-e115ae4d55ae";
+import { loadInventoryCacheMeta, loadInventoryPayload } from "./inventory_source.js?v=build-e115ae4d55ae";
+import { ensureImportedCollectionState, loadCollectionState } from "./collection_state.js?v=build-e115ae4d55ae";
+import { deriveResolvedCollectionModel } from "./collection_model.js?v=build-e115ae4d55ae";
 
 export async function loadInventoryProjection(options = {}) {
   const catalog = options.catalog || await loadCatalogFallback();
@@ -82,9 +83,17 @@ export function selectNeededCodes(projection) {
 }
 
 export function selectAvailableTradeOffers(projection) {
+  const cards = projection?.adjustedInventory?.cards || {};
   return (Array.isArray(projection?.collectionModel?.cards) ? projection.collectionModel.cards : [])
     .filter((card) => card.inventory.availableToTradeQuantity > 0)
-    .map((card) => ({ code: card.code, quantity: card.inventory.availableToTradeQuantity }))
+    .map((card) => ({
+      code: card.code,
+      quantity: card.inventory.availableToTradeQuantity,
+      variants: {
+        green: insigniaQuantity(cards[card.code], "green"),
+        blue: insigniaQuantity(cards[card.code], "blue"),
+      },
+    }))
     .sort((a, b) => sortCode(a.code, b.code));
 }
 

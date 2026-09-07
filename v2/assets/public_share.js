@@ -1,10 +1,10 @@
 import {
   selectAvailableTradeOffers,
   selectNeededCodes,
-} from "./inventory_projection.js?v=build-d13e6b8f204a";
+} from "./inventory_projection.js?v=build-e115ae4d55ae";
 
 export const PUBLIC_SHARE_SETTINGS_KEY = "panini.publicShare.settings.v1";
-export const PUBLIC_PROJECTION_MODEL_VERSION = 2;
+export const PUBLIC_PROJECTION_MODEL_VERSION = 3;
 const TOKEN_PATTERN = /^PNP1_[A-Za-z0-9_-]{43}$/;
 const TOKEN_HASH_CONTEXT = "panini-public-share-token-v1:";
 
@@ -123,6 +123,7 @@ export function serializePublicTradeProjection({ catalog, inventoryProjection } 
   if (!model) throw new Error("Public serialization requires the unified inventory projection.");
   return {
     schemaVersion: 1,
+    modelVersion: PUBLIC_PROJECTION_MODEL_VERSION,
     catalog: {
       edition: String(catalog?.edition || ""),
       canonicalCount: Number(catalog?.canonical_count ?? model.summary.catalogCount),

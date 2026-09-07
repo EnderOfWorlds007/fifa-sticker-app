@@ -1,4 +1,4 @@
-const BUILD_ID = "build-d13e6b8f204a";
+const BUILD_ID = "build-e115ae4d55ae";
 const CACHE_NAME = `fifa-card-apps-fifa-sticker-app-v2-${BUILD_ID}`;
 const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}$/, "");
 const APP_SHELL_PATHS = [
@@ -26,6 +26,7 @@ const APP_SHELL_PATHS = [
   "/fifa-sticker-app/v2/assets/share.js",
   "/fifa-sticker-app/v2/assets/share_filter.js",
   "/fifa-sticker-app/v2/assets/share_matcher.js",
+  "/fifa-sticker-app/v2/assets/insignia_filter.js",
   "/fifa-sticker-app/v2/assets/collection_state.js",
   "/fifa-sticker-app/v2/assets/backup_restore.js",
   "/fifa-sticker-app/v2/assets/compare.js",

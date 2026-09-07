@@ -12,32 +12,34 @@ import {
   planBackupSource,
   parseBackupPayload,
   partitionOutgoingLinesByAvailability,
+  insigniaQuantity,
   saveLedger,
   storagePersistenceSummary,
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e115ae4d55ae";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-e115ae4d55ae";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-d13e6b8f204a";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-e115ae4d55ae";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-e115ae4d55ae";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-e115ae4d55ae";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-d13e6b8f204a";
-import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-d13e6b8f204a";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-e115ae4d55ae";
+import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-e115ae4d55ae";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-e115ae4d55ae";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -196,6 +198,11 @@ let inventoryProjection = null;
 let cards = startingMissingCards();
 let collectionCatalog = { cards, aliases: {} };
 let catalogSourceLabel = "hunt list";
+const insigniaFilter = mountInsigniaFilter("#collectionInsigniaFilter", {
+  label: "Card back",
+  help: "Filter saved cards by the green or blue insignia on the back.",
+  onChange: render,
+});
 
 function loadState() {
   return loadCollectionState();
@@ -445,8 +452,10 @@ function sortCode(a, b) {
 
 function visibleCards() {
   const model = currentCollectionModel();
+  const inventoryCards = currentInventoryProjection().adjustedInventory.cards || {};
   const query = searchInput.value.trim().toUpperCase().replace(/[-_]/g, " ");
   return model.cards.filter((card) => {
+    if (insigniaFilter?.value !== "both" && insigniaQuantity(inventoryCards[card.code], insigniaFilter.value) <= 0) return false;
     if (state.filter === "missing" && !card.missing) return false;
     if (state.filter === "collected" && card.missing) return false;
     if (!query) return true;

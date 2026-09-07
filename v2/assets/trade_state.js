@@ -3,6 +3,15 @@ export const COLLECTION_KEY = "panini.collectionTracker.v1";
 export const INVENTORY_SNAPSHOT_KEY = "panini.inventorySnapshot.v1";
 export const INVENTORY_CACHE_META_KEY = "panini.inventorySnapshotMeta.v1";
 export const LEGACY_TRADED_AWAY_KEY = "panini.tradeInventoryRemoved.v1";
+export const INSIGNIA_FILTERS = Object.freeze({
+  both: "both",
+  green: "green",
+  blue: "blue",
+});
+export const INSIGNIA_VARIANTS = Object.freeze({
+  green: "united_edition",
+  blue: "standard_fifa_licensed",
+});
 const LEGACY_TRANSACTION_ID = "legacy_traded_away_v1";
 const TRANSACTION_TRANSITIONS = {
   draft: new Set(["reserved", "completed", "cancelled"]),
@@ -484,21 +493,67 @@ export function tradeLineQuantityTotal(lines) {
   return normalizeLines(lines).reduce((sum, line) => sum + line.quantity, 0);
 }
 
+export function normalizeInsigniaFilter(value) {
+  return value === INSIGNIA_FILTERS.green || value === INSIGNIA_FILTERS.blue
+    ? value
+    : INSIGNIA_FILTERS.both;
+}
+
+export function insigniaVariantForFilter(value) {
+  return INSIGNIA_VARIANTS[normalizeInsigniaFilter(value)] || "";
+}
+
+export function insigniaQuantity(card, filter = INSIGNIA_FILTERS.both) {
+  const normalized = normalizeInsigniaFilter(filter);
+  if (normalized === INSIGNIA_FILTERS.both) {
+    return Math.max(0, Number(card?.count ?? card?.quantity ?? 0));
+  }
+  const publicQuantity = card?.variants?.[normalized];
+  if (publicQuantity != null) return Math.max(0, Number(publicQuantity || 0));
+  const variant = insigniaVariantForFilter(normalized);
+  const variantQuantity = card?.back_insignia_counts?.[variant];
+  if (variantQuantity != null) return Math.max(0, Number(variantQuantity || 0));
+  if (card?.back_insignia_type === variant) {
+    return Math.max(0, Number(card?.count ?? card?.quantity ?? 0));
+  }
+  return 0;
+}
+
 export function partitionOutgoingLinesByAvailability({ additions, existing = [], inventory } = {}) {
   const cards = inventory?.cards && typeof inventory.cards === "object" ? inventory.cards : {};
   const aliases = inventoryAliasMap(cards);
-  const used = new Map();
+  const usedTotal = new Map();
+  const usedPlain = new Map();
+  const usedVariant = new Map();
   for (const line of normalizeLines(existing).map((item) => canonicalizeInventoryLine(item, aliases))) {
-    used.set(line.code, (used.get(line.code) || 0) + line.quantity);
+    usedTotal.set(line.code, (usedTotal.get(line.code) || 0) + line.quantity);
+    if (line.variant) {
+      const key = `${line.code}:${line.variant}`;
+      usedVariant.set(key, (usedVariant.get(key) || 0) + line.quantity);
+    } else {
+      usedPlain.set(line.code, (usedPlain.get(line.code) || 0) + line.quantity);
+    }
   }
   return normalizeLinesWithMetadata(additions).map((item) => canonicalizeInventoryLine(item, aliases)).reduce((result, line) => {
-    const available = Math.max(0, Number(cards[line.code]?.count || 0));
-    const remaining = Math.max(0, available - (used.get(line.code) || 0));
+    const card = cards[line.code];
+    const filter = line.variant === INSIGNIA_VARIANTS.green
+      ? INSIGNIA_FILTERS.green
+      : line.variant === INSIGNIA_VARIANTS.blue
+        ? INSIGNIA_FILTERS.blue
+        : INSIGNIA_FILTERS.both;
+    const key = `${line.code}:${line.variant || ""}`;
+    const available = insigniaQuantity(card, filter);
+    const alreadyUsed = line.variant
+      ? (usedVariant.get(key) || 0) + (usedPlain.get(line.code) || 0)
+      : usedTotal.get(line.code) || 0;
+    const remaining = Math.max(0, available - alreadyUsed);
     const addableQuantity = Math.min(line.quantity, remaining);
     const ignoredQuantity = line.quantity - addableQuantity;
     if (addableQuantity > 0) {
       result.added.push({ ...line, quantity: addableQuantity });
-      used.set(line.code, (used.get(line.code) || 0) + addableQuantity);
+      usedTotal.set(line.code, (usedTotal.get(line.code) || 0) + addableQuantity);
+      if (line.variant) usedVariant.set(key, (usedVariant.get(key) || 0) + addableQuantity);
+      else usedPlain.set(line.code, (usedPlain.get(line.code) || 0) + addableQuantity);
     }
     if (ignoredQuantity > 0) result.ignored.push({ ...line, quantity: ignoredQuantity });
     return result;
@@ -859,7 +914,7 @@ export function variantLabel(value) {
     .join(" ");
 }
 
-export function compareParsedCodes(occurrences, adjustedInventory, missingCodes) {
+export function compareParsedCodes(occurrences, adjustedInventory, missingCodes, options = {}) {
   const cards = adjustedInventory?.cards && typeof adjustedInventory.cards === "object" ? adjustedInventory.cards : {};
   const aliases = inventoryAliasMap(cards);
   const missing = missingCodes instanceof Set ? missingCodes : new Set(missingCodes || []);
@@ -872,9 +927,10 @@ export function compareParsedCodes(occurrences, adjustedInventory, missingCodes)
     const row = {
       code,
       mentions,
-      available: card ? Number(card.count || 0) : 0,
+      available: card ? insigniaQuantity(card, options.insigniaFilter) : 0,
       needed: missing.has(code),
       card: card || null,
+      variant: insigniaVariantForFilter(options.insigniaFilter),
     };
     if (row.available > 0) canGive.push(row);
     if (row.needed) needFromThem.push(row);

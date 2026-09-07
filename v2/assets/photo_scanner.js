@@ -9,29 +9,29 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-e115ae4d55ae";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-d13e6b8f204a";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-d13e6b8f204a";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-e115ae4d55ae";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-e115ae4d55ae";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-e115ae4d55ae";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-d13e6b8f204a";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-d13e6b8f204a";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-d13e6b8f204a";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-e115ae4d55ae";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-e115ae4d55ae";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-e115ae4d55ae";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-e115ae4d55ae";
 import {
   classifyScannedCards,
   SCANNED_CARD_STATUS,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-d13e6b8f204a";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-e115ae4d55ae";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
