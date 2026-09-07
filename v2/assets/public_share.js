@@ -1,10 +1,10 @@
 import {
   selectAvailableTradeOffers,
   selectNeededCodes,
-} from "./inventory_projection.js?v=build-e115ae4d55ae";
+} from "./inventory_projection.js?v=build-248100b59333";
 
 export const PUBLIC_SHARE_SETTINGS_KEY = "panini.publicShare.settings.v1";
-export const PUBLIC_PROJECTION_MODEL_VERSION = 3;
+export const PUBLIC_PROJECTION_MODEL_VERSION = 4;
 const TOKEN_PATTERN = /^PNP1_[A-Za-z0-9_-]{43}$/;
 const TOKEN_HASH_CONTEXT = "panini-public-share-token-v1:";
 
