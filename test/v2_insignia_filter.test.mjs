@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  allocateInsigniaQuantities,
+  assignOutgoingVariants,
   compareParsedCodes,
   insigniaQuantity,
   insigniaVariantForFilter,
@@ -27,6 +29,31 @@ test("insignia filter maps green and blue to the scanner back variants", () => {
   assert.equal(insigniaQuantity(mixedCard, "both"), 5);
   assert.equal(insigniaQuantity(mixedCard, "green"), 2);
   assert.equal(insigniaQuantity(mixedCard, "blue"), 3);
+  assert.equal(insigniaQuantity(mixedCard, "prefer-green"), 5);
+  assert.equal(insigniaQuantity(mixedCard, "prefer-blue"), 5);
+});
+
+test("preference modes maximise their colour and then preserve coverage with the other colour", () => {
+  assert.deepEqual(allocateInsigniaQuantities(mixedCard, 4, "prefer-blue"), [
+    { quantity: 3, variant: "standard_fifa_licensed" },
+    { quantity: 1, variant: "united_edition" },
+  ]);
+  assert.deepEqual(allocateInsigniaQuantities(mixedCard, 4, "prefer-green"), [
+    { quantity: 2, variant: "united_edition" },
+    { quantity: 2, variant: "standard_fifa_licensed" },
+  ]);
+  const assigned = assignOutgoingVariants(
+    [{ code: "ARG10", quantity: 3 }],
+    { cards: { ARG10: mixedCard } },
+    {
+      existing: [{ code: "ARG10", quantity: 1, variant: "united_edition" }],
+      preferredVariant: "united_edition",
+    },
+  );
+  assert.deepEqual(assigned, [
+    { code: "ARG10", quantity: 1, variant: "united_edition" },
+    { code: "ARG10", quantity: 2, variant: "standard_fifa_licensed" },
+  ]);
 });
 
 test("compare limits cards I can give to the selected back colour", () => {
@@ -55,9 +82,32 @@ test("read-only matching filters only the shared collector's offers", () => {
   ];
   const green = buildPublicTradeMatch({ value: "ARG10 FRA7", mode: "need", offers, insigniaFilter: "green" });
   assert.deepEqual(green.matchedCodes, ["ARG10"]);
-  assert.match(publicTradeMatchMessage(green), /I need \(green backs\): ARG: 10/);
+  assert.match(publicTradeMatchMessage(green), /I need:\nGreen: ARG10\./);
   const offer = buildPublicTradeMatch({ value: "FRA7", mode: "offer", needs: ["FRA7"], offers, insigniaFilter: "green" });
   assert.deepEqual(offer.matchedCodes, ["FRA7"]);
+});
+
+test("read-only preference matching keeps coverage and produces colour-labelled copy text", () => {
+  const offers = [
+    { code: "ARG10", quantity: 5, variants: { green: 2, blue: 3 } },
+    { code: "FRA7", quantity: 1, variants: { green: 0, blue: 1 } },
+  ];
+  const green = buildPublicTradeMatch({
+    value: "ARG10 ×4, FRA7",
+    mode: "need",
+    offers,
+    insigniaFilter: "prefer-green",
+  });
+  assert.deepEqual(green.matchedCodes, ["ARG10", "FRA7"]);
+  assert.deepEqual(green.allocatedOffers, [
+    { code: "ARG10", quantity: 2, variant: "united_edition" },
+    { code: "ARG10", quantity: 2, variant: "standard_fifa_licensed" },
+    { code: "FRA7", quantity: 1, variant: "standard_fifa_licensed" },
+  ]);
+  assert.equal(
+    publicTradeMatchMessage(green),
+    "Hi! I found a match.\nI need:\nBlue: ARG10 ×2, FRA7.\nGreen: ARG10 ×2.",
+  );
 });
 
 test("an inventory refresh notifies cloud sharing only when its snapshot changes", () => {
@@ -96,7 +146,7 @@ test("read-only matching explains stale shared projections instead of reporting 
   assert.match(publicTradeMatchMessage(result), /colours have not reached this shared list/i);
 });
 
-test("all five V2 query surfaces mount the shared three-state filter", () => {
+test("all five V2 query surfaces mount the shared five-state filter", () => {
   const surfaces = ["collection", "inventory", "compare", "trade", "share"];
   for (const surface of surfaces) {
     const html = readFileSync(new URL(`../v2/${surface}/index.html`, import.meta.url), "utf8");
@@ -108,6 +158,8 @@ test("all five V2 query surfaces mount the shared three-state filter", () => {
   assert.match(filterSource, />Both</);
   assert.match(filterSource, />Green</);
   assert.match(filterSource, />Blue</);
+  assert.match(filterSource, />Prefer green</);
+  assert.match(filterSource, />Prefer blue</);
 });
 
 test("public projections are versioned for colour quantities", () => {

@@ -1,8 +1,15 @@
-import { extractCodeOccurrences, insigniaQuantity, normalizeInsigniaFilter, sortCode } from "./trade_state.js?v=build-248100b59333";
+import {
+  allocateInsigniaQuantities,
+  extractCodeOccurrences,
+  insigniaQuantity,
+  normalizeInsigniaFilter,
+  sortCode,
+} from "./trade_state.js?v=build-7fedfc50626d";
 
 export function buildPublicTradeMatch({ value, mode, needs = [], offers = [], insigniaFilter = "both" } = {}) {
   const normalizedFilter = normalizeInsigniaFilter(insigniaFilter);
-  const parsedCodes = [...extractCodeOccurrences(value).keys()].sort(sortCode);
+  const occurrences = extractCodeOccurrences(value);
+  const parsedCodes = [...occurrences.keys()].sort(sortCode);
   const colourUnavailable = mode === "need"
     && normalizedFilter !== "both"
     && !publicOffersHaveInsigniaData(offers);
@@ -13,11 +20,20 @@ export function buildPublicTradeMatch({ value, mode, needs = [], offers = [], in
     : needs.map((code) => String(code || "").toUpperCase());
   const eligible = new Set(eligibleCodes);
   const matchedCodes = parsedCodes.filter((code) => eligible.has(code));
+  const offersByCode = new Map(offers.map((offer) => [String(offer?.code || "").toUpperCase(), offer]));
+  const allocatedOffers = mode === "need"
+    ? matchedCodes.flatMap((code) => allocateInsigniaQuantities(
+      offersByCode.get(code),
+      Math.max(1, Number(occurrences.get(code) || 1)),
+      normalizedFilter,
+    ).map((allocation) => ({ code, ...allocation })))
+    : [];
   return {
     mode: mode === "need" ? "need" : "offer",
     insigniaFilter: normalizedFilter,
     parsedCodes,
     matchedCodes,
+    allocatedOffers,
     status: !parsedCodes.length
       ? "empty"
       : colourUnavailable
@@ -34,11 +50,32 @@ export function publicTradeMatchMessage(result) {
     return "Card-back colours have not reached this shared list yet. Ask its owner to open Compare or Collection once, then try again.";
   }
   if (result?.status !== "match") return "No matches found in this list. Try pasting another one.";
-  const colour = result.mode === "need" && result.insigniaFilter !== "both"
-    ? ` (${result.insigniaFilter} backs)`
-    : "";
-  const label = result.mode === "need" ? `I need${colour}` : "I can offer";
-  return `Hi! I found a match.\n${label}: ${groupCodes(result.matchedCodes)}.`;
+  if (result.mode !== "need") {
+    return `Hi! I found a match.\nI can offer: ${groupCodes(result.matchedCodes)}.`;
+  }
+  const colourLines = formattedColourLines(result.allocatedOffers || []);
+  return colourLines.length
+    ? `Hi! I found a match.\nI need:\n${colourLines.join("\n")}`
+    : `Hi! I found a match.\nI need: ${groupCodes(result.matchedCodes)}.`;
+}
+
+function formattedColourLines(lines) {
+  const groups = [
+    ["standard_fifa_licensed", "Blue"],
+    ["united_edition", "Green"],
+    ["", "Back not recorded"],
+  ];
+  return groups.flatMap(([variant, label]) => {
+    const matches = lines.filter((line) => (line.variant || "") === variant);
+    return matches.length ? [`${label}: ${formatAllocatedCodes(matches)}.`] : [];
+  });
+}
+
+function formatAllocatedCodes(lines) {
+  return [...lines]
+    .sort((a, b) => sortCode(a.code, b.code))
+    .map((line) => `${line.code}${line.quantity > 1 ? ` ×${line.quantity}` : ""}`)
+    .join(", ");
 }
 
 export function publicOffersHaveInsigniaData(offers = []) {

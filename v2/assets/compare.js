@@ -1,16 +1,18 @@
 import {
+  allocateInsigniaQuantities,
   compareParsedCodes,
   extractDirectedCodeOccurrences,
   extractCodeOccurrences,
+  insigniaFilterIsStrict,
   loadLedger,
   mergeCompareResults,
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-248100b59333";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-248100b59333";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-248100b59333";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7fedfc50626d";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7fedfc50626d";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-7fedfc50626d";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-7fedfc50626d";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -229,9 +231,13 @@ function rows(items, type) {
 
 function rowDetail(item, type) {
   const parts = [];
-  if (type === "give") parts.push(`${item.available} ${insigniaFilter?.value === "both" ? "" : `${insigniaFilter.value} `}available`.replace(/\s+/g, " "));
+  if (type === "give") {
+    const mode = insigniaFilter?.value || "both";
+    const label = mode.startsWith("prefer-") ? `${mode.replace("-", " ")} · ` : mode === "both" ? "" : `${mode} `;
+    parts.push(`${label}${item.available} available`);
+  }
   else if (type === "need") parts.push(item.incomingTradeQuantity ? "Still missing, but incoming" : "Still missing");
-  else if (insigniaFilter?.value !== "both" && item.card) parts.push(`No ${insigniaFilter.value} copy available`);
+  else if (insigniaFilterIsStrict(insigniaFilter?.value) && item.card) parts.push(`No ${insigniaFilter.value} copy available`);
   else parts.push(item.incomingTradeQuantity ? "Parsed; incoming in another trade" : "Parsed but not available or needed");
   if (item.mentions > 1) parts.push(`mentioned ${item.mentions}x`);
   if (item.incomingTradeQuantity) parts.push(incomingTradeDetail(item));
@@ -286,13 +292,43 @@ function pendingIncomingByCode() {
 function replyFor(result) {
   const parts = [];
   if (result.canGive.length) {
-    const colour = insigniaFilter?.value === "both" ? "" : ` (${insigniaFilter.value} backs)`;
-    parts.push(`I can give${colour}: ${groupCodes(result.canGive.map((item) => item.code))}.`);
+    const allocation = allocatedGiveLines(result.canGive);
+    const colourLines = formattedColourLines(allocation);
+    parts.push(colourLines.length
+      ? `I can give:\n${colourLines.join("\n")}`
+      : `I can give: ${groupCodes(result.canGive.map((item) => item.code))}.`);
   }
   if (result.needFromThem.length) {
     parts.push(`I need: ${groupCodes(result.needFromThem.map((item) => item.code))}.`);
   }
   return parts.length ? parts.join("\n") : "I do not see any matches from that list.";
+}
+
+function allocatedGiveLines(rows) {
+  return rows.flatMap((item) => allocateInsigniaQuantities(
+    item.card,
+    Math.max(1, Math.min(Number(item.mentions || 1), Number(item.available || 1))),
+    insigniaFilter?.value,
+  ).map((allocation) => ({ code: item.code, ...allocation })));
+}
+
+function formattedColourLines(lines) {
+  const groups = [
+    ["standard_fifa_licensed", "Blue"],
+    ["united_edition", "Green"],
+    ["", "Back not recorded"],
+  ];
+  return groups.flatMap(([variant, label]) => {
+    const matches = lines.filter((line) => (line.variant || "") === variant);
+    return matches.length ? [`${label}: ${formatAllocatedCodes(matches)}.`] : [];
+  });
+}
+
+function formatAllocatedCodes(lines) {
+  return [...lines]
+    .sort((a, b) => sortCode(a.code, b.code))
+    .map((line) => `${line.code}${line.quantity > 1 ? ` ×${line.quantity}` : ""}`)
+    .join(", ");
 }
 
 function groupCodes(codes) {
@@ -328,13 +364,11 @@ function clearResults() {
 }
 
 function buildTradeDraft() {
-  const given = lastCompareResult.canGive.map((item) => ({
-    code: item.code,
-    quantity: Math.max(1, Math.min(Number(item.mentions || 1), Number(item.available || 1))),
-    ...(item.variant ? { variant: item.variant } : {}),
-    available: item.available,
-    owned: Number(lastInventoryPayload?.cards?.[item.code]?.count || item.available || 0),
-    reserved: reservedQuantity(item.code),
+  const given = allocatedGiveLines(lastCompareResult.canGive).map((line) => ({
+    ...line,
+    available: lastCompareResult.canGive.find((item) => item.code === line.code)?.available || line.quantity,
+    owned: Number(lastInventoryPayload?.cards?.[line.code]?.count || line.quantity),
+    reserved: reservedQuantity(line.code),
   }));
   const received = lastCompareResult.needFromThem.map((item) => ({
     code: item.code,
@@ -351,7 +385,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-248100b59333");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-7fedfc50626d");
 }
 
 function reservedQuantity(code) {

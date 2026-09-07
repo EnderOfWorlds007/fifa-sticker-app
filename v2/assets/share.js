@@ -1,15 +1,15 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-248100b59333";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-248100b59333";
-import { insigniaQuantity, sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-248100b59333";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-248100b59333";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-7fedfc50626d";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-7fedfc50626d";
+import { insigniaQuantity, sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7fedfc50626d";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-7fedfc50626d";
 import {
   buildPublicTradeMatch,
   publicOffersHaveInsigniaData,
   publicTradeMatchMessage,
-} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-7fedfc50626d";
 import {
   disclosureControlState,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-7fedfc50626d";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -84,7 +84,7 @@ function render() {
   if (!offers.length) {
     const colour = insigniaFilter?.value;
     const hasColourData = publicOffersHaveInsigniaData(payload?.offers);
-    offersEmpty.textContent = colour === "both"
+    offersEmpty.textContent = colour === "both" || colour?.startsWith("prefer-")
       ? "No matching stickers available to trade."
       : hasColourData
         ? `No ${colour}-backed stickers available to trade.`

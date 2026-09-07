@@ -1,18 +1,24 @@
-import { normalizeInsigniaFilter } from "./trade_state.js?v=build-248100b59333";
+import { normalizeInsigniaFilter } from "./trade_state.js?v=build-7fedfc50626d";
 
 export function mountInsigniaFilter(target, options = {}) {
   const root = typeof target === "string" ? document.querySelector(target) : target;
   if (!root) return null;
   const label = options.label || "Card back";
-  const help = options.help || "Filter by the insignia colour on the back.";
+  const help = `${options.help || "Filter by the insignia colour on the back."} Prefer keeps every available match and uses that colour first.`;
   let value = normalizeInsigniaFilter(options.value);
   root.classList.add("insigniaFilter");
   root.innerHTML = `
     <span class="insigniaFilterLabel">${label}</span>
-    <div class="collectionSegmented insigniaFilterButtons" role="group" aria-label="${label}">
-      <button type="button" data-insignia-value="both">Both</button>
-      <button type="button" data-insignia-value="green">Green</button>
-      <button type="button" data-insignia-value="blue">Blue</button>
+    <div class="insigniaFilterButtons" role="group" aria-label="${label}">
+      <div class="collectionSegmented insigniaExactButtons">
+        <button type="button" data-insignia-value="both">Both</button>
+        <button type="button" data-insignia-value="green">Green</button>
+        <button type="button" data-insignia-value="blue">Blue</button>
+      </div>
+      <div class="collectionSegmented insigniaPreferenceButtons">
+        <button type="button" data-insignia-value="prefer-green">Prefer green</button>
+        <button type="button" data-insignia-value="prefer-blue">Prefer blue</button>
+      </div>
     </div>
     <span class="insigniaFilterHelp">${help}</span>
   `;

@@ -12,34 +12,35 @@ import {
   planBackupSource,
   parseBackupPayload,
   partitionOutgoingLinesByAvailability,
+  insigniaFilterIsStrict,
   insigniaQuantity,
   saveLedger,
   storagePersistenceSummary,
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-248100b59333";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7fedfc50626d";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-7fedfc50626d";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-248100b59333";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-7fedfc50626d";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-7fedfc50626d";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-7fedfc50626d";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-248100b59333";
-import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-248100b59333";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-248100b59333";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7fedfc50626d";
+import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-7fedfc50626d";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-7fedfc50626d";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -455,7 +456,7 @@ function visibleCards() {
   const inventoryCards = currentInventoryProjection().adjustedInventory.cards || {};
   const query = searchInput.value.trim().toUpperCase().replace(/[-_]/g, " ");
   return model.cards.filter((card) => {
-    if (insigniaFilter?.value !== "both" && insigniaQuantity(inventoryCards[card.code], insigniaFilter.value) <= 0) return false;
+    if (insigniaFilterIsStrict(insigniaFilter?.value) && insigniaQuantity(inventoryCards[card.code], insigniaFilter.value) <= 0) return false;
     if (state.filter === "missing" && !card.missing) return false;
     if (state.filter === "collected" && card.missing) return false;
     if (!query) return true;

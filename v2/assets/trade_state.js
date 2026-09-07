@@ -7,6 +7,8 @@ export const INSIGNIA_FILTERS = Object.freeze({
   both: "both",
   green: "green",
   blue: "blue",
+  preferGreen: "prefer-green",
+  preferBlue: "prefer-blue",
 });
 export const INSIGNIA_VARIANTS = Object.freeze({
   green: "united_edition",
@@ -494,18 +496,32 @@ export function tradeLineQuantityTotal(lines) {
 }
 
 export function normalizeInsigniaFilter(value) {
-  return value === INSIGNIA_FILTERS.green || value === INSIGNIA_FILTERS.blue
+  return Object.values(INSIGNIA_FILTERS).includes(value)
     ? value
     : INSIGNIA_FILTERS.both;
 }
 
+export function insigniaFilterIsStrict(value) {
+  const normalized = normalizeInsigniaFilter(value);
+  return normalized === INSIGNIA_FILTERS.green || normalized === INSIGNIA_FILTERS.blue;
+}
+
+export function preferredInsigniaVariant(value) {
+  const normalized = normalizeInsigniaFilter(value);
+  if (normalized === INSIGNIA_FILTERS.green || normalized === INSIGNIA_FILTERS.preferGreen) {
+    return INSIGNIA_VARIANTS.green;
+  }
+  return INSIGNIA_VARIANTS.blue;
+}
+
 export function insigniaVariantForFilter(value) {
-  return INSIGNIA_VARIANTS[normalizeInsigniaFilter(value)] || "";
+  const normalized = normalizeInsigniaFilter(value);
+  return insigniaFilterIsStrict(normalized) ? INSIGNIA_VARIANTS[normalized] : "";
 }
 
 export function insigniaQuantity(card, filter = INSIGNIA_FILTERS.both) {
   const normalized = normalizeInsigniaFilter(filter);
-  if (normalized === INSIGNIA_FILTERS.both) {
+  if (!insigniaFilterIsStrict(normalized)) {
     return Math.max(0, Number(card?.count ?? card?.quantity ?? 0));
   }
   const publicQuantity = card?.variants?.[normalized];
@@ -517,6 +533,36 @@ export function insigniaQuantity(card, filter = INSIGNIA_FILTERS.both) {
     return Math.max(0, Number(card?.count ?? card?.quantity ?? 0));
   }
   return 0;
+}
+
+export function allocateInsigniaQuantities(card, requestedQuantity, filter = INSIGNIA_FILTERS.both) {
+  const normalized = normalizeInsigniaFilter(filter);
+  const requested = Math.max(0, Number(requestedQuantity || 0));
+  if (!requested) return [];
+
+  const total = insigniaQuantity(card, INSIGNIA_FILTERS.both);
+  const known = new Map([
+    [INSIGNIA_VARIANTS.green, insigniaQuantity(card, INSIGNIA_FILTERS.green)],
+    [INSIGNIA_VARIANTS.blue, insigniaQuantity(card, INSIGNIA_FILTERS.blue)],
+  ]);
+  if (insigniaFilterIsStrict(normalized)) {
+    const variant = insigniaVariantForFilter(normalized);
+    const quantity = Math.min(requested, known.get(variant) || 0);
+    return quantity ? [{ quantity, variant }] : [];
+  }
+
+  const allocation = [];
+  let remaining = Math.min(requested, total);
+  const preferred = preferredInsigniaVariant(normalized);
+  const other = preferred === INSIGNIA_VARIANTS.green ? INSIGNIA_VARIANTS.blue : INSIGNIA_VARIANTS.green;
+  for (const variant of [preferred, other]) {
+    if (!remaining) break;
+    const quantity = Math.min(remaining, Math.max(0, known.get(variant) || 0));
+    if (quantity) allocation.push({ quantity, variant });
+    remaining -= quantity;
+  }
+  if (remaining) allocation.push({ quantity: remaining });
+  return allocation;
 }
 
 export function partitionOutgoingLinesByAvailability({ additions, existing = [], inventory } = {}) {
@@ -566,6 +612,20 @@ export function assignOutgoingVariants(lines, inventory, options = {}) {
   const aliases = inventoryAliasMap(cards);
   const remainingByCode = new Map();
   const output = [];
+
+  for (const line of normalizeLinesWithMetadata(options.existing || []).map((item) => canonicalizeInventoryLine(item, aliases))) {
+    const card = cards[line.code];
+    const counts = remainingVariantCounts(card?.back_insignia_counts, remainingByCode, line.code);
+    let remaining = line.quantity;
+    const variants = line.variant ? [line.variant] : orderedVariants(counts, preferredVariant);
+    for (const variant of variants) {
+      if (!remaining) break;
+      const available = Math.max(0, counts.get(variant) || 0);
+      const used = Math.min(remaining, available);
+      counts.set(variant, available - used);
+      remaining -= used;
+    }
+  }
 
   for (const line of normalizeLinesWithMetadata(lines).map((item) => canonicalizeInventoryLine(item, aliases))) {
     const card = cards[line.code];
