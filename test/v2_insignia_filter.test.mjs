@@ -6,9 +6,12 @@ import {
   allocateInsigniaQuantities,
   assignOutgoingVariants,
   compareParsedCodes,
+  insigniaFilterIsStrict,
   insigniaQuantity,
   insigniaVariantForFilter,
+  normalizeInsigniaFilter,
   partitionOutgoingLinesByAvailability,
+  preferredInsigniaVariant,
 } from "../v2/assets/trade_state.js";
 import { buildPublicTradeMatch, publicOffersHaveInsigniaData, publicTradeMatchMessage } from "../v2/assets/share_matcher.js";
 import { cacheInventoryPayload, INVENTORY_SNAPSHOT_KEY } from "../v2/assets/inventory_source.js";
@@ -53,6 +56,45 @@ test("preference modes maximise their colour and then preserve coverage with the
   assert.deepEqual(assigned, [
     { code: "ARG10", quantity: 1, variant: "united_edition" },
     { code: "ARG10", quantity: 2, variant: "standard_fifa_licensed" },
+  ]);
+});
+
+test("all five modes normalize without weakening the strict green and blue filters", () => {
+  assert.equal(normalizeInsigniaFilter("both"), "both");
+  assert.equal(normalizeInsigniaFilter("green"), "green");
+  assert.equal(normalizeInsigniaFilter("blue"), "blue");
+  assert.equal(normalizeInsigniaFilter("prefer-green"), "prefer-green");
+  assert.equal(normalizeInsigniaFilter("prefer-blue"), "prefer-blue");
+  assert.equal(normalizeInsigniaFilter("unexpected"), "both");
+  assert.equal(insigniaFilterIsStrict("green"), true);
+  assert.equal(insigniaFilterIsStrict("blue"), true);
+  assert.equal(insigniaFilterIsStrict("prefer-green"), false);
+  assert.equal(insigniaFilterIsStrict("prefer-blue"), false);
+  assert.equal(preferredInsigniaVariant("prefer-green"), "united_edition");
+  assert.equal(preferredInsigniaVariant("prefer-blue"), "standard_fifa_licensed");
+});
+
+test("both and preference allocations split quantities deterministically and retain unrecorded backs", () => {
+  assert.deepEqual(allocateInsigniaQuantities(mixedCard, 4, "both"), [
+    { quantity: 3, variant: "standard_fifa_licensed" },
+    { quantity: 1, variant: "united_edition" },
+  ]);
+  const partiallyRecordedCard = {
+    code: "ECU7",
+    count: 3,
+    back_insignia_type: "mixed",
+    back_insignia_counts: {
+      united_edition: 1,
+      standard_fifa_licensed: 1,
+    },
+  };
+  assert.deepEqual(allocateInsigniaQuantities(partiallyRecordedCard, 3, "prefer-green"), [
+    { quantity: 1, variant: "united_edition" },
+    { quantity: 1, variant: "standard_fifa_licensed" },
+    { quantity: 1 },
+  ]);
+  assert.deepEqual(allocateInsigniaQuantities(mixedCard, 4, "green"), [
+    { quantity: 2, variant: "united_edition" },
   ]);
 });
 
@@ -108,6 +150,36 @@ test("read-only preference matching keeps coverage and produces colour-labelled 
     publicTradeMatchMessage(green),
     "Hi! I found a match.\nI need:\nBlue: ARG10 ×2, FRA7.\nGreen: ARG10 ×2.",
   );
+});
+
+test("read-only prefer-blue maximises blue while retaining green-only matches", () => {
+  const offers = [
+    { code: "BEL19", quantity: 2, variants: { green: 1, blue: 1 } },
+    { code: "COL17", quantity: 1, variants: { green: 1, blue: 0 } },
+    { code: "ECU7", quantity: 2, variants: { green: 0, blue: 2 } },
+  ];
+  const result = buildPublicTradeMatch({
+    value: "ECU7 ×2, BEL19 ×2, COL17",
+    mode: "need",
+    offers,
+    insigniaFilter: "prefer-blue",
+  });
+  assert.deepEqual(result.matchedCodes, ["BEL19", "COL17", "ECU7"]);
+  assert.equal(
+    publicTradeMatchMessage(result),
+    "Hi! I found a match.\nI need:\nBlue: BEL19, ECU7 ×2.\nGreen: BEL19, COL17.",
+  );
+});
+
+test("Compare copy and trade drafts consume the shared colour allocation", () => {
+  const compareSource = readFileSync(new URL("../v2/assets/compare.js", import.meta.url), "utf8");
+  const tradeSource = readFileSync(new URL("../v2/assets/trade_builder.js", import.meta.url), "utf8");
+  assert.match(compareSource, /allocateInsigniaQuantities/);
+  assert.match(compareSource, /\["standard_fifa_licensed", "Blue"\]/);
+  assert.match(compareSource, /\["united_edition", "Green"\]/);
+  assert.match(compareSource, /const given = allocatedGiveLines/);
+  assert.match(tradeSource, /assignOutgoingVariants\(split\.added/);
+  assert.match(tradeSource, /preferredVariant: preferredInsigniaVariant/);
 });
 
 test("an inventory refresh notifies cloud sharing only when its snapshot changes", () => {
