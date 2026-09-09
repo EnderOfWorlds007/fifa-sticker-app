@@ -812,6 +812,82 @@
   color: var(--muted);
 }
 
+@media (min-width: 960px) {
+  .sharePage {
+    width: min(1200px, 100%);
+    min-height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.28fr);
+    column-gap: clamp(18px, 2.4vw, 30px);
+    row-gap: 12px;
+    align-items: start;
+    margin: 0 auto;
+    padding: clamp(24px, 3vw, 42px);
+  }
+
+  .sharePage > .shareHero {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 286px;
+    align-content: start;
+    margin: 0;
+    padding: 32px 28px 30px;
+  }
+
+  .sharePage > .shareHero h1 {
+    font-size: clamp(42px, 4.2vw, 54px);
+  }
+
+  .sharePage > #shareStatus {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .sharePage > #shareUpdatedAt {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .sharePage > .shareSearchPrompt {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: stretch;
+    padding: 26px;
+  }
+
+  .sharePage > .shareSearchPrompt textarea {
+    min-height: 174px;
+  }
+
+  .sharePage > .shareMatchActions {
+    grid-column: 2;
+    grid-row: 4;
+    margin-bottom: 4px;
+  }
+
+  .sharePage > .shareMatchResult {
+    grid-column: 1 / -1;
+    grid-row: 5;
+    margin-bottom: 4px;
+  }
+
+  .sharePage > #shareNeedsPanel,
+  .sharePage > #shareOffersPanel {
+    grid-row: 6;
+    align-self: start;
+    margin-top: 4px;
+    padding: 14px;
+  }
+
+  .sharePage > #shareNeedsPanel {
+    grid-column: 1;
+  }
+
+  .sharePage > #shareOffersPanel {
+    grid-column: 2;
+  }
+}
+
 .collectionSegmented {
   display: grid;
   grid-template-columns: repeat(3, minmax(84px, 1fr));
