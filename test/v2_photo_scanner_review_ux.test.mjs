@@ -4,6 +4,8 @@ import test from "node:test";
 
 const source = readFileSync(new URL("../v2/assets/photo_scanner.js", import.meta.url), "utf8");
 const backendSource = readFileSync(new URL("../v2/assets/ocr_backend.js", import.meta.url), "utf8");
+const reporterSource = readFileSync(new URL("../v2/assets/client_error_reports.js", import.meta.url), "utf8");
+const tradePasteSource = readFileSync(new URL("../v2/assets/trade_paste_box.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../v2/scanner/index.html", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../v2/assets/styles.css", import.meta.url), "utf8");
 
@@ -125,4 +127,16 @@ test("recognized scan results are grouped into compact rows with edition colours
   assert.match(styles, /\.compactScanEditionBar \.is-green[\s\S]*#35d07f/);
   assert.match(styles, /\.compactScanEditionBar \.is-unknown[\s\S]*#7d8a94/);
   assert.doesNotMatch(row, /dominantScannedCardStatus/);
+});
+
+test("all photo OCR entry points retain sanitized diagnostic references", () => {
+  assert.match(source, /await recordClientError\(error, \{ operationId \}/);
+  assert.match(source, /diagnosticReference\(error, recorded\.queued \? recorded\.report : null\)/);
+  assert.match(source, /waitForPhotoCodeJob\(job,/);
+  assert.match(tradePasteSource, /await recordClientError\(error, \{ operationId \}/);
+  assert.match(tradePasteSource, /waitForPhotoCodeJob\(job,/);
+  assert.match(backendSource, /flushPendingClientErrorReports/);
+  assert.match(backendSource, /addEventListener\?\.\("online"/);
+  assert.match(reporterSource, /const DEAD_LETTER_STORE_NAME = "rejected_reports"/);
+  assert.doesNotMatch(reporterSource, /error\.message|error\.stack/);
 });

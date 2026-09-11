@@ -10,35 +10,43 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6ac0f3b421de";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-758205c86f15";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-cf1e606d819a";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-cf1e606d819a";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-758205c86f15";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-758205c86f15";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-758205c86f15";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-cf1e606d819a";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-cf1e606d819a";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-cf1e606d819a";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-758205c86f15";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-758205c86f15";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-758205c86f15";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-758205c86f15";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-c14e7a92d5b8";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-758205c86f15";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-48d107a3be6c";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-758205c86f15";
+import {
+  CLIENT_ERROR_REPORTS_PATH,
+  diagnosticReference,
+  newOperationId,
+  OcrClientError,
+  recordClientError,
+  requestIdFrom,
+} from "/fifa-sticker-app/v2/assets/client_error_reports.js?v=build-758205c86f15";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -202,12 +210,14 @@ async function scanPhotos(files) {
   showPhotoReviewImage(imageUrl);
   const recognizedPayloads = [];
   let lastError = null;
+  let lastErrorMessage = "";
   try {
     for (let index = 0; index < selected.length; index += 1) {
+      const operationId = newOperationId();
       setScanProgress(`Scanning... ${index + 1}/${selected.length}`);
       try {
         const job = await createPhotoCodeJob(selected[index], { side: side.value || photoOcrSide() });
-        const payload = await waitForPhotoCodeJob(job.job_id, {
+        const payload = await waitForPhotoCodeJob(job, {
           onStatus: (message) => { setScanProgress(message); },
         });
         const resultPayload = payload.result || payload;
@@ -216,11 +226,16 @@ async function scanPhotos(files) {
         recognizedPayloads.push(resultPayload);
       } catch (error) {
         lastError = error;
+        lastErrorMessage = await recordedErrorMessage(error, operationId);
       }
     }
-    await renderResults(recognizedPayloads, { requestedCount: selected.length, lastError });
+    await renderResults(recognizedPayloads, {
+      requestedCount: selected.length,
+      lastError,
+      lastErrorMessage,
+    });
   } catch (error) {
-    status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
+    status.textContent = await recordedErrorMessage(error, newOperationId());
     codesList.replaceChildren(emptyRow("No result."));
   } finally {
     scanButton.disabled = false;
@@ -258,11 +273,13 @@ async function renderResults(payloads, options = {}) {
   result.value = text;
   copyButton.disabled = !text;
   const failedCount = Math.max(0, Number(options.requestedCount || payloads.length) - payloads.length);
-  const failureText = failedCount ? ` ${failedCount} photo${failedCount === 1 ? "" : "s"} could not be read.` : "";
+  const failureText = failedCount
+    ? ` ${failedCount} photo${failedCount === 1 ? "" : "s"} could not be read.${options.lastErrorMessage ? ` Last failure: ${options.lastErrorMessage}` : ""}`
+    : "";
   status.textContent = latestScanCodes.length
     ? `${latestScanCodes.length} cards recognized.${failureText}`
     : options.lastError instanceof Error
-      ? options.lastError.message
+      ? options.lastErrorMessage || options.lastError.message
       : "No cards recognized in those photos.";
   if (latestCaptureSummary && cameraDiagnostics) cameraDiagnostics.textContent = latestCaptureSummary;
   renderCollectionActions();
@@ -1150,6 +1167,7 @@ function saveBackendSettings() {
 }
 
 async function testBackend() {
+  const operationId = newOperationId();
   saveBackendSettings();
   const base = recognitionBaseUrl();
   if (!base) {
@@ -1160,8 +1178,30 @@ async function testBackend() {
   updateBackendStatus("Testing backend...", { mirror: true });
   try {
     const response = await fetch(recognitionUrl("/readyz"), { cache: "no-store" });
-    if (!response.ok) throw new Error(`Backend check failed (${response.status}).`);
-    const payload = await response.json();
+    if (!response.ok) {
+      throw new OcrClientError("The OCR backend health check failed.", {
+        code: response.status >= 500 ? "HTTP_SERVER_ERROR" : "HTTP_CLIENT_ERROR",
+        operation: "backend_check",
+        phase: "response",
+        retryable: response.status >= 500,
+        httpStatus: response.status,
+        requestId: requestIdFrom(response),
+      });
+    }
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (cause) {
+      throw new OcrClientError("The OCR backend returned an invalid health response.", {
+        code: "MALFORMED_RESPONSE",
+        operation: "backend_check",
+        phase: "decode",
+        retryable: false,
+        httpStatus: response.status,
+        requestId: requestIdFrom(response),
+        cause,
+      });
+    }
     const selectedSide = side?.value || photoOcrSide();
     if (payload.expected_side && payload.expected_side !== selectedSide) {
       updateBackendStatus(`Backend is ${payload.expected_side} OCR, but this page is set to ${selectedSide}.`, { mirror: true });
@@ -1174,11 +1214,38 @@ async function testBackend() {
         : "OCR backend connected. Enter the laptop OCR token below, then tap Save backend.";
     }
     updateBackendStatus(message, { mirror: true });
-  } catch {
-    updateBackendStatus("Could not reach that backend.", { mirror: true });
+  } catch (cause) {
+    const error = cause instanceof OcrClientError
+      ? cause
+      : new OcrClientError("Could not reach that OCR backend.", {
+        code: "NETWORK_UNREACHABLE",
+        operation: "backend_check",
+        phase: "request",
+        retryable: true,
+        cause,
+      });
+    updateBackendStatus(await recordedErrorMessage(error, operationId), { mirror: true });
   } finally {
     if (backendTestButton) backendTestButton.disabled = false;
   }
+}
+
+async function recordedErrorMessage(error, operationId) {
+  const recorded = await recordClientError(error, { operationId }, clientErrorTransport());
+  const message = error instanceof OcrClientError ? error.message : "Photo scan failed.";
+  const reference = diagnosticReference(error, recorded.queued ? recorded.report : null);
+  const referenceText = reference
+    ? ` Reference ${reference}.`
+    : " No diagnostic reference could be saved.";
+  const storageWarning = recorded.storageFailed ? " Diagnostic storage is unavailable." : "";
+  return `${message}${referenceText}${storageWarning}`;
+}
+
+function clientErrorTransport() {
+  return {
+    reportUrl: recognitionUrl(CLIENT_ERROR_REPORTS_PATH),
+    token: ocrToken(),
+  };
 }
 
 function updateBackendStatus(message, options = {}) {
