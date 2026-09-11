@@ -1674,16 +1674,82 @@
 }
 
 .photoReviewQueue {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   color: var(--muted);
   font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .photoReviewQueue {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .photoReviewQueue > span {
+    grid-column: 1 / -1;
+  }
 }
 
 .photoReviewInspector p {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.photoReviewDecision {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.photoReviewDecision > strong {
+  font-size: 14px;
+}
+
+.insigniaModelResult {
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.insigniaDecisionButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.insigniaDecisionButtons button {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 6px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  text-align: center;
+}
+
+.insigniaDecisionButtons button span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.insigniaDecisionButtons button[data-insignia-decision="blue"].selected {
+  border-color: rgba(74, 168, 255, 0.85);
+  background: rgba(74, 168, 255, 0.18);
+}
+
+.insigniaDecisionButtons button[data-insignia-decision="green"].selected {
+  border-color: rgba(0, 194, 168, 0.85);
+  background: rgba(0, 194, 168, 0.18);
+}
+
+.insigniaDecisionButtons button[data-insignia-decision="skip"].selected {
+  border-color: rgba(255, 196, 87, 0.8);
+  background: rgba(255, 196, 87, 0.12);
 }
 
 .photoReviewChoices {

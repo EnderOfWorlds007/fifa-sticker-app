@@ -4,6 +4,7 @@ const OCR_TOKEN_KEY = "panini.ocrToken.v1";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 export const PHOTO_CODE_JOBS_PATH = ["", "api", "photo-code-jobs"].join('/');
 export const PHOTO_CODE_REVIEW_LABELS_PATH = ["", "api", "photo-code-review", "labels"].join('/');
+export const BACK_INSIGNIA_REVIEW_LABELS_PATH = ["", "api", "back-insignia-review", "labels"].join('/');
 export const ALBUM_PAGE_JOBS_PATH = ["", "api", "album-page-jobs"].join('/');
 
 export function applyOcrBackendFromQuery() {
@@ -161,6 +162,17 @@ export async function savePhotoCodeReviewLabel(payload) {
   });
   if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
   if (!response.ok) throw new Error(`Review save failed (${response.status}).`);
+  return response.json();
+}
+
+export async function saveBackInsigniaReviewLabel(payload) {
+  const response = await fetch(recognitionUrl(BACK_INSIGNIA_REVIEW_LABELS_PATH), {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+  });
+  if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
+  if (!response.ok) throw new Error(`Back-colour feedback save failed (${response.status}).`);
   return response.json();
 }
 
