@@ -153,8 +153,8 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
     server.kill();
     chrome.kill();
     await Promise.allSettled([once(server, "exit"), once(chrome, "exit")]);
-    await rm(serverRoot, { recursive: true, force: true });
-    await rm(chromeProfile, { recursive: true, force: true });
+    await rm(serverRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(chromeProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
