@@ -141,6 +141,17 @@ test("adding a scan preserves its scan-time trading classification", () => {
   assert.match(body, /renderRecognizedCodeRows\(\)/);
 });
 
+test("adding a scan preserves recognized blue and green back insignias", () => {
+  assert.match(source, /scan_inventory\.js/);
+  const receivedBody = functionBody("currentScanReceivedLines");
+  assert.match(receivedBody, /slot\.code && slotStatus\(slot\) === "matched"/);
+  assert.match(receivedBody, /receivedLinesForScan\(\{ slots, fallbackCodes: latestScanCodes \}\)/);
+  const addBody = functionBody("addScanToCollection");
+  assert.match(addBody, /const received = currentScanReceivedLines\(\)/);
+  assert.match(addBody, /createTransaction\(loadLedger\(\), \{ kind: "received", received, given: \[\] \}\)/);
+  assert.match(functionBody("currentScanSignature"), /scanReceiptSignature\(currentScanReceivedLines\(\)\)/);
+});
+
 test("scanner counts matched review slots including duplicates before collection summary", () => {
   const renderBody = functionBody("renderResults");
   assert.match(renderBody, /const fallbackCodes = payloads\.flatMap/);
