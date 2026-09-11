@@ -426,8 +426,7 @@ function drawReviewSlot(slot, imageRect) {
 }
 
 function reviewSlotAppearance(slot, statusValue) {
-  if (statusValue === "review") return { color: "#ffb000", fillAlpha: 0.18, dashed: true };
-  if (statusValue !== "matched") return { color: "#ff4d4f", fillAlpha: 0.18, dashed: false };
+  if (statusValue !== "matched") return { color: "#ffb000", fillAlpha: 0.18, dashed: true };
   if (isBackScanSlot(slot) && slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.blue) {
     return { color: "#3fa9ff", fillAlpha: 0.20, dashed: false };
   }
@@ -547,8 +546,8 @@ function insigniaDecisionSection(slot) {
   const choices = document.createElement("div");
   choices.className = "insigniaDecisionButtons";
   const options = [
-    { decision: "blue", variant: SCAN_INSIGNIA_VARIANTS.blue, label: "Blue", detail: "Official Licensed" },
-    { decision: "green", variant: SCAN_INSIGNIA_VARIANTS.green, label: "Green", detail: "United Edition" },
+    { decision: "blue", variant: SCAN_INSIGNIA_VARIANTS.blue, label: "Blue", detail: "Rest of the World Edition" },
+    { decision: "green", variant: SCAN_INSIGNIA_VARIANTS.green, label: "Green", detail: "Swiss Edition" },
     { decision: "skip", variant: "no_clue", label: "Can’t tell", detail: "Leave colour unknown" },
   ];
   for (const option of options) {
