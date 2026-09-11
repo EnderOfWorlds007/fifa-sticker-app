@@ -97,6 +97,26 @@ export function scannedCardGroupDetail(group) {
   ].filter(Boolean).join(" · ");
 }
 
+export function scannedCardGroupSpareRange(group) {
+  const added = nonNegativeQuantity(group?.newTradingCards) + nonNegativeQuantity(group?.duplicateTradingCards);
+  if (!added) return null;
+  const after = group?.duplicateTradingCards
+    ? nonNegativeQuantity(group?.priorTradingQuantity) + 1
+    : nonNegativeQuantity(group?.newTradingCards);
+  return { before: Math.max(0, after - added), after };
+}
+
+export function compactScannedCardGroupDetail(group) {
+  const parts = [
+    group?.newForAlbum ? `Album +${nonNegativeQuantity(group.newForAlbum)}` : "",
+    group?.newTradingCards ? `First spare +${nonNegativeQuantity(group.newTradingCards)}` : "",
+    group?.duplicateTradingCards ? `Duplicate +${nonNegativeQuantity(group.duplicateTradingCards)}` : "",
+  ].filter(Boolean);
+  const spareRange = scannedCardGroupSpareRange(group);
+  if (spareRange) parts.push(`spares ${spareRange.before}→${spareRange.after}`);
+  return parts.join(" · ");
+}
+
 export function dominantScannedCardStatus(group) {
   if (group?.newForAlbum) return SCANNED_CARD_STATUS.NEW_FOR_ALBUM;
   if (group?.newTradingCards) return SCANNED_CARD_STATUS.NEW_TRADING_CARD;

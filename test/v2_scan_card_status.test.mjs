@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyScannedCards,
+  compactScannedCardGroupDetail,
   dominantScannedCardStatus,
   expandCodeOccurrences,
   groupScannedCardStatuses,
   SCANNED_CARD_STATUS,
   scannedCardGroupDetail,
+  scannedCardGroupSpareRange,
   scannedCardStatusSummaryText,
   summarizeScannedCardStatuses,
 } from "../v2/assets/scan_card_status.js";
@@ -33,6 +35,22 @@ test("missing repeated cards fill the album, create a first trading card, then b
     { code: "AUS16", status: NEW_TRADING_CARD, priorTradingQuantity: 0 },
     { code: "AUS16", status: DUPLICATE_TRADING_CARD, priorTradingQuantity: 1 },
   ]);
+});
+
+test("compact scan groups retain every outcome and show the spare-count change", () => {
+  const groups = groupScannedCardStatuses(classifyScannedCards(
+    ["AUS16", "AUS16", "AUS16"],
+    collectionModel([{ code: "AUS16", missing: true }]),
+  ));
+  assert.deepEqual(scannedCardGroupSpareRange(groups[0]), { before: 0, after: 2 });
+  assert.equal(compactScannedCardGroupDetail(groups[0]), "Album +1 · First spare +1 · Duplicate +1 · spares 0→2");
+
+  const duplicates = groupScannedCardStatuses(classifyScannedCards(
+    ["TUN8", "TUN8"],
+    collectionModel([{ code: "TUN8", missing: false, availableToTradeQuantity: 3 }]),
+  ));
+  assert.deepEqual(scannedCardGroupSpareRange(duplicates[0]), { before: 3, after: 5 });
+  assert.equal(compactScannedCardGroupDetail(duplicates[0]), "Duplicate +2 · spares 3→5");
 });
 
 test("an owned album card becomes a new trading card before later scan copies are duplicates", () => {

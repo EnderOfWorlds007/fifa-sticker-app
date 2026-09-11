@@ -86,7 +86,8 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       const result = await evaluate(cdp, `({
         upload: window.__cameraUpload,
         diagnostics: document.querySelector("#photoCameraDiagnostics").textContent,
-        cardStatus: document.querySelector("#photoScannerCodes li span")?.textContent,
+        cardStatus: document.querySelector("#photoScannerCodes .compactScanResultDetail")?.textContent,
+        editionUnknown: document.querySelector("#photoScannerCodes .compactScanEdition.is-unknown")?.textContent,
         tracksStopped: window.__cameraTracksStopped,
         torch: window.__cameraTorch,
         cameraButtonDisabled: document.querySelector("#photoScannerCameraButton").disabled,
@@ -97,7 +98,8 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       assert.match(result.diagnostics, /captured 1×1/);
       assert.match(result.diagnostics, /native still photo/);
       assert.match(result.diagnostics, /still-photo flash requested/);
-      assert.equal(result.cardStatus, "Duplicate trading card · 1 spare already available");
+      assert.equal(result.cardStatus, "Duplicate +1 · spares 1→2");
+      assert.equal(result.editionUnknown, "?1");
       assert.equal(result.tracksStopped, true);
       assert.equal(result.torch, false, "cleanup should turn the torch off");
       assert.equal(result.cameraButtonDisabled, false);

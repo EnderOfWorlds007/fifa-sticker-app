@@ -29,9 +29,11 @@ import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js
 import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-cf1e606d819a";
 import {
   classifyScannedCards,
-  SCANNED_CARD_STATUS,
+  compactScannedCardGroupDetail,
+  dominantScannedCardStatus,
+  groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-c14e7a92d5b8";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
@@ -806,7 +808,11 @@ function renderCollectionActions() {
 }
 
 function renderRecognizedCodeRows() {
-  codesList.replaceChildren(...(latestScanStatuses.length ? latestScanStatuses.map(codeRow) : [emptyRow("No recognized codes.")]));
+  const groups = groupScannedCardStatuses(latestScanStatuses);
+  const insigniasByCode = scanInsigniasByCode(currentScanReceivedLines());
+  codesList.replaceChildren(...(groups.length
+    ? groups.map((group) => compactCodeRow(group, insigniasByCode.get(group.code)))
+    : [emptyRow("No recognized codes.")]));
 }
 
 function addScanToCollection() {
@@ -1037,20 +1043,50 @@ function pointInPolygon(point, polygon) {
   return inside;
 }
 
-function codeRow(scanCard) {
+function compactCodeRow(group, insignias = { blue: 0, green: 0, unknown: 0 }) {
   const row = document.createElement("li");
-  const label = document.createElement("span");
-  row.className = `found ${scanCard.status}`;
-  if (scanCard.status === SCANNED_CARD_STATUS.NEW_FOR_ALBUM) label.textContent = "New for album";
-  if (scanCard.status === SCANNED_CARD_STATUS.NEW_TRADING_CARD) label.textContent = "New trading card · first spare";
-  if (scanCard.status === SCANNED_CARD_STATUS.DUPLICATE_TRADING_CARD) {
-    const prior = scanCard.priorTradingQuantity;
-    label.textContent = `Duplicate trading card · ${prior} spare${prior === 1 ? "" : "s"} already available`;
-  }
+  row.className = `compactScanResultRow found ${dominantScannedCardStatus(group)}`;
   const code = document.createElement("strong");
-  code.textContent = scanCard.code;
-  row.append(code, label);
+  code.className = "compactScanResultCode";
+  code.textContent = group.code;
+  if (group.quantity > 1) {
+    const quantity = document.createElement("small");
+    quantity.textContent = ` ×${group.quantity}`;
+    code.append(quantity);
+  }
+  const editions = document.createElement("span");
+  editions.className = "compactScanResultEditions";
+  appendEditionMarker(editions, "blue", insignias.blue, "Rest of the World Edition");
+  appendEditionMarker(editions, "green", insignias.green, "Swiss Edition");
+  appendEditionMarker(editions, "unknown", insignias.unknown, "Edition colour unknown");
+  const detail = document.createElement("span");
+  detail.className = "compactScanResultDetail";
+  detail.textContent = compactScannedCardGroupDetail(group);
+  row.append(code, editions, detail);
   return row;
+}
+
+function appendEditionMarker(container, colour, quantity, meaning) {
+  if (!quantity) return;
+  const marker = document.createElement("span");
+  marker.className = `compactScanEdition is-${colour}`;
+  marker.title = meaning;
+  marker.setAttribute("aria-label", `${quantity} ${meaning}`);
+  const prefix = colour === "blue" ? "B" : colour === "green" ? "G" : "?";
+  marker.textContent = `${prefix}${quantity}`;
+  container.append(marker);
+}
+
+function scanInsigniasByCode(lines) {
+  const groups = new Map();
+  for (const line of lines) {
+    const counts = groups.get(line.code) || { blue: 0, green: 0, unknown: 0 };
+    if (line.variant === SCAN_INSIGNIA_VARIANTS.blue) counts.blue += line.quantity;
+    else if (line.variant === SCAN_INSIGNIA_VARIANTS.green) counts.green += line.quantity;
+    else counts.unknown += line.quantity;
+    groups.set(line.code, counts);
+  }
+  return groups;
 }
 
 function emptyRow(text) {
