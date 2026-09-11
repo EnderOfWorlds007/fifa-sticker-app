@@ -114,9 +114,15 @@ test("recognized scan results are grouped into compact rows with edition colours
   assert.match(render, /groupScannedCardStatuses\(latestScanStatuses\)/);
   assert.match(render, /scanInsigniasByCode\(currentScanReceivedLines\(\)\)/);
   assert.match(row, /compactScannedCardGroupDetail\(group\)/);
+  assert.match(row, /appendEditionBarSegment\(editionBar, "blue"/);
+  assert.match(row, /appendEditionBarSegment\(editionBar, "green"/);
   assert.match(row, /appendEditionMarker\(editions, "blue"/);
   assert.match(row, /appendEditionMarker\(editions, "green"/);
   assert.match(styles, /#photoScannerCodes[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(styles, /\.compactScanEdition\.is-blue/);
   assert.match(styles, /\.compactScanEdition\.is-green/);
+  assert.match(styles, /\.compactScanEditionBar \.is-blue[\s\S]*#3fa9ff/);
+  assert.match(styles, /\.compactScanEditionBar \.is-green[\s\S]*#35d07f/);
+  assert.match(styles, /\.compactScanEditionBar \.is-unknown[\s\S]*#7d8a94/);
+  assert.doesNotMatch(row, /dominantScannedCardStatus/);
 });

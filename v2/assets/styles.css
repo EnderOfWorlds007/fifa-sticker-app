@@ -1668,12 +1668,43 @@
 }
 
 #photoScannerCodes .compactScanResultRow {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 2px 6px;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 7px 8px 7px 12px;
+  border-color: var(--line);
+  border-left-width: 1px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.compactScanEditionBar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  width: 5px;
+  background: #7d8a94;
+}
+
+.compactScanEditionBar span {
+  flex-basis: 0;
+  min-height: 2px;
+}
+
+.compactScanEditionBar .is-blue {
+  background: #3fa9ff;
+}
+
+.compactScanEditionBar .is-green {
+  background: #35d07f;
+}
+
+.compactScanEditionBar .is-unknown {
+  background: #7d8a94;
 }
 
 .compactScanResultCode {
