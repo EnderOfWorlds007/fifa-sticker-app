@@ -62,3 +62,14 @@ test("front scans do not ask users to classify an unseen back", () => {
   assert.match(functionBody("slotNeedsInsigniaReview"), /if \(!isBackScanSlot\(slot\)\) return false/);
   assert.match(functionBody("renderInspector"), /if \(isBackScanSlot\(slot\)\) reviewInspector\.append\(insigniaDecisionSection\(slot\)\)/);
 });
+
+test("iPhone gets a reliable single-photo picker without losing batch selection", () => {
+  assert.match(html, /id="photoScannerInput" type="file" accept="image\/\*" hidden/);
+  assert.doesNotMatch(html, /id="photoScannerInput"[^>]*multiple/);
+  assert.match(html, /id="photoScannerBatchInput" type="file" accept="image\/\*" multiple hidden/);
+  assert.match(html, /id="photoScannerButton"[^>]*>Choose photo<\/button>/);
+  assert.match(html, /id="photoScannerBatchButton"[^>]*>Select several<\/button>/);
+  assert.match(source, /picker\?\.addEventListener\("input", scanSelectedPhotos\)/);
+  assert.match(source, /picker\?\.addEventListener\("change", scanSelectedPhotos\)/);
+  assert.match(functionBody("scanSelectedPhotos"), /event\?\.currentTarget \|\| input/);
+});

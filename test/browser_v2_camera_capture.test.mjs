@@ -100,7 +100,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       const chooserPromise = withTimeout(cdp.waitFor("Page.fileChooserOpened"), 2000, "fallback file chooser did not open");
       await clickCenter(cdp, fallbackRect);
       const chooser = await chooserPromise;
-      assert.equal(chooser.mode, "selectMultiple");
+      assert.equal(chooser.mode, "selectSingle", "camera fallback should use the reliable single-photo picker on iPhone");
 
       await send(cdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/compare/` });
       await waitForExpression(cdp, `document.querySelector("#compareText")`);

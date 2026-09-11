@@ -122,7 +122,7 @@ test("light diagnostics never turn a request into a confirmed claim", () => {
   }), /Preview 1920×1080; captured 4032×3024; native still photo \(maximum resolution requested\); still-photo flash requested/);
 });
 
-test("scanner and shared paste boxes expose camera plus unchanged photo picker paths", () => {
+test("scanner exposes reliable single and batch photo paths alongside camera capture", () => {
   const scannerHtml = readFileSync("v2/scanner/index.html", "utf8");
   const scannerJs = readFileSync("v2/assets/photo_scanner.js", "utf8");
   const pasteBox = readFileSync("v2/assets/trade_paste_box.js", "utf8");
@@ -130,7 +130,8 @@ test("scanner and shared paste boxes expose camera plus unchanged photo picker p
   const serviceWorker = readFileSync("v2/sw.js", "utf8");
 
   assert.match(scannerHtml, /id="photoScannerCameraButton"[^>]*>Use Camera</);
-  assert.match(scannerHtml, /id="photoScannerButton"[^>]*>Use Photos</);
+  assert.match(scannerHtml, /id="photoScannerButton"[^>]*>Choose photo</);
+  assert.match(scannerHtml, /id="photoScannerBatchButton"[^>]*>Select several</);
   assert.match(scannerJs, /openCameraCapture/);
   assert.match(pasteBox, /cameraButton\.textContent = "Use Camera"/);
   assert.match(pasteBox, /photoButton\.textContent = "Use Photos"/);
