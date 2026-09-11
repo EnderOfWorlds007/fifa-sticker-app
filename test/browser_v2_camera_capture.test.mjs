@@ -81,6 +81,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       assert.match(livePreview, /still-photo flash ready/);
 
       await evaluate(cdp, `document.querySelector(".cameraTakeButton").click()`);
+      await waitForExpression(cdp, `window.__cameraUploadCount === 3`);
       await waitForExpression(cdp, `document.querySelector("#photoScannerResult").value === "TUR5"`);
       const result = await evaluate(cdp, `({
         upload: window.__cameraUpload,
