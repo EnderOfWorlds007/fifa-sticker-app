@@ -403,13 +403,51 @@ function drawReviewSlot(slot, imageRect) {
   reviewCtx.setLineDash([]);
   const center = polygonCenter(points);
   const label = slot.code || (statusValue === "review" ? "Review" : "Unknown");
-  reviewCtx.font = "800 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-  reviewCtx.textAlign = "center";
-  reviewCtx.fillStyle = "rgba(0, 0, 0, 0.74)";
-  reviewCtx.fillRect(center[0] - 48, center[1] - 11, 96, 22);
-  reviewCtx.fillStyle = "#fff";
-  reviewCtx.fillText(label.slice(0, 12), center[0], center[1] + 5);
+  const labelMetrics = reviewLabelMetrics(points, label, photoReviewView.focused);
+  if (labelMetrics) {
+    reviewCtx.clip();
+    reviewCtx.font = `800 ${labelMetrics.fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+    reviewCtx.textAlign = "center";
+    reviewCtx.textBaseline = "middle";
+    const measuredWidth = reviewCtx.measureText(label).width;
+    const backgroundWidth = Math.min(labelMetrics.maxWidth, measuredWidth + labelMetrics.paddingX * 2);
+    reviewCtx.fillStyle = "rgba(0, 0, 0, 0.74)";
+    reviewCtx.fillRect(
+      center[0] - backgroundWidth / 2,
+      center[1] - labelMetrics.height / 2,
+      backgroundWidth,
+      labelMetrics.height,
+    );
+    reviewCtx.fillStyle = "#fff";
+    reviewCtx.fillText(label, center[0], center[1], labelMetrics.maxTextWidth);
+  }
   reviewCtx.restore();
+}
+
+function reviewLabelMetrics(points, label, focused = false) {
+  const bounds = polygonBounds(points);
+  if (bounds.width < 18 || bounds.height < 18) return null;
+  const maxWidth = bounds.width * 0.86;
+  const maxHeight = bounds.height * 0.24;
+  const characterWidth = Math.max(4, String(label || "").length) * 0.62;
+  const fontSize = Math.max(5, Math.min(focused ? 18 : 13, maxHeight / 1.4, maxWidth / characterWidth));
+  const paddingX = Math.min(fontSize * 0.38, maxWidth * 0.08);
+  return {
+    fontSize,
+    paddingX,
+    maxWidth,
+    maxTextWidth: Math.max(1, maxWidth - paddingX * 2),
+    height: Math.min(maxHeight, fontSize * 1.4),
+  };
+}
+
+function polygonBounds(points) {
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  return {
+    width: Math.max(0, Math.max(...xs) - Math.min(...xs)),
+    height: Math.max(0, Math.max(...ys) - Math.min(...ys)),
+  };
 }
 
 function selectReviewSlotAtEvent(event) {

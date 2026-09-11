@@ -73,3 +73,16 @@ test("iPhone gets a reliable single-photo picker without losing batch selection"
   assert.match(source, /picker\?\.addEventListener\("change", scanSelectedPhotos\)/);
   assert.match(functionBody("scanSelectedPhotos"), /event\?\.currentTarget \|\| input/);
 });
+
+test("overview labels scale to and stay clipped inside each detected card", () => {
+  const metrics = functionBody("reviewLabelMetrics");
+  const draw = functionBody("drawReviewSlot");
+  assert.match(metrics, /maxWidth = bounds\.width \* 0\.86/);
+  assert.match(metrics, /maxHeight = bounds\.height \* 0\.24/);
+  assert.match(metrics, /maxWidth \/ characterWidth/);
+  assert.match(metrics, /focused \? 18 : 13/);
+  assert.match(draw, /reviewCtx\.clip\(\)/);
+  assert.match(draw, /Math\.min\(labelMetrics\.maxWidth, measuredWidth \+ labelMetrics\.paddingX \* 2\)/);
+  assert.match(draw, /fillText\(label, center\[0\], center\[1\], labelMetrics\.maxTextWidth\)/);
+  assert.doesNotMatch(draw, /fillRect\(center\[0\] - 48/);
+});
