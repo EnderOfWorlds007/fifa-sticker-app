@@ -1585,9 +1585,33 @@
 }
 
 .photoReviewLegendSwatch.isEstimated {
-  border-color: #ffd166;
-  border-style: dashed;
-  background: rgba(255, 209, 102, 0.10);
+  width: 20px;
+  height: 13px;
+  border: 0;
+  background: transparent;
+}
+
+.photoReviewLegendSwatch.isEstimated svg {
+  display: block;
+  width: 20px;
+  height: 13px;
+  overflow: visible;
+}
+
+.photoReviewLegendSwatch.isEstimated rect {
+  fill: rgba(255, 92, 244, 0.10);
+  stroke-linecap: round;
+  stroke-dasharray: 6 2 1 2;
+}
+
+.photoReviewLegendSwatch .estimatedSwatchKeyline {
+  stroke: rgba(0, 0, 0, 0.82);
+  stroke-width: 4;
+}
+
+.photoReviewLegendSwatch .estimatedSwatchStroke {
+  stroke: #ff5cf4;
+  stroke-width: 2;
 }
 
 .photoReviewLegendSwatch.isReview {

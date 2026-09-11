@@ -2,13 +2,13 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-9ebe4fcac0c5";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-42a76c25ccf2";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-42a76c25ccf2";
-import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-9ebe4fcac0c5";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-9ebe4fcac0c5";
+import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-9ebe4fcac0c5";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [

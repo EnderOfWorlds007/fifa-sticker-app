@@ -10,35 +10,35 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-9ebe4fcac0c5";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-42a76c25ccf2";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-42a76c25ccf2";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-9ebe4fcac0c5";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-9ebe4fcac0c5";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-9ebe4fcac0c5";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-42a76c25ccf2";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-42a76c25ccf2";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-42a76c25ccf2";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-9ebe4fcac0c5";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-9ebe4fcac0c5";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-9ebe4fcac0c5";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-9ebe4fcac0c5";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-9ebe4fcac0c5";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-42a76c25ccf2";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-9ebe4fcac0c5";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -249,9 +249,9 @@ function setScanProgress(message) {
 
 async function renderResults(payloads, options = {}) {
   const fallbackCodes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
+  await refreshScannerCollectionProjection();
   const reviewCodes = renderPhotoReview(payloads[0] || null);
   latestScanCodes = reviewCodes.length ? reviewCodes : normalizeCodeList(fallbackCodes);
-  await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   latestScanStatuses = classifyCurrentScan();
   const text = copyTextForCodes(latestScanCodes);
@@ -312,6 +312,7 @@ function normalizeReviewSlots(slots, payload = {}) {
       ...slot,
       id: String(slot.id || `slot-${index + 1}`),
       code: String(slot.code || "").toUpperCase(),
+      name: String(slot.name || reviewSlotCatalogName(slot.code) || "").trim(),
       original_code: String(slot.code || "").toUpperCase(),
       original_back_insignia_type: String(slot.back_insignia_type || "no_clue"),
       original_back_insignia_confidence: Number(slot.back_insignia_confidence || 0),
@@ -403,7 +404,11 @@ function drawReviewSlot(slot, imageRect) {
   const points = polygon.map(([x, y]) => [imageRect.x + x * imageRect.width, imageRect.y + y * imageRect.height]);
   if (points.length < 4) return;
   const selected = slot.id === photoReviewState.selectedSlotId;
-  const statusValue = slotNeedsReview(slot) ? "review" : slotStatus(slot);
+  const codeReviewRequired = slotNeedsCodeReview(slot);
+  const insigniaReviewRequired = slotNeedsInsigniaReview(slot);
+  const statusValue = codeReviewRequired || (insigniaReviewRequired && slot.geometry_status !== "estimated")
+    ? "review"
+    : slotStatus(slot);
   const appearance = reviewSlotAppearance(slot, statusValue);
   const color = appearance.color;
   reviewCtx.save();
@@ -415,21 +420,35 @@ function drawReviewSlot(slot, imageRect) {
   reviewCtx.closePath();
   reviewCtx.fill();
   reviewCtx.globalAlpha = 1;
-  reviewCtx.lineWidth = selected ? 4 : 2.5;
+  const dashPattern = appearance.dashPattern || (appearance.dashed ? [6, 4] : []);
+  if (appearance.keylineColor) {
+    reviewCtx.lineWidth = selected ? 7 : 5;
+    reviewCtx.strokeStyle = appearance.keylineColor;
+    reviewCtx.setLineDash(dashPattern);
+    reviewCtx.stroke();
+  }
+  reviewCtx.lineWidth = selected ? 4 : (appearance.lineWidth || 2.5);
   reviewCtx.strokeStyle = color;
-  if (appearance.dashed) reviewCtx.setLineDash([6, 4]);
+  reviewCtx.setLineDash(dashPattern);
   reviewCtx.stroke();
   reviewCtx.setLineDash([]);
   const center = polygonCenter(points);
-  const label = slot.code || (statusValue === "review" ? "Review" : "Unknown");
-  const labelMetrics = reviewLabelMetrics(points, label, photoReviewView.focused);
+  const label = reviewSlotLabel(slot, statusValue);
+  const labelMetrics = reviewLabelMetrics(points, label.primary, photoReviewView.focused, Boolean(label.secondary));
   if (labelMetrics) {
+    reviewCtx.save();
     reviewCtx.clip();
-    reviewCtx.font = `800 ${labelMetrics.fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
     reviewCtx.textAlign = "center";
     reviewCtx.textBaseline = "middle";
-    const measuredWidth = reviewCtx.measureText(label).width;
-    const backgroundWidth = Math.min(labelMetrics.maxWidth, measuredWidth + labelMetrics.paddingX * 2);
+    const primaryFont = `800 ${labelMetrics.fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+    const secondaryFont = `650 ${labelMetrics.secondaryFontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+    const primary = fitReviewCanvasText(label.primary, labelMetrics.maxTextWidth, primaryFont);
+    const secondary = fitReviewCanvasText(label.secondary, labelMetrics.maxTextWidth, secondaryFont);
+    reviewCtx.font = primaryFont;
+    const primaryWidth = reviewCtx.measureText(primary).width;
+    reviewCtx.font = secondaryFont;
+    const secondaryWidth = secondary ? reviewCtx.measureText(secondary).width : 0;
+    const backgroundWidth = Math.min(labelMetrics.maxWidth, Math.max(primaryWidth, secondaryWidth) + labelMetrics.paddingX * 2);
     reviewCtx.fillStyle = "rgba(0, 0, 0, 0.74)";
     reviewCtx.fillRect(
       center[0] - backgroundWidth / 2,
@@ -438,15 +457,78 @@ function drawReviewSlot(slot, imageRect) {
       labelMetrics.height,
     );
     reviewCtx.fillStyle = "#fff";
-    reviewCtx.fillText(label, center[0], center[1], labelMetrics.maxTextWidth);
+    reviewCtx.font = primaryFont;
+    const primaryY = secondary ? center[1] - labelMetrics.secondaryFontSize * 0.48 : center[1];
+    reviewCtx.fillText(primary, center[0], primaryY, labelMetrics.maxTextWidth);
+    if (secondary) {
+      reviewCtx.font = secondaryFont;
+      reviewCtx.fillStyle = "rgba(255, 255, 255, 0.88)";
+      reviewCtx.fillText(secondary, center[0], center[1] + labelMetrics.fontSize * 0.48, labelMetrics.maxTextWidth);
+    }
+    reviewCtx.restore();
+  }
+  if (insigniaReviewRequired && !codeReviewRequired && slot.geometry_status === "estimated") {
+    drawReviewAttentionBadge(points);
   }
   reviewCtx.restore();
+}
+
+function reviewSlotLabel(slot, statusValue = slotStatus(slot)) {
+  const primary = String(slot.code || (statusValue === "review" ? "Review" : "Unknown")).trim();
+  const name = String(slot.name || "").trim();
+  return {
+    primary,
+    secondary: name && name.toUpperCase() !== primary.toUpperCase() ? name : "",
+  };
+}
+
+function fitReviewCanvasText(value, maxWidth, font) {
+  let text = String(value || "").trim();
+  if (!text) return "";
+  reviewCtx.font = font;
+  if (reviewCtx.measureText(text).width <= maxWidth) return text;
+  while (text.length > 4 && reviewCtx.measureText(`${text}…`).width > maxWidth) text = text.slice(0, -1);
+  return `${text.trim()}…`;
+}
+
+function drawReviewAttentionBadge(points) {
+  const bounds = polygonBounds(points);
+  const radius = Math.max(6, Math.min(9, Math.min(bounds.width, bounds.height) * 0.12));
+  const [x, y] = reviewAttentionBadgeCenter(points);
+  reviewCtx.beginPath();
+  reviewCtx.arc(x, y, radius, 0, Math.PI * 2);
+  reviewCtx.fillStyle = "rgba(0, 0, 0, 0.82)";
+  reviewCtx.fill();
+  reviewCtx.lineWidth = 2;
+  reviewCtx.strokeStyle = "#ffb000";
+  reviewCtx.stroke();
+  reviewCtx.fillStyle = "#ffcf70";
+  reviewCtx.font = `900 ${Math.max(9, radius * 1.35)}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+  reviewCtx.textAlign = "center";
+  reviewCtx.textBaseline = "middle";
+  reviewCtx.fillText("!", x, y + 0.5);
+}
+
+function reviewAttentionBadgeCenter(points) {
+  const center = points.reduce(
+    (total, point) => [total[0] + point[0] / points.length, total[1] + point[1] / points.length],
+    [0, 0],
+  );
+  const vertex = points[0] || center;
+  return [vertex[0] * 0.55 + center[0] * 0.45, vertex[1] * 0.55 + center[1] * 0.45];
 }
 
 function reviewSlotAppearance(slot, statusValue) {
   if (statusValue !== "matched") return { color: "#ffb000", fillAlpha: 0.18, dashed: true };
   if (slot.geometry_status === "estimated") {
-    return { color: "#ffd166", fillAlpha: 0.10, dashed: true };
+    return {
+      color: "#ff5cf4",
+      fillAlpha: 0.06,
+      dashed: true,
+      dashPattern: [10, 4, 2, 4],
+      keylineColor: "rgba(0, 0, 0, 0.78)",
+      lineWidth: 3,
+    };
   }
   if (isBackScanSlot(slot) && slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.blue) {
     return { color: "#3fa9ff", fillAlpha: 0.20, dashed: false };
@@ -460,24 +542,128 @@ function reviewSlotAppearance(slot, statusValue) {
 function reviewSlotPolygon(slot) {
   const card = slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : [];
   const anchor = slot.normalized_code_anchor_box?.length >= 4 ? slot.normalized_code_anchor_box : [];
+  if (slot.geometry_status === "estimated" && card.length >= 4) {
+    if (!isPlausibleEstimatedReviewPolygon(card, anchor)) return anchor;
+    const calibrated = calibrateEstimatedReviewPolygon(card, photoReviewState.slots);
+    return isPlausibleEstimatedReviewPolygon(calibrated, anchor) ? calibrated : card;
+  }
   if (slot.geometry_status !== "resolved" && anchor.length >= 4) return anchor;
   return card.length >= 4 ? card : anchor;
 }
 
-function reviewLabelMetrics(points, label, focused = false) {
+function isPlausibleEstimatedReviewPolygon(card, anchor = []) {
+  if (!Array.isArray(card) || card.length !== 4) return false;
+  const points = card.map((point) => Array.isArray(point) ? [Number(point[0]), Number(point[1])] : [NaN, NaN]);
+  if (points.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y))) return false;
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  if (Math.min(...xs) < -0.05 || Math.max(...xs) > 1.05 || Math.min(...ys) < -0.05 || Math.max(...ys) > 1.05) return false;
+  const signedCrosses = points.map((point, index) => {
+    const next = points[(index + 1) % points.length];
+    const after = points[(index + 2) % points.length];
+    return (next[0] - point[0]) * (after[1] - next[1]) - (next[1] - point[1]) * (after[0] - next[0]);
+  });
+  const epsilon = 1e-6;
+  if (!signedCrosses.every((value) => value > epsilon) && !signedCrosses.every((value) => value < -epsilon)) return false;
+  const edges = points.map((point, index) => {
+    const next = points[(index + 1) % points.length];
+    return Math.hypot(next[0] - point[0], next[1] - point[1]);
+  });
+  const shortest = Math.min(...edges);
+  const longest = Math.max(...edges);
+  if (shortest < 0.025 || longest / shortest > 2.8) return false;
+  const polygonArea = Math.abs(points.reduce((total, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return total + point[0] * next[1] - next[0] * point[1];
+  }, 0) / 2);
+  if (polygonArea < 0.003 || polygonArea > 0.35) return false;
+  if (Array.isArray(anchor) && anchor.length >= 4) {
+    const anchorPoints = anchor.map((point) => [Number(point[0]), Number(point[1])]);
+    if (anchorPoints.some(([x, y]) => !Number.isFinite(x) || !Number.isFinite(y))) return false;
+    const anchorArea = Math.abs(anchorPoints.reduce((total, point, index) => {
+      const next = anchorPoints[(index + 1) % anchorPoints.length];
+      return total + point[0] * next[1] - next[0] * point[1];
+    }, 0) / 2);
+    if (anchorArea > 0 && polygonArea < anchorArea * 4) return false;
+    const anchorCenter = anchorPoints.reduce(
+      (total, point) => [total[0] + point[0] / anchorPoints.length, total[1] + point[1] / anchorPoints.length],
+      [0, 0],
+    );
+    let inside = false;
+    for (let index = 0, previous = points.length - 1; index < points.length; previous = index, index += 1) {
+      const current = points[index];
+      const prior = points[previous];
+      if (((current[1] > anchorCenter[1]) !== (prior[1] > anchorCenter[1]))
+        && anchorCenter[0] < ((prior[0] - current[0]) * (anchorCenter[1] - current[1])) / (prior[1] - current[1]) + current[0]) {
+        inside = !inside;
+      }
+    }
+    if (!inside) return false;
+  }
+  return true;
+}
+
+function calibrateEstimatedReviewPolygon(card, slots = []) {
+  if (!Array.isArray(card) || card.length < 4) return card;
+  const area = (points) => Math.abs(points.reduce((total, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return total + point[0] * next[1] - next[0] * point[1];
+  }, 0) / 2);
+  const center = (points) => points.reduce(
+    (total, point) => [total[0] + point[0] / points.length, total[1] + point[1] / points.length],
+    [0, 0],
+  );
+  const cardArea = area(card);
+  if (cardArea <= 0) return card;
+  const cardCenter = center(card);
+  const references = slots
+    .filter((candidate) => candidate.geometry_status === "resolved" && candidate.normalized_polygon?.length >= 4)
+    .map((candidate) => {
+      const candidateCenter = center(candidate.normalized_polygon);
+      return {
+        area: area(candidate.normalized_polygon),
+        distance: Math.hypot(candidateCenter[0] - cardCenter[0], candidateCenter[1] - cardCenter[1]),
+      };
+    })
+    .filter((candidate) => candidate.area > 0)
+    .sort((first, second) => first.distance - second.distance)
+    .slice(0, 4);
+  if (references.length < 2) return card;
+  const areas = references.map((candidate) => candidate.area).sort((first, second) => first - second);
+  const middle = Math.floor(areas.length / 2);
+  const targetArea = areas.length % 2 ? areas[middle] : (areas[middle - 1] + areas[middle]) / 2;
+  const rawScale = Math.sqrt(targetArea / cardArea);
+  if (rawScale >= 0.82 && rawScale <= 1.22) return card;
+  const scale = Math.max(0.65, Math.min(1.75, rawScale));
+  const scaled = card.map(([x, y]) => [
+    cardCenter[0] + (x - cardCenter[0]) * scale,
+    cardCenter[1] + (y - cardCenter[1]) * scale,
+  ]);
+  const xs = scaled.map((point) => point[0]);
+  const ys = scaled.map((point) => point[1]);
+  const shiftX = Math.max(0, -Math.min(...xs)) + Math.min(0, 1 - Math.max(...xs));
+  const shiftY = Math.max(0, -Math.min(...ys)) + Math.min(0, 1 - Math.max(...ys));
+  return scaled.map(([x, y]) => [x + shiftX, y + shiftY]);
+}
+
+function reviewLabelMetrics(points, label, focused = false, hasSecondary = false) {
   const bounds = polygonBounds(points);
   if (bounds.width < 18 || bounds.height < 18) return null;
   const maxWidth = bounds.width * 0.86;
   const maxHeight = bounds.height * 0.24;
   const characterWidth = Math.max(4, String(label || "").length) * 0.62;
   const fontSize = Math.max(5, Math.min(focused ? 18 : 13, maxHeight / 1.4, maxWidth / characterWidth));
+  const secondaryFontSize = Math.max(6, Math.min(focused ? 12 : 9, fontSize * 0.74));
   const paddingX = Math.min(fontSize * 0.38, maxWidth * 0.08);
   return {
     fontSize,
+    secondaryFontSize,
     paddingX,
     maxWidth,
     maxTextWidth: Math.max(1, maxWidth - paddingX * 2),
-    height: Math.min(maxHeight, fontSize * 1.4),
+    height: hasSecondary
+      ? Math.min(bounds.height * 0.36, fontSize * 1.15 + secondaryFontSize * 1.25 + 3)
+      : Math.min(maxHeight, fontSize * 1.4),
   };
 }
 
@@ -485,6 +671,10 @@ function polygonBounds(points) {
   const xs = points.map((point) => point[0]);
   const ys = points.map((point) => point[1]);
   return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
     width: Math.max(0, Math.max(...xs) - Math.min(...xs)),
     height: Math.max(0, Math.max(...ys) - Math.min(...ys)),
   };
@@ -553,7 +743,8 @@ function renderInspector() {
   save.textContent = "Set";
   const meta = document.createElement("p");
   meta.textContent = `${slotStatus(slot)} · ${formatConfidence(slot.confidence).replace("confidence", "code OCR")} · ${geometryLabel(slot.geometry_status)}`;
-  reviewInspector.replaceChildren(inspectorTitle(slot.code || "Unknown card"), meta);
+  const inspectorLabel = reviewSlotLabel(slot);
+  reviewInspector.replaceChildren(inspectorTitle([inspectorLabel.primary, inspectorLabel.secondary].filter(Boolean).join(" · ")), meta);
   identitySection.append(identityTitle, identityHelp);
   if (choices.childElementCount) identitySection.append(choices);
   identitySection.append(form);
@@ -652,10 +843,19 @@ function insigniaModelSummary(slot) {
 
 function geometryLabel(value) {
   if (value === "resolved") return "card boundary resolved";
-  if (value === "estimated") return "code accepted; card boundary estimated";
+  if (value === "estimated") return "code accepted; card outline estimated";
   if (value === "orientation_uncertain") return "card orientation uncertain";
   if (value === "code_only") return "code only; no complete card crop";
   return value || "geometry unknown";
+}
+
+function reviewSlotCatalogName(code) {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) return "";
+  const card = latestInventoryProjection?.catalog?.cards?.find(
+    (candidate) => String(candidate?.code || "").trim().toUpperCase() === normalized,
+  );
+  return String(card?.name || "").trim();
 }
 
 async function saveInspectorCode(event) {
@@ -672,6 +872,7 @@ async function saveInspectorCode(event) {
   try {
     await persistReviewLabel(slot, correctedCode);
     slot.code = correctedCode;
+    slot.name = reviewSlotCatalogName(correctedCode);
     slot.review_status = slot.code ? "matched" : "unreadable";
     slot.needs_user_help = !slot.code;
     slot.saved_review = true;

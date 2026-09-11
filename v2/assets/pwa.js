@@ -1,4 +1,4 @@
-export const V2_BUILD_ID = "build-42a76c25ccf2";
+export const V2_BUILD_ID = "build-9ebe4fcac0c5";
 const RELOAD_KEY = `fifa-v2-controller-reload-${V2_BUILD_ID}`;
 const statusElement = typeof document === "undefined" ? null : document.querySelector("[data-pwa-status]");
 const reloadRequested = new WeakSet();

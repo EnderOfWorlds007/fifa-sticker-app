@@ -5,7 +5,7 @@ import {
   insigniaQuantity,
   normalizeInsigniaFilter,
   sortCode,
-} from "./trade_state.js?v=build-42a76c25ccf2";
+} from "./trade_state.js?v=build-9ebe4fcac0c5";
 
 export function buildPublicTradeMatch({ value, mode, needs = [], offers = [], insigniaFilter = "both" } = {}) {
   const normalizedFilter = normalizeInsigniaFilter(insigniaFilter);
