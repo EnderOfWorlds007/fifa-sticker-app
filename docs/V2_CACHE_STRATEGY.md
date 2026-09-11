@@ -27,7 +27,7 @@ V2 also overlaps the legacy root worker scope. Root and V2 workers must never de
 ### Build identity
 
 - V2 uses one build identifier in the form `build-<12 lowercase hex characters>`.
-- The current deployed identifier is `build-cf1e606d819a`.
+- The current release-candidate identifier is `build-758205c86f15`.
 - The identifier appears consistently in V2 HTML asset URLs, JavaScript module imports, data URLs, `v2/assets/pwa.js`, `v2/sw.js`, cache tests, and the current recovery page.
 - Every deployable change to cached V2 assets gets a new identifier. Never reuse an identifier, even for a reverted or amended deployment.
 
@@ -113,10 +113,10 @@ Recovery is two-phase:
 7. Redirect to the scanner with the current build and a fresh nonce.
 8. If staging or activation fails, keep the old caches and show a retry action. Never destroy the working offline copy first.
 
-The current live recovery URL is:
+The release-candidate recovery URL is:
 
 ```text
-https://enderofworlds007.github.io/fifa-sticker-app/v2/cache-reset-build-cf1e606d819a/
+https://enderofworlds007.github.io/fifa-sticker-app/v2/cache-reset-build-758205c86f15/
 ```
 
 Create a new recovery pathname whenever the build changes and stale installed clients need an explicit escape route. Do not overwrite or reuse an older recovery pathname.
@@ -138,6 +138,10 @@ For a camera regression, ask the tester to confirm the visible scanner marker be
 ```text
 Camera build <current-suffix> ready
 ```
+
+The camera build marker is a component-specific diagnostic revision. It does not
+replace the canonical `build-<12 hex>` PWA identity; verify both values during a
+camera-related release.
 
 If that marker is current and the one-time recovery completed, treat the remaining behavior as an application/browser bug rather than assuming cache staleness again.
 

@@ -1,14 +1,23 @@
 import {
   createPhotoCodeJob,
+  ocrToken,
   recognitionBaseUrl,
+  recognitionUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-758205c86f15";
+import {
+  CLIENT_ERROR_REPORTS_PATH,
+  diagnosticReference,
+  newOperationId,
+  OcrClientError,
+  recordClientError,
+} from "/fifa-sticker-app/v2/assets/client_error_reports.js?v=build-758205c86f15";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-cf1e606d819a";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-cf1e606d819a";
-import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-758205c86f15";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-758205c86f15";
+import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-758205c86f15";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -284,13 +293,16 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
   const recognized = [];
   let failureCount = 0;
   let lastError = null;
+  let lastFailureReference = "";
+  let diagnosticStorageFailed = false;
   setPhotoProgress(button, status, "Preparing photos...");
   try {
     for (let index = 0; index < selected.length; index += 1) {
+      const operationId = newOperationId();
       setPhotoProgress(button, status, `Scanning... ${index + 1}/${selected.length}`);
       try {
         const job = await createPhotoCodeJob(selected[index]);
-        const payload = await waitForPhotoCodeJob(job.job_id, {
+        const payload = await waitForPhotoCodeJob(job, {
           onStatus: (message) => setPhotoProgress(button, status, message),
         });
         const result = payload.result || payload;
@@ -303,17 +315,32 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
       } catch (error) {
         failureCount += 1;
         lastError = error;
+        const recorded = await recordClientError(error, { operationId }, clientErrorTransport());
+        lastFailureReference = diagnosticReference(
+          error,
+          recorded.queued ? recorded.report : null,
+        ) || "";
+        diagnosticStorageFailed ||= recorded.storageFailed;
       }
     }
     if (!recognized.length) {
-      showCapabilityMessage(status, "Photo scan", lastError instanceof Error ? lastError.message : "No card numbers were found in those photos.");
+      const message = lastError instanceof OcrClientError
+        ? lastError.message
+        : "No card numbers were found in those photos.";
+      const reference = lastFailureReference ? ` Reference ${lastFailureReference}.` : "";
+      const storageWarning = diagnosticStorageFailed
+        ? " Diagnostic storage is unavailable; no additional local reference was saved."
+        : "";
+      showCapabilityMessage(status, "Photo scan", `${message}${reference}${storageWarning}`);
       return;
     }
     const recognizedText = recognized.join("\n");
     appendText(textarea, recognizedText);
     await options.onTextAcquired?.({ source: options.source || "photo", text: recognizedText });
     const success = `Filled card codes from ${recognized.length}/${selected.length} photo${selected.length === 1 ? "" : "s"}.`;
-    const failures = failureCount ? ` ${failureCount} photo${failureCount === 1 ? "" : "s"} could not be read.` : "";
+    const failures = failureCount
+      ? ` ${failureCount} photo${failureCount === 1 ? "" : "s"} could not be read.${lastFailureReference ? ` Last failure reference ${lastFailureReference}.` : ""}${diagnosticStorageFailed ? " Diagnostic storage was unavailable for at least one failure." : ""}`
+      : "";
     const captureSummary = options.captureSummary ? ` ${options.captureSummary}` : "";
     showCapabilityMessage(status, "Photo scan", `${success}${failures}${captureSummary}`);
   } catch (error) {
@@ -322,6 +349,13 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
     resetPhotoButton(button, options.buttonLabel);
     status.setAttribute("aria-busy", "false");
   }
+}
+
+function clientErrorTransport() {
+  return {
+    reportUrl: recognitionUrl(CLIENT_ERROR_REPORTS_PATH),
+    token: ocrToken(),
+  };
 }
 
 function setPhotoProgress(button, status, text) {

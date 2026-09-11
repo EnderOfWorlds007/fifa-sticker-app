@@ -1,3 +1,10 @@
+import {
+  CLIENT_ERROR_REPORTS_PATH,
+  flushClientErrorReports,
+  OcrClientError,
+  requestIdFrom,
+} from "/fifa-sticker-app/v2/assets/client_error_reports.js?v=build-758205c86f15";
+
 const config = window.PANINI_CONFIG || {};
 const RECOGNITION_URL_KEY = "panini.recognitionBaseUrl.v1";
 const OCR_TOKEN_KEY = "panini.ocrToken.v1";
@@ -87,18 +94,29 @@ export function saveOcrBackendSettings({ baseUrl = "", token = "" } = {}) {
 }
 
 export async function createPhotoCodeJob(file, { side = photoOcrSide() } = {}) {
-  const response = await fetch(recognitionUrl(PHOTO_CODE_JOBS_PATH), {
-    method: "POST",
-    headers: authHeaders({
-      "Content-Type": file.type || "application/octet-stream",
-      "X-Panini-Expected-Side": side,
-    }),
-    body: file,
-  });
-  if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
-  if (response.status === 409) throw new Error("That scanner backend does not serve the selected sticker side.");
-  if (!response.ok) throw new Error(`Upload failed (${response.status}).`);
-  return response.json();
+  let response;
+  try {
+    response = await fetch(recognitionUrl(PHOTO_CODE_JOBS_PATH), {
+      method: "POST",
+      headers: authHeaders({
+        "Content-Type": file.type || "application/octet-stream",
+        "X-Panini-Expected-Side": side,
+      }),
+      body: file,
+    });
+  } catch (cause) {
+    throw new OcrClientError("Could not reach the OCR backend.", {
+      code: "NETWORK_UNREACHABLE",
+      operation: "photo_job_create",
+      phase: "request",
+      retryable: true,
+      cause,
+    });
+  }
+  throwForPhotoHttpStatus(response, "photo_job_create");
+  const payload = await responseJson(response, "photo_job_create");
+  void flushPendingClientErrorReports();
+  return payload;
 }
 
 export async function createAlbumPageJob(file) {
@@ -136,23 +154,88 @@ export async function albumPageBackendReadiness() {
   };
 }
 
-export async function waitForPhotoCodeJob(jobId, { onStatus } = {}) {
-  if (!jobId) throw new Error("Backend did not return a job id.");
-  for (let attempt = 0; attempt < 90; attempt += 1) {
-    const response = await fetch(recognitionUrl(`${PHOTO_CODE_JOBS_PATH}/${encodeURIComponent(jobId)}`), {
-      cache: "no-store",
-      headers: authHeaders(),
+export async function waitForPhotoCodeJob(jobOrId, { onStatus } = {}) {
+  const job = typeof jobOrId === "object" && jobOrId !== null ? jobOrId : {};
+  const jobId = typeof jobOrId === "string" ? jobOrId : job.job_id;
+  const correlation = {
+    jobId,
+    uploadId: job.upload_id,
+    creationRequestId: job.creation_request_id,
+  };
+  if (!jobId) {
+    throw new OcrClientError("The OCR backend returned an invalid job.", {
+      code: "MALFORMED_RESPONSE",
+      operation: "photo_job_wait",
+      phase: "decode",
     });
-    if (response.status === 401 || response.status === 403) throw new Error("Laptop OCR token is missing or incorrect.");
-    if (!response.ok) throw new Error(`Recognition status failed (${response.status}).`);
-    const payload = await response.json();
+  }
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    let response;
+    try {
+      response = await fetch(recognitionUrl(`${PHOTO_CODE_JOBS_PATH}/${encodeURIComponent(jobId)}`), {
+        cache: "no-store",
+        headers: authHeaders(),
+      });
+    } catch (cause) {
+      throw new OcrClientError("Connection to the OCR backend was interrupted.", {
+        code: "NETWORK_UNREACHABLE",
+        operation: "photo_job_status",
+        phase: "poll",
+        retryable: true,
+        ...correlation,
+        requestId: correlation.creationRequestId,
+        attempt: attempt + 1,
+        cause,
+      });
+    }
+    throwForPhotoHttpStatus(response, "photo_job_status", { ...correlation, attempt: attempt + 1 });
+    const payload = await responseJson(response, "photo_job_status", { ...correlation, attempt: attempt + 1 });
+    correlation.uploadId = payload.upload_id || correlation.uploadId;
+    correlation.creationRequestId = payload.creation_request_id || correlation.creationRequestId;
     if (payload.status === "done") return payload;
-    if (payload.status === "error") throw new Error(payload.error || "Photo recognition failed.");
+    if (payload.status === "error") {
+      throw new OcrClientError("Photo recognition failed on the backend.", {
+        code: "JOB_FAILED",
+        operation: "photo_job_wait",
+        phase: "job",
+        retryable: false,
+        diagnosticId: payload.diagnostic_id,
+        requestId: requestIdFrom(response),
+        ...correlation,
+        attempt: attempt + 1,
+      });
+    }
     if (onStatus) onStatus(payload.status === "running" ? "Recognizing photo..." : "Waiting for recognizer...");
     await delay(1000);
   }
-  throw new Error("Recognition timed out.");
+  throw new OcrClientError("Photo recognition timed out.", {
+    code: "REQUEST_TIMEOUT",
+    operation: "photo_job_wait",
+    phase: "timeout",
+    retryable: true,
+    ...correlation,
+    requestId: correlation.creationRequestId,
+    attempt: 90,
+  });
 }
+
+export function flushPendingClientErrorReports() {
+  return flushClientErrorReports({
+    reportUrl: recognitionUrl(CLIENT_ERROR_REPORTS_PATH),
+    token: ocrToken(),
+  });
+}
+
+function schedulePendingClientErrorFlush() {
+  const schedule = globalThis.setTimeout;
+  if (typeof schedule !== "function") return;
+  schedule(() => {
+    void flushPendingClientErrorReports().catch(() => {});
+  }, 0);
+}
+
+globalThis.window?.addEventListener?.("online", schedulePendingClientErrorFlush);
+schedulePendingClientErrorFlush();
 
 export async function savePhotoCodeReviewLabel(payload) {
   const response = await fetch(recognitionUrl(PHOTO_CODE_REVIEW_LABELS_PATH), {
@@ -197,6 +280,67 @@ export async function waitForAlbumPageJob(jobId, { onStatus } = {}) {
 function authHeaders(headers = {}) {
   const token = ocrToken();
   return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+}
+
+function throwForPhotoHttpStatus(response, operation, context = {}) {
+  if (response.ok) return;
+  const fields = {
+    operation,
+    phase: "response",
+    httpStatus: response.status,
+    requestId: requestIdFrom(response) || context.creationRequestId,
+    jobId: context.jobId,
+    uploadId: context.uploadId,
+    attempt: context.attempt,
+  };
+  if (response.status === 401 || response.status === 403) {
+    throw new OcrClientError("Laptop OCR token is missing or incorrect.", {
+      ...fields,
+      code: ocrToken() ? "AUTH_REJECTED" : "AUTH_REQUIRED",
+      retryable: false,
+    });
+  }
+  if (response.status === 409 && operation === "photo_job_create") {
+    throw new OcrClientError("That OCR backend does not serve the selected sticker side.", {
+      ...fields,
+      code: "SIDE_UNAVAILABLE",
+      retryable: false,
+    });
+  }
+  if (response.status === 404 && operation === "photo_job_status") {
+    throw new OcrClientError("The OCR job is no longer available.", {
+      ...fields,
+      code: "JOB_MISSING",
+      retryable: false,
+    });
+  }
+  throw new OcrClientError(
+    response.status >= 500 ? "The OCR backend had an internal error." : "The OCR request was rejected.",
+    {
+      ...fields,
+      code: response.status >= 500 ? "HTTP_SERVER_ERROR" : "HTTP_CLIENT_ERROR",
+      retryable: response.status >= 500 || response.status === 429,
+    },
+  );
+}
+
+async function responseJson(response, operation, context = {}) {
+  try {
+    return await response.json();
+  } catch (cause) {
+    throw new OcrClientError("The OCR backend returned an invalid response.", {
+      code: "MALFORMED_RESPONSE",
+      operation,
+      phase: "decode",
+      retryable: false,
+      httpStatus: response.status,
+      requestId: requestIdFrom(response) || context.creationRequestId,
+      jobId: context.jobId,
+      uploadId: context.uploadId,
+      attempt: context.attempt,
+      cause,
+    });
+  }
 }
 
 function persistedValue(name) {
