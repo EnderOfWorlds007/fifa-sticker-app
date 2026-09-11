@@ -40,8 +40,10 @@ import {
 } from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-48d107a3be6c";
 
 const input = document.querySelector("#photoScannerInput");
+const batchInput = document.querySelector("#photoScannerBatchInput");
 const side = document.querySelector("#photoScannerSide");
 const scanButton = document.querySelector("#photoScannerButton");
+const batchButton = document.querySelector("#photoScannerBatchButton");
 const cameraButton = document.querySelector("#photoScannerCameraButton");
 const cameraDiagnostics = document.querySelector("#photoCameraDiagnostics");
 const copyButton = document.querySelector("#photoScannerCopyButton");
@@ -93,9 +95,13 @@ refreshScannerCollectionProjection().then(() => {
   renderCollectionActions();
   renderRecognizedCodeRows();
 });
-scanButton?.addEventListener("click", () => input?.click());
+scanButton?.addEventListener("click", () => openPhotoPicker(input));
+batchButton?.addEventListener("click", () => openPhotoPicker(batchInput));
 cameraButton?.addEventListener("click", captureCameraPhoto);
-input?.addEventListener("change", scanSelectedPhotos);
+for (const picker of [input, batchInput]) {
+  picker?.addEventListener("input", scanSelectedPhotos);
+  picker?.addEventListener("change", scanSelectedPhotos);
+}
 reviewImage?.addEventListener("load", () => drawPhotoReview());
 reviewStage?.addEventListener("click", selectReviewSlotAtEvent);
 reviewInspector?.addEventListener("submit", saveInspectorCode);
@@ -119,9 +125,16 @@ copyButton?.addEventListener("click", async () => {
   window.setTimeout(() => { copyButton.textContent = originalText || "Copy codes"; }, 1600);
 });
 
-async function scanSelectedPhotos() {
+function openPhotoPicker(picker) {
+  if (!picker || scanInFlight) return;
+  picker.value = "";
+  picker.click();
+}
+
+async function scanSelectedPhotos(event) {
   if (scanInFlight) return;
-  const files = [...(input?.files || [])];
+  const picker = event?.currentTarget || input;
+  const files = [...(picker?.files || [])];
   if (!files.length) return;
   latestCaptureSummary = "";
   if (cameraDiagnostics) cameraDiagnostics.textContent = "Using photo-library image; in-app camera diagnostics do not apply.";
@@ -130,7 +143,7 @@ async function scanSelectedPhotos() {
     await scanPhotos(files);
   } finally {
     scanInFlight = false;
-    if (input) input.value = "";
+    if (picker) picker.value = "";
   }
 }
 
@@ -138,7 +151,7 @@ async function captureCameraPhoto() {
   if (scanInFlight) return;
   const capture = await openCameraCapture({
     invoker: cameraButton,
-    onFallback: () => input?.click(),
+    onFallback: () => openPhotoPicker(input),
     onStatus: (message) => {
       if (cameraDiagnostics) cameraDiagnostics.textContent = message;
     },
@@ -164,6 +177,7 @@ async function scanPhotos(files) {
     return;
   }
   scanButton.disabled = true;
+  if (batchButton) batchButton.disabled = true;
   if (cameraButton) cameraButton.disabled = true;
   copyButton.disabled = true;
   result.value = "";
@@ -202,10 +216,11 @@ async function scanPhotos(files) {
     codesList.replaceChildren(emptyRow("No result."));
   } finally {
     scanButton.disabled = false;
+    if (batchButton) batchButton.disabled = false;
     if (cameraButton) cameraButton.disabled = false;
     scanButton.classList.remove("scanning");
     scanButton.setAttribute("aria-busy", "false");
-    scanButton.textContent = "Use Photos";
+    scanButton.textContent = "Choose photo";
   }
 }
 

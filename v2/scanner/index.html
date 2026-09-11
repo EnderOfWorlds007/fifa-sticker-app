@@ -24,7 +24,8 @@
         <option value="back">Back</option>
         <option value="front">Front</option>
       </select>
-      <input id="photoScannerInput" type="file" accept="image/*" multiple hidden data-paste-photo-input="true">
+      <input id="photoScannerInput" type="file" accept="image/*" hidden data-paste-photo-input="true">
+      <input id="photoScannerBatchInput" type="file" accept="image/*" multiple hidden>
       <details class="ocrBackendSettings">
         <summary>OCR backend</summary>
         <label>
@@ -43,9 +44,11 @@
       </details>
       <div class="buttonRow">
         <button id="photoScannerCameraButton" class="cameraCaptureButton" type="button">Use Camera</button>
-        <button id="photoScannerButton" class="photoUploadButton" type="button">Use Photos</button>
+        <button id="photoScannerButton" class="photoUploadButton" type="button">Choose photo</button>
+        <button id="photoScannerBatchButton" class="secondary" type="button">Select several</button>
         <button id="photoScannerCopyButton" class="secondary" type="button" disabled>Copy codes</button>
       </div>
+      <p class="hint">Choose photo returns as soon as you select one. Select several opens the batch picker.</p>
       <p id="photoCameraDiagnostics" class="hint" role="status" aria-live="polite">Camera build 248100b59333 ready. Diagnostics will show the actual resolution and flash/torch status. <a href="/fifa-sticker-app/v2/cache-reset-build-cf1e606d819a/">Refresh cached app</a>.</p>
     </section>
 
@@ -98,7 +101,7 @@
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-cf1e606d819a" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-6ac0f3b421de" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-b22f61e13d4a" type="module"></script>
   <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-cf1e606d819a" type="module"></script>
 </body>
 </html>
