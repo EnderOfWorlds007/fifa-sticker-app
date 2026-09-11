@@ -386,9 +386,10 @@ function drawReviewSlot(slot, imageRect) {
   if (points.length < 4) return;
   const selected = slot.id === photoReviewState.selectedSlotId;
   const statusValue = slotNeedsReview(slot) ? "review" : slotStatus(slot);
-  const color = statusValue === "matched" ? "#00c2a8" : statusValue === "review" ? "#ffb000" : "#ff4d4f";
+  const appearance = reviewSlotAppearance(slot, statusValue);
+  const color = appearance.color;
   reviewCtx.save();
-  reviewCtx.globalAlpha = statusValue === "matched" ? 0.22 : 0.18;
+  reviewCtx.globalAlpha = appearance.fillAlpha;
   reviewCtx.fillStyle = color;
   reviewCtx.beginPath();
   reviewCtx.moveTo(points[0][0], points[0][1]);
@@ -398,7 +399,7 @@ function drawReviewSlot(slot, imageRect) {
   reviewCtx.globalAlpha = 1;
   reviewCtx.lineWidth = selected ? 4 : 2.5;
   reviewCtx.strokeStyle = color;
-  if (statusValue === "review") reviewCtx.setLineDash([6, 4]);
+  if (appearance.dashed) reviewCtx.setLineDash([6, 4]);
   reviewCtx.stroke();
   reviewCtx.setLineDash([]);
   const center = polygonCenter(points);
@@ -422,6 +423,18 @@ function drawReviewSlot(slot, imageRect) {
     reviewCtx.fillText(label, center[0], center[1], labelMetrics.maxTextWidth);
   }
   reviewCtx.restore();
+}
+
+function reviewSlotAppearance(slot, statusValue) {
+  if (statusValue === "review") return { color: "#ffb000", fillAlpha: 0.18, dashed: true };
+  if (statusValue !== "matched") return { color: "#ff4d4f", fillAlpha: 0.18, dashed: false };
+  if (isBackScanSlot(slot) && slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.blue) {
+    return { color: "#3fa9ff", fillAlpha: 0.20, dashed: false };
+  }
+  if (isBackScanSlot(slot) && slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.green) {
+    return { color: "#35d07f", fillAlpha: 0.20, dashed: false };
+  }
+  return { color: "#a7b0bd", fillAlpha: 0.16, dashed: false };
 }
 
 function reviewLabelMetrics(points, label, focused = false) {
