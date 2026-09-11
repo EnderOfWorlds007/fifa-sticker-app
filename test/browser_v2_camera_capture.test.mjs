@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import test from "node:test";
 
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME = process.env.CHROME_BIN || (process.platform === "darwin"
+  ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  : "/usr/bin/google-chrome");
 const PORT = 8792;
 const DEBUG_PORT = 9332;
 
-test("V2 controlled camera sends its captured File through the existing OCR flow", async () => {
+test("V2 photo picker stays reusable and camera sends captured files through OCR", async () => {
   const serverRoot = await mkdtemp(join(tmpdir(), "fifa-v2-camera-server-"));
   await symlink(process.cwd(), join(serverRoot, "fifa-sticker-app"));
+  const photoPath = join(serverRoot, "sample.png");
+  await writeFile(photoPath, Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  ));
   const server = spawn("python3", ["-m", "http.server", String(PORT), "--bind", "127.0.0.1"], {
     cwd: serverRoot,
     stdio: ["ignore", "pipe", "pipe"],
@@ -23,6 +30,8 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
     `--remote-debugging-port=${DEBUG_PORT}`,
     `--user-data-dir=${chromeProfile}`,
     "--disable-gpu",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
     "--no-first-run",
     "--no-default-browser-check",
     "about:blank",
@@ -41,6 +50,28 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       await waitForExpression(cdp, `document.querySelector("#photoScannerCameraButton")`);
       await delay(500);
       await evaluate(cdp, installOcrMockSource());
+
+      await send(cdp, "Page.setInterceptFileChooserDialog", { enabled: true });
+      for (const expectedUploadCount of [1, 2]) {
+        const photoRect = await evaluate(cdp, `(() => {
+          const rect = document.querySelector("#photoScannerButton").getBoundingClientRect();
+          return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+        })()`);
+        const chooserPromise = withTimeout(cdp.waitFor("Page.fileChooserOpened"), 2000, "Choose photo did not open its native file input");
+        await clickCenter(cdp, photoRect);
+        const chooser = await chooserPromise;
+        assert.equal(chooser.mode, "selectSingle");
+        assert.ok(chooser.backendNodeId, "Choose photo should expose its native input");
+        await send(cdp, "DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [photoPath] });
+        await waitForExpression(cdp, `window.__cameraUploadCount === ${expectedUploadCount}`);
+        await waitForExpression(cdp, `document.querySelector("#photoScannerResult").value === "TUR5" && !document.querySelector("#photoScannerInput").disabled`);
+      }
+      const reusablePicker = await evaluate(cdp, `({
+        connected: document.querySelector("#photoScannerInput").isConnected,
+        value: document.querySelector("#photoScannerInput").value,
+        label: document.querySelector("#photoScannerButton").textContent,
+      })`);
+      assert.deepEqual(reusablePicker, { connected: true, value: "", label: "Choose photo" });
 
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraCaptureDialog")`);
@@ -79,7 +110,7 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       const iosPreview = await evaluate(cdp, `document.querySelector(".cameraCaptureStatus").textContent`);
       assert.match(iosPreview, /torch confirmed active/);
       await evaluate(cdp, `document.querySelector(".cameraTakeButton").click()`);
-      await waitForExpression(cdp, `window.__cameraUploadCount === 2`);
+      await waitForExpression(cdp, `window.__cameraUploadCount === 4`);
       const iosResult = await evaluate(cdp, `({
         nativeCalls: window.__nativeTakePhotoCalls,
         diagnostics: document.querySelector("#photoCameraDiagnostics").textContent,
@@ -89,7 +120,6 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
       assert.ok(iosResult.upload.size > 0);
       assert.match(iosResult.diagnostics, /iPhone\/iPad camera frame \(native still bypassed\)/);
 
-      await send(cdp, "Page.setInterceptFileChooserDialog", { enabled: true });
       await waitForExpression(cdp, `document.querySelector("#photoScannerStatus").textContent.includes("recognized") && !document.querySelector("#photoScannerCameraButton").disabled`);
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraFallbackButton")`);
@@ -124,8 +154,8 @@ test("V2 controlled camera sends its captured File through the existing OCR flow
     server.kill();
     chrome.kill();
     await Promise.allSettled([once(server, "exit"), once(chrome, "exit")]);
-    await rm(serverRoot, { recursive: true, force: true });
-    await rm(chromeProfile, { recursive: true, force: true });
+    await rm(serverRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(chromeProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -211,7 +241,7 @@ async function createPage(url) {
 }
 
 async function waitForHttp(url) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     try { if ((await fetch(url)).ok) return; } catch { /* retry */ }
     await delay(100);

@@ -95,8 +95,6 @@ refreshScannerCollectionProjection().then(() => {
   renderCollectionActions();
   renderRecognizedCodeRows();
 });
-scanButton?.addEventListener("click", () => openPhotoPicker(input));
-batchButton?.addEventListener("click", () => openPhotoPicker(batchInput));
 cameraButton?.addEventListener("click", captureCameraPhoto);
 for (const picker of [input, batchInput]) {
   picker?.addEventListener("input", scanSelectedPhotos);
@@ -177,7 +175,9 @@ async function scanPhotos(files) {
     return;
   }
   scanButton.disabled = true;
+  if (input) input.disabled = true;
   if (batchButton) batchButton.disabled = true;
+  if (batchInput) batchInput.disabled = true;
   if (cameraButton) cameraButton.disabled = true;
   copyButton.disabled = true;
   result.value = "";
@@ -216,7 +216,9 @@ async function scanPhotos(files) {
     codesList.replaceChildren(emptyRow("No result."));
   } finally {
     scanButton.disabled = false;
+    if (input) input.disabled = false;
     if (batchButton) batchButton.disabled = false;
+    if (batchInput) batchInput.disabled = false;
     if (cameraButton) cameraButton.disabled = false;
     scanButton.classList.remove("scanning");
     scanButton.setAttribute("aria-busy", "false");
