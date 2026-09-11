@@ -1544,6 +1544,57 @@
   font-size: 12px;
 }
 
+.photoReviewLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin: -3px 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  list-style: none;
+}
+
+.photoReviewLegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.photoReviewLegend strong {
+  color: var(--text);
+}
+
+.photoReviewLegendSwatch {
+  width: 18px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 2px solid #a7b0bd;
+  border-radius: 3px;
+  background: rgba(167, 176, 189, 0.16);
+}
+
+.photoReviewLegendSwatch.isBlue {
+  border-color: #3fa9ff;
+  background: rgba(63, 169, 255, 0.20);
+}
+
+.photoReviewLegendSwatch.isGreen {
+  border-color: #35d07f;
+  background: rgba(53, 208, 127, 0.20);
+}
+
+.photoReviewLegendSwatch.isReview {
+  border-color: #ffb000;
+  border-style: dashed;
+  background: rgba(255, 176, 0, 0.18);
+}
+
+.photoReviewLegendSwatch.isError {
+  border-color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.18);
+}
+
 .photoReviewToolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 44px 44px auto;

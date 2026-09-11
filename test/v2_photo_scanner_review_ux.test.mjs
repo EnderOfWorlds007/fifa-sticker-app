@@ -86,3 +86,19 @@ test("overview labels scale to and stay clipped inside each detected card", () =
   assert.match(draw, /fillText\(label, center\[0\], center\[1\], labelMetrics\.maxTextWidth\)/);
   assert.doesNotMatch(draw, /fillRect\(center\[0\] - 48/);
 });
+
+test("back-card outlines distinguish insignia variants and explain every review color", () => {
+  const appearance = functionBody("reviewSlotAppearance");
+  assert.match(appearance, /statusValue === "review"[^\n]*#ffb000[^\n]*dashed: true/);
+  assert.match(appearance, /statusValue !== "matched"[^\n]*#ff4d4f/);
+  assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.blue[\s\S]*#3fa9ff/);
+  assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.green[\s\S]*#35d07f/);
+  assert.match(functionBody("drawReviewSlot"), /reviewSlotAppearance\(slot, statusValue\)/);
+  assert.match(html, /aria-label="Card outline legend"/);
+  assert.match(html, /<strong>Blue<\/strong> Official Licensed/);
+  assert.match(html, /<strong>Green<\/strong> United Edition/);
+  assert.match(html, /<strong>Amber dashed<\/strong> Needs review/);
+  assert.match(html, /<strong>Red<\/strong> Unreadable or unmatched/);
+  assert.match(styles, /\.photoReviewLegendSwatch\.isBlue/);
+  assert.match(styles, /\.photoReviewLegendSwatch\.isReview/);
+});
