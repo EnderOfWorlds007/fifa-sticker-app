@@ -10,35 +10,35 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6ac0f3b421de";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-42a76c25ccf2";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-cf1e606d819a";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-cf1e606d819a";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-42a76c25ccf2";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-42a76c25ccf2";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-42a76c25ccf2";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-cf1e606d819a";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-cf1e606d819a";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-cf1e606d819a";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-42a76c25ccf2";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-42a76c25ccf2";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-42a76c25ccf2";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-42a76c25ccf2";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-c14e7a92d5b8";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-42a76c25ccf2";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-48d107a3be6c";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-42a76c25ccf2";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -356,7 +356,7 @@ function drawPhotoReview() {
 function reviewImageRect(baseImageRect, stageRect) {
   const slot = selectedSlot();
   if (!photoReviewView.focused || !slot) return baseImageRect;
-  const polygon = slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : slot.normalized_code_anchor_box;
+  const polygon = reviewSlotPolygon(slot);
   const points = polygon.map(([x, y]) => [baseImageRect.x + x * baseImageRect.width, baseImageRect.y + y * baseImageRect.height]);
   const xs = points.map((point) => point[0]);
   const ys = points.map((point) => point[1]);
@@ -399,7 +399,7 @@ function photoImageRect(rect) {
 }
 
 function drawReviewSlot(slot, imageRect) {
-  const polygon = slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : slot.normalized_code_anchor_box;
+  const polygon = reviewSlotPolygon(slot);
   const points = polygon.map(([x, y]) => [imageRect.x + x * imageRect.width, imageRect.y + y * imageRect.height]);
   if (points.length < 4) return;
   const selected = slot.id === photoReviewState.selectedSlotId;
@@ -445,6 +445,9 @@ function drawReviewSlot(slot, imageRect) {
 
 function reviewSlotAppearance(slot, statusValue) {
   if (statusValue !== "matched") return { color: "#ffb000", fillAlpha: 0.18, dashed: true };
+  if (slot.geometry_status === "estimated") {
+    return { color: "#ffd166", fillAlpha: 0.10, dashed: true };
+  }
   if (isBackScanSlot(slot) && slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.blue) {
     return { color: "#3fa9ff", fillAlpha: 0.20, dashed: false };
   }
@@ -452,6 +455,13 @@ function reviewSlotAppearance(slot, statusValue) {
     return { color: "#35d07f", fillAlpha: 0.20, dashed: false };
   }
   return { color: "#a7b0bd", fillAlpha: 0.16, dashed: false };
+}
+
+function reviewSlotPolygon(slot) {
+  const card = slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : [];
+  const anchor = slot.normalized_code_anchor_box?.length >= 4 ? slot.normalized_code_anchor_box : [];
+  if (slot.geometry_status !== "resolved" && anchor.length >= 4) return anchor;
+  return card.length >= 4 ? card : anchor;
 }
 
 function reviewLabelMetrics(points, label, focused = false) {
@@ -488,7 +498,7 @@ function selectReviewSlotAtEvent(event) {
   const point = [event.clientX - bounds.left, event.clientY - bounds.top];
   for (let index = photoReviewState.slots.length - 1; index >= 0; index -= 1) {
     const slot = photoReviewState.slots[index];
-    const polygon = (slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : slot.normalized_code_anchor_box)
+    const polygon = reviewSlotPolygon(slot)
       .map(([x, y]) => [imageRect.x + x * imageRect.width, imageRect.y + y * imageRect.height]);
     if (pointInPolygon(point, polygon)) {
       photoReviewState.selectedSlotId = slot.id;
@@ -642,6 +652,7 @@ function insigniaModelSummary(slot) {
 
 function geometryLabel(value) {
   if (value === "resolved") return "card boundary resolved";
+  if (value === "estimated") return "code accepted; card boundary estimated";
   if (value === "orientation_uncertain") return "card orientation uncertain";
   if (value === "code_only") return "code only; no complete card crop";
   return value || "geometry unknown";
