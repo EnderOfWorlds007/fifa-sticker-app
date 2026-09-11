@@ -93,6 +93,8 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       const result = await evaluate(cdp, `({
         upload: window.__cameraUpload,
         diagnostics: document.querySelector("#photoCameraDiagnostics").textContent,
+        reviewTitle: document.querySelector("#photoReviewInspector > strong")?.textContent,
+        estimatedLegend: document.querySelector(".photoReviewLegendSwatch.isEstimated")?.parentElement.textContent,
         cardStatus: document.querySelector("#photoScannerCodes .compactScanResultDetail")?.textContent,
         editionUnknown: document.querySelector("#photoScannerCodes .compactScanEdition.is-unknown")?.textContent,
         tracksStopped: window.__cameraTracksStopped,
@@ -105,6 +107,8 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       assert.match(result.diagnostics, /captured 1×1/);
       assert.match(result.diagnostics, /native still photo/);
       assert.match(result.diagnostics, /still-photo flash requested/);
+      assert.equal(result.reviewTitle, "TUR5 · Abdulkerim Bardakci");
+      assert.match(result.estimatedLegend, /Magenta dash-dot\s+Code accepted; card outline estimated/);
       assert.equal(result.cardStatus, "Duplicate +1 · spares 1→2");
       assert.equal(result.editionUnknown, "?1");
       assert.equal(result.tracksStopped, true);
@@ -171,7 +175,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-42a76c25ccf2", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-9ebe4fcac0c5", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
@@ -204,6 +208,7 @@ function cameraMockSource() {
     HTMLVideoElement.prototype.play = async function () {};
     HTMLCanvasElement.prototype.getContext = () => new Proxy({}, {
       get(target, property) {
+        if (property === "measureText") return (value) => ({ width: String(value || "").length * 8 });
         if (!(property in target)) target[property] = () => {};
         return target[property];
       },
@@ -236,7 +241,24 @@ function installOcrMockSource() {
         return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: "camera-job", status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
       }
       if (String(url).includes("/api/photo-code-jobs/camera-job")) {
-        return Promise.resolve(new Response(JSON.stringify({ status: "done", result: { codes: ["TUR5"] } }), { status: 200, headers: { "content-type": "application/json" } }));
+        return Promise.resolve(new Response(JSON.stringify({
+          status: "done",
+          result: {
+            codes: ["TUR5"],
+            overview_map: {
+              slots: [{
+                id: "slot-tur5",
+                code: "TUR5",
+                state: "confirmed",
+                review_status: "matched",
+                geometry_status: "estimated",
+                normalized_polygon: [[0.12, 0.12], [0.42, 0.12], [0.42, 0.52], [0.12, 0.52]],
+                normalized_code_anchor_box: [[0.32, 0.14], [0.39, 0.14], [0.39, 0.18], [0.32, 0.18]],
+                back_insignia_type: "no_clue",
+              }],
+            },
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } }));
       }
       return originalFetch(url, init);
     };

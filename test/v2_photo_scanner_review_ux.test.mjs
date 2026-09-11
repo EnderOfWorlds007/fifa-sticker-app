@@ -88,52 +88,105 @@ test("overview labels scale to and stay clipped inside each detected card", () =
   assert.match(metrics, /maxWidth \/ characterWidth/);
   assert.match(metrics, /focused \? 18 : 13/);
   assert.match(draw, /reviewCtx\.clip\(\)/);
-  assert.match(draw, /Math\.min\(labelMetrics\.maxWidth, measuredWidth \+ labelMetrics\.paddingX \* 2\)/);
-  assert.match(draw, /fillText\(label, center\[0\], center\[1\], labelMetrics\.maxTextWidth\)/);
+  assert.match(draw, /Math\.min\(labelMetrics\.maxWidth, Math\.max\(primaryWidth, secondaryWidth\) \+ labelMetrics\.paddingX \* 2\)/);
+  assert.match(draw, /fillText\(primary, center\[0\], primaryY, labelMetrics\.maxTextWidth\)/);
   assert.doesNotMatch(draw, /fillRect\(center\[0\] - 48/);
 });
 
 test("back-card outlines distinguish insignia variants and explain every review color", () => {
   const appearance = functionBody("reviewSlotAppearance");
   assert.match(appearance, /statusValue !== "matched"[^\n]*#ffb000[^\n]*dashed: true/);
-  assert.match(appearance, /geometry_status === "estimated"[\s\S]*#ffd166/);
+  assert.match(appearance, /geometry_status === "estimated"[\s\S]*#ff5cf4/);
   assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.blue[\s\S]*#3fa9ff/);
   assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.green[\s\S]*#35d07f/);
   assert.match(functionBody("drawReviewSlot"), /reviewSlotAppearance\(slot, statusValue\)/);
   assert.match(html, /aria-label="Card outline legend"/);
   assert.match(html, /<strong>Blue<\/strong> Rest of the World Edition/);
   assert.match(html, /<strong>Green<\/strong> Swiss Edition/);
-  assert.match(html, /<strong>Gold dashed<\/strong> Code accepted; boundary estimated/);
+  assert.match(html, /<strong>Magenta dash-dot<\/strong> Code accepted; card outline estimated/);
   assert.match(html, /<strong>Amber dashed<\/strong> Needs review/);
   assert.doesNotMatch(html, /<strong>Red<\/strong>/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isBlue/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isEstimated/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isReview/);
+  assert.match(html, /class="estimatedSwatchStroke"/);
+  assert.match(styles, /stroke-dasharray: 6 2 1 2/);
 });
 
-test("estimated card geometry renders only the observed code marker", () => {
+test("estimated card geometry renders a locally calibrated full outline with its code", () => {
   const polygon = functionBody("reviewSlotPolygon");
+  assert.match(polygon, /geometry_status === "estimated" && card\.length >= 4/);
+  assert.match(polygon, /isPlausibleEstimatedReviewPolygon\(card, anchor\)/);
+  assert.match(polygon, /calibrateEstimatedReviewPolygon\(card, photoReviewState\.slots\)/);
   assert.match(polygon, /slot\.geometry_status !== "resolved" && anchor\.length >= 4/);
-  assert.match(polygon, /return anchor/);
   assert.match(functionBody("reviewImageRect"), /reviewSlotPolygon\(slot\)/);
   assert.match(functionBody("drawReviewSlot"), /reviewSlotPolygon\(slot\)/);
   assert.match(functionBody("selectReviewSlotAtEvent"), /reviewSlotPolygon\(slot\)/);
-  assert.match(functionBody("geometryLabel"), /code accepted; card boundary estimated/);
+  assert.match(functionBody("geometryLabel"), /code accepted; card outline estimated/);
 
-  const selectPolygon = new Function("slot", polygon);
+  const calibrate = new Function("card", "slots", functionBody("calibrateEstimatedReviewPolygon"));
   const card = [[0.1, 0.1], [0.4, 0.1], [0.4, 0.5], [0.1, 0.5]];
-  const anchor = [[0.3, 0.12], [0.38, 0.12], [0.38, 0.18], [0.3, 0.18]];
-  assert.deepEqual(selectPolygon({ geometry_status: "estimated", normalized_polygon: card, normalized_code_anchor_box: anchor }), anchor);
-  assert.deepEqual(selectPolygon({ geometry_status: "resolved", normalized_polygon: card, normalized_code_anchor_box: anchor }), card);
+  const resolved = [
+    { geometry_status: "resolved", normalized_polygon: [[0.5, 0.1], [0.8, 0.1], [0.8, 0.5], [0.5, 0.5]] },
+    { geometry_status: "resolved", normalized_polygon: [[0.5, 0.52], [0.8, 0.52], [0.8, 0.92], [0.5, 0.92]] },
+  ];
+  assert.deepEqual(calibrate(card, resolved), card);
+  const small = [[0.15, 0.2], [0.3, 0.2], [0.3, 0.4], [0.15, 0.4]];
+  const calibrated = calibrate(small, resolved);
+  assert.ok(calibrated[1][0] - calibrated[0][0] > 0.25);
+  assert.ok(calibrated[2][1] - calibrated[1][1] > 0.34);
+
+  const plausible = new Function("card", "anchor", functionBody("isPlausibleEstimatedReviewPolygon"));
+  const anchor = [[0.32, 0.12], [0.38, 0.12], [0.38, 0.15], [0.32, 0.15]];
+  assert.equal(plausible(card, anchor), true);
+  assert.equal(plausible(anchor, anchor), false);
+  assert.equal(plausible([[0.1, 0.1], [0.4, 0.5], [0.4, 0.1], [0.1, 0.5]], anchor), false);
+  assert.equal(plausible([[-0.2, 0.1], [0.4, 0.1], [0.4, 0.5], [-0.2, 0.5]], anchor), false);
+  assert.equal(plausible([[0.1, 0.1], [0.1, 0.1], [0.4, 0.5], [0.1, 0.5]], anchor), false);
 
   const appearance = new Function("slot", "statusValue", functionBody("reviewSlotAppearance"));
   assert.deepEqual(appearance({ geometry_status: "estimated" }, "matched"), {
-    color: "#ffd166",
-    fillAlpha: 0.10,
+    color: "#ff5cf4",
+    fillAlpha: 0.06,
     dashed: true,
+    dashPattern: [10, 4, 2, 4],
+    keylineColor: "rgba(0, 0, 0, 0.78)",
+    lineWidth: 3,
   });
   const label = new Function("value", functionBody("geometryLabel"));
-  assert.equal(label("estimated"), "code accepted; card boundary estimated");
+  assert.equal(label("estimated"), "code accepted; card outline estimated");
+});
+
+test("estimated outlines use a dark keyline and dash-dot stroke before drawing the card code", () => {
+  const draw = functionBody("drawReviewSlot");
+  assert.match(draw, /appearance\.keylineColor/);
+  assert.match(draw, /reviewCtx\.setLineDash\(dashPattern\)/);
+  assert.match(draw, /reviewSlotLabel\(slot, statusValue\)/);
+  assert.match(draw, /fillText\(primary/);
+  assert.match(draw, /fillText\(secondary/);
+  const label = new Function("slot", "statusValue", functionBody("reviewSlotLabel"));
+  assert.deepEqual(label({ code: "CAN14", name: "Alphonso Davies" }, "matched"), {
+    primary: "CAN14",
+    secondary: "Alphonso Davies",
+  });
+  assert.deepEqual(label({ code: "CAN14" }, "matched"), { primary: "CAN14", secondary: "" });
+  assert.deepEqual(label({ code: "", name: "" }, "review"), { primary: "Review", secondary: "" });
+});
+
+test("estimated geometry stays magenta when only the insignia needs review", () => {
+  const draw = functionBody("drawReviewSlot");
+  assert.match(draw, /codeReviewRequired \|\| \(insigniaReviewRequired && slot\.geometry_status !== "estimated"\)/);
+  assert.match(draw, /insigniaReviewRequired && !codeReviewRequired && slot\.geometry_status === "estimated"/);
+  assert.match(draw, /drawReviewAttentionBadge\(points\)/);
+  assert.match(draw, /reviewCtx\.save\(\)[\s\S]*reviewCtx\.clip\(\)[\s\S]*reviewCtx\.restore\(\)/);
+  const badgeCenter = new Function("points", functionBody("reviewAttentionBadgeCenter"));
+  assert.deepEqual(badgeCenter([[50, 0], [100, 50], [50, 100], [0, 50]]), [50, 22.5]);
+});
+
+test("catalogue projection loads before review slots are normalized", () => {
+  const render = functionBody("renderResults");
+  assert.ok(render.indexOf("await refreshScannerCollectionProjection()") < render.indexOf("renderPhotoReview(payloads[0] || null)"));
+  assert.match(functionBody("normalizeReviewSlots"), /reviewSlotCatalogName\(slot\.code\)/);
 });
 
 test("recognized scan results are grouped into compact rows with edition colours", () => {
