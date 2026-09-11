@@ -3509,7 +3509,7 @@ label {
   outline-offset: 2px;
 }
 
-.photoPickerControl:has(.photoPickerNativeInput:disabled) {
+.photoPickerControl.isBusy {
   pointer-events: none;
   opacity: 0.55;
 }
