@@ -5,11 +5,12 @@ import {
   photoOcrSide,
   recognitionBaseUrl,
   recognitionUrl,
+  saveBackInsigniaReviewLabel,
   saveOcrBackendSettings,
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-cf1e606d819a";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6ac0f3b421de";
 import {
   cancelTransaction,
   createTransaction,
@@ -33,6 +34,7 @@ import {
 } from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-cf1e606d819a";
 import {
   receivedLinesForScan,
+  SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
 } from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-48d107a3be6c";
@@ -60,6 +62,7 @@ const reviewInspector = document.querySelector("#photoReviewInspector");
 const reviewQueue = document.querySelector("#photoReviewQueue");
 const reviewQueueText = document.querySelector("#photoReviewQueueText");
 const reviewNextButton = document.querySelector("#photoReviewNext");
+const reviewFinishButton = document.querySelector("#photoReviewFinish");
 const reviewAllCorrectButton = document.querySelector("#photoReviewAllCorrect");
 const reviewToolbar = document.querySelector("#photoReviewToolbar");
 const reviewZoomOutButton = document.querySelector("#photoReviewZoomOut");
@@ -97,6 +100,7 @@ reviewImage?.addEventListener("load", () => drawPhotoReview());
 reviewStage?.addEventListener("click", selectReviewSlotAtEvent);
 reviewInspector?.addEventListener("submit", saveInspectorCode);
 reviewNextButton?.addEventListener("click", selectNextReviewSlot);
+reviewFinishButton?.addEventListener("click", finishReviewForNow);
 reviewAllCorrectButton?.addEventListener("click", saveAllReviewSlotsCorrect);
 reviewZoomOutButton?.addEventListener("click", () => adjustReviewZoom(1 / 1.35));
 reviewZoomInButton?.addEventListener("click", () => adjustReviewZoom(1.35));
@@ -248,19 +252,25 @@ function renderPhotoReview(payload) {
   const overview = payload?.overview_map || payload?.overview?.map || payload?.scanner_overview || null;
   const slots = normalizeReviewSlots(overview?.slots || payload?.slots || [], payload);
   photoReviewState.slots = slots;
-  const firstReviewSlot = slots.find((slot) => slotNeedsReview(slot));
+  const firstReviewSlot = reviewSlots()[0];
   photoReviewState.selectedSlotId = firstReviewSlot?.id || slots[0]?.id || "";
-  const matched = slots.filter((slot) => slotStatus(slot) === "matched").length;
-  const uncertain = slots.filter((slot) => slotNeedsReview(slot)).length;
-  if (reviewSummary) {
-    reviewSummary.textContent = slots.length
-      ? `${matched}/${slots.length} matched · ${uncertain} to review`
-      : payload ? "No overlay geometry returned by backend." : "No result";
-  }
+  renderReviewSummary(payload);
   renderReviewQueue();
   renderInspector();
   drawPhotoReview();
   return matchedReviewSlotCodes(slots);
+}
+
+function renderReviewSummary(payload = true) {
+  if (!reviewSummary) return;
+  const slots = photoReviewState.slots;
+  const matched = slots.filter((slot) => slotStatus(slot) === "matched").length;
+  const codeReviewCount = slots.filter((slot) => slotNeedsCodeReview(slot)).length;
+  const insigniaReviewCount = slots.filter((slot) => slotNeedsInsigniaReview(slot)).length;
+  const pendingSummary = reviewQueueSummary(codeReviewCount, insigniaReviewCount);
+  reviewSummary.textContent = slots.length
+    ? `${matched}/${slots.length} codes matched · ${pendingSummary}`
+    : payload ? "No overlay geometry returned by backend." : "No result";
 }
 
 function normalizeReviewSlots(slots, payload = {}) {
@@ -270,6 +280,9 @@ function normalizeReviewSlots(slots, payload = {}) {
       id: String(slot.id || `slot-${index + 1}`),
       code: String(slot.code || "").toUpperCase(),
       original_code: String(slot.code || "").toUpperCase(),
+      original_back_insignia_type: String(slot.back_insignia_type || "no_clue"),
+      original_back_insignia_confidence: Number(slot.back_insignia_confidence || 0),
+      insignia_review_status: "",
       code_candidates: normalizedCodeCandidates(slot),
       upload_id: String(payload?.upload_id || payload?.ocr?.upload_id || ""),
       job_id: String(payload?.job_id || ""),
@@ -414,6 +427,13 @@ function renderInspector() {
     return;
   }
   reviewInspector.hidden = false;
+  const identitySection = document.createElement("section");
+  identitySection.className = "photoReviewDecision";
+  const identityTitle = inspectorTitle("Card identity");
+  const identityHelp = document.createElement("p");
+  identityHelp.textContent = slotNeedsCodeReview(slot)
+    ? "Confirm the code printed in the top pill, or correct it below."
+    : "Code accepted by OCR. Edit it only if the printed code is different.";
   const form = document.createElement("form");
   form.className = "photoReviewInspectorForm";
   form.dataset.slotId = slot.id;
@@ -439,11 +459,109 @@ function renderInspector() {
   save.type = "submit";
   save.textContent = "Set";
   const meta = document.createElement("p");
-  meta.textContent = `${slotStatus(slot)} · ${formatConfidence(slot.confidence)} · ${slot.geometry_status || "geometry unknown"}`;
+  meta.textContent = `${slotStatus(slot)} · ${formatConfidence(slot.confidence).replace("confidence", "code OCR")} · ${geometryLabel(slot.geometry_status)}`;
   reviewInspector.replaceChildren(inspectorTitle(slot.code || "Unknown card"), meta);
-  if (choices.childElementCount) reviewInspector.append(choices);
-  reviewInspector.append(form);
+  identitySection.append(identityTitle, identityHelp);
+  if (choices.childElementCount) identitySection.append(choices);
+  identitySection.append(form);
   form.append(input, save);
+  reviewInspector.append(identitySection);
+  if (isBackScanSlot(slot)) reviewInspector.append(insigniaDecisionSection(slot));
+}
+
+function insigniaDecisionSection(slot) {
+  const section = document.createElement("section");
+  section.className = "photoReviewDecision insigniaDecision";
+  const title = inspectorTitle("Card-back insignia");
+  const help = document.createElement("p");
+  help.textContent = "Choose the centre mark. This choice is saved with this card and sent as OCR feedback.";
+  const model = document.createElement("p");
+  model.className = "insigniaModelResult";
+  model.textContent = insigniaModelSummary(slot);
+  const choices = document.createElement("div");
+  choices.className = "insigniaDecisionButtons";
+  const options = [
+    { decision: "blue", variant: SCAN_INSIGNIA_VARIANTS.blue, label: "Blue", detail: "Official Licensed" },
+    { decision: "green", variant: SCAN_INSIGNIA_VARIANTS.green, label: "Green", detail: "United Edition" },
+    { decision: "skip", variant: "no_clue", label: "Can’t tell", detail: "Leave colour unknown" },
+  ];
+  for (const option of options) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.insigniaDecision = option.decision;
+    button.classList.toggle("selected", selectedInsigniaDecision(slot) === option.decision);
+    button.setAttribute("aria-pressed", String(selectedInsigniaDecision(slot) === option.decision));
+    button.disabled = isCurrentScanApplied();
+    button.innerHTML = `<strong>${option.label}</strong><span>${option.detail}</span>`;
+    button.addEventListener("click", () => chooseInsignia(slot, option));
+    choices.append(button);
+  }
+  section.append(title, help, model, choices);
+  return section;
+}
+
+async function chooseInsignia(slot, option) {
+  const previous = {
+    back_insignia_type: slot.back_insignia_type,
+    insignia_review_status: slot.insignia_review_status,
+  };
+  slot.back_insignia_type = option.variant;
+  slot.insignia_review_status = option.decision;
+  renderInspector();
+  renderReviewQueue();
+  renderReviewSummary();
+  renderCollectionActions();
+  drawPhotoReview();
+  try {
+    await persistInsigniaReviewLabel(slot, option.decision);
+    status.textContent = `${slot.code || "Card"} saved as ${option.label}.`;
+    showToast(`${option.label} back saved.`);
+  } catch {
+    status.textContent = `${slot.code || "Card"} will be saved as ${option.label}; OCR feedback could not upload.`;
+    showToast("Saved for collection; feedback upload failed.");
+  }
+  if (previous.back_insignia_type !== slot.back_insignia_type || previous.insignia_review_status !== slot.insignia_review_status) {
+    selectNextReviewSlot({ afterSlotId: slot.id });
+  }
+}
+
+async function persistInsigniaReviewLabel(slot, decision) {
+  if (!slot.upload_id) throw new Error("This scan has no upload id.");
+  await saveBackInsigniaReviewLabel({
+    id: `photo:${slot.upload_id}:${slot.id}`,
+    decision,
+    code: slot.code || "",
+    predicted_type: slot.original_back_insignia_type || "no_clue",
+    predicted_confidence: slot.original_back_insignia_confidence || 0,
+  });
+}
+
+function selectedInsigniaDecision(slot) {
+  if (slot.insignia_review_status) return slot.insignia_review_status;
+  if (slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.blue) return "blue";
+  if (slot.back_insignia_type === SCAN_INSIGNIA_VARIANTS.green) return "green";
+  return "";
+}
+
+function insigniaModelSummary(slot) {
+  const scores = slot.back_insignia_scores || {};
+  const blue = Number(scores.standard_fifa_licensed || 0);
+  const green = Number(scores.united_edition || 0);
+  if (!blue && !green) return "Recognizer: no usable insignia crop.";
+  const original = slot.original_back_insignia_type;
+  const verdict = original === SCAN_INSIGNIA_VARIANTS.blue
+    ? "Recognizer: Blue"
+    : original === SCAN_INSIGNIA_VARIANTS.green
+      ? "Recognizer: Green"
+      : "Recognizer: no prediction";
+  return `${verdict} · Blue ${Math.round(blue * 100)}% · Green ${Math.round(green * 100)}%`;
+}
+
+function geometryLabel(value) {
+  if (value === "resolved") return "card boundary resolved";
+  if (value === "orientation_uncertain") return "card orientation uncertain";
+  if (value === "code_only") return "code only; no complete card crop";
+  return value || "geometry unknown";
 }
 
 async function saveInspectorCode(event) {
@@ -465,6 +583,7 @@ async function saveInspectorCode(event) {
     slot.saved_review = true;
     updateResultFromReviewSlots();
     renderReviewQueue();
+    renderReviewSummary();
     renderInspector();
     drawPhotoReview();
     status.textContent = slot.code ? `Saved correction ${slot.code}.` : "Saved unreadable card review.";
@@ -499,7 +618,7 @@ async function persistReviewLabel(slot, correctedCode) {
 }
 
 async function saveAllReviewSlotsCorrect() {
-  const slots = photoReviewState.slots.filter((slot) => slot.code);
+  const slots = photoReviewState.slots.filter((slot) => slot.code && slotNeedsCodeReview(slot));
   if (!slots.length) return;
   if (reviewAllCorrectButton) {
     reviewAllCorrectButton.disabled = true;
@@ -515,6 +634,7 @@ async function saveAllReviewSlotsCorrect() {
     }
     updateResultFromReviewSlots();
     renderReviewQueue();
+    renderReviewSummary();
     renderInspector();
     drawPhotoReview();
     status.textContent = `Saved ${slots.length} correct card${slots.length === 1 ? "" : "s"}.`;
@@ -524,8 +644,8 @@ async function saveAllReviewSlotsCorrect() {
     showToast(status.textContent);
   } finally {
     if (reviewAllCorrectButton) {
-      reviewAllCorrectButton.textContent = "All correct";
-      reviewAllCorrectButton.disabled = !photoReviewState.slots.some((slot) => slot.code);
+      reviewAllCorrectButton.textContent = "Confirm shown codes";
+      reviewAllCorrectButton.disabled = !photoReviewState.slots.some((slot) => slot.code && slotNeedsCodeReview(slot));
     }
   }
 }
@@ -686,25 +806,34 @@ function currentScanReceivedLines() {
 }
 
 function renderReviewQueue() {
-  const reviewSlots = photoReviewState.slots.filter((slot) => slotNeedsReview(slot));
+  const pending = reviewSlots();
   if (!reviewQueue || !reviewQueueText || !reviewNextButton) return;
-  if (reviewAllCorrectButton) reviewAllCorrectButton.disabled = !photoReviewState.slots.some((slot) => slot.code);
-  reviewQueue.hidden = reviewSlots.length === 0;
-  reviewQueueText.textContent = `${reviewSlots.length} uncertain match${reviewSlots.length === 1 ? "" : "es"} to review`;
-  reviewNextButton.disabled = reviewSlots.length === 0;
-  reviewNextButton.textContent = photoReviewView.focused ? "Next uncertain" : "Review uncertain";
+  const codeCount = photoReviewState.slots.filter((slot) => slotNeedsCodeReview(slot)).length;
+  const insigniaCount = photoReviewState.slots.filter((slot) => slotNeedsInsigniaReview(slot)).length;
+  if (reviewAllCorrectButton) {
+    reviewAllCorrectButton.hidden = codeCount === 0;
+    reviewAllCorrectButton.disabled = codeCount === 0;
+  }
+  reviewQueue.hidden = pending.length === 0;
+  reviewQueueText.textContent = reviewQueueSummary(codeCount, insigniaCount);
+  reviewNextButton.disabled = pending.length === 0;
+  reviewNextButton.textContent = photoReviewView.focused ? "Next review" : insigniaCount && !codeCount ? "Review backs" : "Start review";
   const focused = photoReviewView.focused && selectedSlot();
-  const focusedIndex = focused ? reviewSlots.findIndex((slot) => slot.id === focused.id) : -1;
-  if (focusedIndex >= 0) reviewQueueText.textContent = `Reviewing ${focusedIndex + 1} of ${reviewSlots.length} · ${focused.code || "Unknown card"}`;
+  const focusedIndex = focused ? pending.findIndex((slot) => slot.id === focused.id) : -1;
+  if (focusedIndex >= 0) reviewQueueText.textContent = `Reviewing ${focusedIndex + 1} of ${pending.length} · ${focused.code || "Unknown card"} · ${slotReviewReason(focused)}`;
   if (reviewToolbar) reviewToolbar.hidden = !focused;
 }
 
-function selectNextReviewSlot() {
-  const reviewSlots = photoReviewState.slots.filter((slot) => slotNeedsReview(slot));
-  if (!reviewSlots.length) return;
-  const currentIndex = reviewSlots.findIndex((slot) => slot.id === photoReviewState.selectedSlotId);
-  if (photoReviewView.focused) photoReviewState.selectedSlotId = reviewSlots[(currentIndex + 1) % reviewSlots.length].id;
-  else if (currentIndex < 0) photoReviewState.selectedSlotId = reviewSlots[0].id;
+function selectNextReviewSlot(options = {}) {
+  const pending = reviewSlots();
+  if (!pending.length) {
+    showReviewOverview();
+    return;
+  }
+  const currentId = options.afterSlotId || photoReviewState.selectedSlotId;
+  const currentPosition = photoReviewState.slots.findIndex((slot) => slot.id === currentId);
+  const next = pending.find((slot) => photoReviewState.slots.indexOf(slot) > currentPosition) || pending[0];
+  photoReviewState.selectedSlotId = next.id;
   photoReviewView = { focused: true, zoomFactor: 1 };
   renderInspector();
   renderReviewQueue();
@@ -724,6 +853,16 @@ function showReviewOverview() {
   drawPhotoReview();
 }
 
+function finishReviewForNow() {
+  showReviewOverview();
+  const remaining = reviewSlots().length;
+  status.textContent = remaining
+    ? `Review paused with ${remaining} unresolved card${remaining === 1 ? "" : "s"}. Unresolved backs will be saved as colour unknown.`
+    : "Review complete.";
+  showToast(remaining ? "Review paused; unresolved backs stay unknown." : "Review complete.");
+  collectionActions?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function selectedSlot() {
   return photoReviewState.slots.find((slot) => slot.id === photoReviewState.selectedSlotId);
 }
@@ -736,8 +875,40 @@ function slotStatus(slot) {
 }
 
 function slotNeedsReview(slot) {
-  const statusValue = slotStatus(slot);
-  return Boolean(slot.needs_user_help || statusValue !== "matched" || (slot.confidence > 0 && slot.confidence < 0.90));
+  return slotNeedsCodeReview(slot) || slotNeedsInsigniaReview(slot);
+}
+
+function slotNeedsCodeReview(slot) {
+  return Boolean(!slot.code || slot.needs_user_help || slotStatus(slot) !== "matched");
+}
+
+function slotNeedsInsigniaReview(slot) {
+  if (!isBackScanSlot(slot)) return false;
+  if (slot.insignia_review_status) return false;
+  return ![SCAN_INSIGNIA_VARIANTS.blue, SCAN_INSIGNIA_VARIANTS.green].includes(slot.back_insignia_type);
+}
+
+function isBackScanSlot(slot) {
+  return String(slot.requested_side || side?.value || photoOcrSide()).toLowerCase() === "back";
+}
+
+function reviewSlots() {
+  return photoReviewState.slots.filter((slot) => slotNeedsReview(slot));
+}
+
+function reviewQueueSummary(codeCount, insigniaCount) {
+  const parts = [];
+  if (codeCount) parts.push(`${codeCount} code${codeCount === 1 ? "" : "s"}`);
+  if (insigniaCount) parts.push(`${insigniaCount} card back${insigniaCount === 1 ? "" : "s"}`);
+  return parts.length ? `${parts.join(" · ")} need review` : "review complete";
+}
+
+function slotReviewReason(slot) {
+  const code = slotNeedsCodeReview(slot);
+  const insignia = slotNeedsInsigniaReview(slot);
+  if (code && insignia) return "check code and back";
+  if (code) return "check code";
+  return "choose back insignia";
 }
 
 function formatConfidence(value) {
