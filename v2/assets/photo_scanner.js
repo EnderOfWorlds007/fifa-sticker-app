@@ -140,11 +140,19 @@ async function scanSelectedPhotos(event) {
   if (cameraDiagnostics) cameraDiagnostics.textContent = "Using photo-library image; in-app camera diagnostics do not apply.";
   scanInFlight = true;
   try {
+    await allowNativePickerToDismiss();
     await scanPhotos(files);
   } finally {
     scanInFlight = false;
     if (picker) picker.value = "";
   }
+}
+
+function allowNativePickerToDismiss() {
+  if (typeof requestAnimationFrame !== "function") {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
 async function captureCameraPhoto() {
@@ -177,9 +185,8 @@ async function scanPhotos(files) {
     return;
   }
   scanButton.disabled = true;
-  if (input) input.disabled = true;
   if (batchButton) batchButton.disabled = true;
-  if (batchInput) batchInput.disabled = true;
+  setPhotoPickersBusy(true);
   if (cameraButton) cameraButton.disabled = true;
   copyButton.disabled = true;
   result.value = "";
@@ -218,13 +225,21 @@ async function scanPhotos(files) {
     codesList.replaceChildren(emptyRow("No result."));
   } finally {
     scanButton.disabled = false;
-    if (input) input.disabled = false;
     if (batchButton) batchButton.disabled = false;
-    if (batchInput) batchInput.disabled = false;
+    setPhotoPickersBusy(false);
     if (cameraButton) cameraButton.disabled = false;
     scanButton.classList.remove("scanning");
     scanButton.setAttribute("aria-busy", "false");
     scanButton.textContent = "Choose photo";
+  }
+}
+
+function setPhotoPickersBusy(busy) {
+  for (const picker of [input, batchInput]) {
+    const control = picker?.closest(".photoPickerControl");
+    control?.classList.toggle("isBusy", busy);
+    if (busy) control?.setAttribute("aria-disabled", "true");
+    else control?.removeAttribute("aria-disabled");
   }
 }
 

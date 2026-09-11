@@ -64,14 +64,21 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         assert.ok(chooser.backendNodeId, "Choose photo should expose its native input");
         await send(cdp, "DOM.setFileInputFiles", { backendNodeId: chooser.backendNodeId, files: [photoPath] });
         await waitForExpression(cdp, `window.__cameraUploadCount === ${expectedUploadCount}`);
+        const pickerDuringUpload = await evaluate(cdp, `({
+          inputDisabled: document.querySelector("#photoScannerInput").disabled,
+          controlBusy: document.querySelector("#photoScannerInput").closest(".photoPickerControl").classList.contains("isBusy"),
+        })`);
+        assert.deepEqual(pickerDuringUpload, { inputDisabled: false, controlBusy: true });
         await waitForExpression(cdp, `document.querySelector("#photoScannerResult").value === "TUR5" && !document.querySelector("#photoScannerInput").disabled`);
       }
       const reusablePicker = await evaluate(cdp, `({
         connected: document.querySelector("#photoScannerInput").isConnected,
+        disabled: document.querySelector("#photoScannerInput").disabled,
+        busy: document.querySelector("#photoScannerInput").closest(".photoPickerControl").classList.contains("isBusy"),
         value: document.querySelector("#photoScannerInput").value,
         label: document.querySelector("#photoScannerButton").textContent,
       })`);
-      assert.deepEqual(reusablePicker, { connected: true, value: "", label: "Choose photo" });
+      assert.deepEqual(reusablePicker, { connected: true, disabled: false, busy: false, value: "", label: "Choose photo" });
 
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraCaptureDialog")`);
@@ -226,7 +233,7 @@ function installOcrMockSource() {
         const file = init.body;
         window.__cameraUploadCount = (window.__cameraUploadCount || 0) + 1;
         window.__cameraUpload = file ? { name: file.name, type: file.type, size: file.size } : null;
-        return Promise.resolve(new Response(JSON.stringify({ job_id: "camera-job", status: "queued" }), { status: 202, headers: { "content-type": "application/json" } }));
+        return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: "camera-job", status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
       }
       if (String(url).includes("/api/photo-code-jobs/camera-job")) {
         return Promise.resolve(new Response(JSON.stringify({ status: "done", result: { codes: ["TUR5"] } }), { status: 200, headers: { "content-type": "application/json" } }));

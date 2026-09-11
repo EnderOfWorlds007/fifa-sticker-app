@@ -74,6 +74,10 @@ test("iPhone gets a reliable single-photo picker without losing batch selection"
   assert.match(source, /picker\?\.addEventListener\("input", scanSelectedPhotos\)/);
   assert.match(source, /picker\?\.addEventListener\("change", scanSelectedPhotos\)/);
   assert.match(functionBody("scanSelectedPhotos"), /event\?\.currentTarget \|\| input/);
+  assert.match(functionBody("scanSelectedPhotos"), /await allowNativePickerToDismiss\(\)/);
+  assert.doesNotMatch(functionBody("scanPhotos"), /input\.disabled|batchInput\.disabled/);
+  assert.match(functionBody("scanPhotos"), /setPhotoPickersBusy\(true\)/);
+  assert.match(styles, /\.photoPickerControl\.isBusy[\s\S]*pointer-events: none/);
 });
 
 test("overview labels scale to and stay clipped inside each detected card", () => {
