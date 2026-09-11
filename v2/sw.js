@@ -48,6 +48,7 @@ const APP_SHELL_PATHS = [
   "/fifa-sticker-app/v2/assets/review_album_pages.js",
   "/fifa-sticker-app/v2/assets/photo_code_debug_review.js",
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
+  "/fifa-sticker-app/v2/assets/scan_inventory.js",
   "/fifa-sticker-app/v2/assets/scan_card_status.js",
   "/fifa-sticker-app/v2/assets/paste_card_status.js",
   "/fifa-sticker-app/v2/assets/pwa.js",

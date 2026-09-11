@@ -15,7 +15,6 @@ import {
   createTransaction,
   loadLedger,
   saveLedger,
-  sortCode,
 } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-cf1e606d819a";
 import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-cf1e606d819a";
 import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-cf1e606d819a";
@@ -32,6 +31,11 @@ import {
   SCANNED_CARD_STATUS,
   summarizeScannedCardStatuses,
 } from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-cf1e606d819a";
+import {
+  receivedLinesForScan,
+  scanReceiptSignature,
+  summarizeScanInsignias,
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-48d107a3be6c";
 
 const input = document.querySelector("#photoScannerInput");
 const side = document.querySelector("#photoScannerSide");
@@ -595,6 +599,12 @@ function renderCollectionActions() {
     return;
   }
   const scanSummary = summarizeScannedCardStatuses(latestScanStatuses);
+  const insignias = summarizeScanInsignias(currentScanReceivedLines());
+  const insigniaSummary = [
+    insignias.blue ? `${insignias.blue} blue` : "",
+    insignias.green ? `${insignias.green} green` : "",
+    insignias.unknown ? `${insignias.unknown} colour unknown` : "",
+  ].filter(Boolean).join(" · ");
   const applied = isCurrentScanApplied();
   collectionActions.hidden = false;
   addCollectionButton.disabled = applied;
@@ -604,8 +614,8 @@ function renderCollectionActions() {
     undoCollectionButton.disabled = !applied;
   }
   collectionSummary.textContent = applied
-    ? `${total} scanned card${total === 1 ? "" : "s"} already added · Undo to add again`
-    : `${scanSummary.newForAlbum} new for album · ${scanSummary.newTradingCards} new trading card${scanSummary.newTradingCards === 1 ? "" : "s"} · ${scanSummary.duplicateTradingCards} duplicate trading card${scanSummary.duplicateTradingCards === 1 ? "" : "s"}`;
+    ? `${total} scanned card${total === 1 ? "" : "s"} already added · ${insigniaSummary} · Undo to add again`
+    : `${scanSummary.newForAlbum} new for album · ${scanSummary.newTradingCards} new trading card${scanSummary.newTradingCards === 1 ? "" : "s"} · ${scanSummary.duplicateTradingCards} duplicate trading card${scanSummary.duplicateTradingCards === 1 ? "" : "s"} · ${insigniaSummary}`;
 }
 
 function renderRecognizedCodeRows() {
@@ -613,17 +623,15 @@ function renderRecognizedCodeRows() {
 }
 
 function addScanToCollection() {
-  const codes = normalizeCodeList(latestScanCodes);
-  if (!codes.length) return;
+  const received = currentScanReceivedLines();
+  const receivedCount = received.reduce((total, line) => total + line.quantity, 0);
+  if (!receivedCount) return;
   if (isCurrentScanApplied()) {
     status.textContent = "This scan was already added. Use Undo before adding it again.";
     showToast("Scan already added.");
     renderCollectionActions();
     return;
   }
-  const quantities = new Map();
-  for (const code of codes) quantities.set(code, (quantities.get(code) || 0) + 1);
-  const received = [...quantities.entries()].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => sortCode(a.code, b.code));
   const nextLedger = createTransaction(loadLedger(), { kind: "received", received, given: [] });
   const transactionId = nextLedger.transactions[nextLedger.transactions.length - 1]?.id || "";
   saveLedger(nextLedger);
@@ -634,7 +642,7 @@ function addScanToCollection() {
     renderCollectionActions();
     renderRecognizedCodeRows();
   });
-  status.textContent = `Added ${codes.length} scanned card${codes.length === 1 ? "" : "s"} to collection activity.`;
+  status.textContent = `Added ${receivedCount} scanned card${receivedCount === 1 ? "" : "s"} to collection activity with card-back colours.`;
   showToast("Scan added to collection.");
 }
 
@@ -669,7 +677,12 @@ function isCurrentScanApplied() {
 }
 
 function currentScanSignature() {
-  return normalizeCodeList(latestScanCodes).join("|");
+  return scanReceiptSignature(currentScanReceivedLines());
+}
+
+function currentScanReceivedLines() {
+  const slots = photoReviewState.slots.filter((slot) => slot.code && slotStatus(slot) === "matched");
+  return receivedLinesForScan({ slots, fallbackCodes: latestScanCodes });
 }
 
 function renderReviewQueue() {
