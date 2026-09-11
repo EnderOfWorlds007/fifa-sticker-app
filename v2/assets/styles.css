@@ -3411,6 +3411,38 @@ label {
   gap: 8px;
 }
 
+.photoPickerControl {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.photoPickerControl > button {
+  width: 100%;
+  height: 100%;
+}
+
+.photoPickerNativeInput {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.photoPickerControl:focus-within > button {
+  outline: 2px solid #8fe9dd;
+  outline-offset: 2px;
+}
+
+.photoPickerControl:has(.photoPickerNativeInput:disabled) {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 .hidden {
   display: none;
 }

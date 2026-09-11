@@ -64,11 +64,13 @@ test("front scans do not ask users to classify an unseen back", () => {
 });
 
 test("iPhone gets a reliable single-photo picker without losing batch selection", () => {
-  assert.match(html, /id="photoScannerInput" type="file" accept="image\/\*" hidden/);
+  assert.match(html, /id="photoScannerInput" class="photoPickerNativeInput" type="file" accept="image\/\*"/);
   assert.doesNotMatch(html, /id="photoScannerInput"[^>]*multiple/);
-  assert.match(html, /id="photoScannerBatchInput" type="file" accept="image\/\*" multiple hidden/);
+  assert.match(html, /id="photoScannerBatchInput" class="photoPickerNativeInput" type="file" accept="image\/\*" multiple/);
   assert.match(html, /id="photoScannerButton"[^>]*>Choose photo<\/button>/);
   assert.match(html, /id="photoScannerBatchButton"[^>]*>Select several<\/button>/);
+  assert.match(styles, /\.photoPickerNativeInput[\s\S]*position: absolute[\s\S]*inset: 0[\s\S]*opacity: 0/);
+  assert.doesNotMatch(source, /scanButton\?\.addEventListener\("click"/);
   assert.match(source, /picker\?\.addEventListener\("input", scanSelectedPhotos\)/);
   assert.match(source, /picker\?\.addEventListener\("change", scanSelectedPhotos\)/);
   assert.match(functionBody("scanSelectedPhotos"), /event\?\.currentTarget \|\| input/);
