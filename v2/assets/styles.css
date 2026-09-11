@@ -1584,6 +1584,12 @@
   background: rgba(53, 208, 127, 0.20);
 }
 
+.photoReviewLegendSwatch.isEstimated {
+  border-color: #ffd166;
+  border-style: dashed;
+  background: rgba(255, 209, 102, 0.10);
+}
+
 .photoReviewLegendSwatch.isReview {
   border-color: #ffb000;
   border-style: dashed;

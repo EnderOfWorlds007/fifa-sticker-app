@@ -96,16 +96,44 @@ test("overview labels scale to and stay clipped inside each detected card", () =
 test("back-card outlines distinguish insignia variants and explain every review color", () => {
   const appearance = functionBody("reviewSlotAppearance");
   assert.match(appearance, /statusValue !== "matched"[^\n]*#ffb000[^\n]*dashed: true/);
+  assert.match(appearance, /geometry_status === "estimated"[\s\S]*#ffd166/);
   assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.blue[\s\S]*#3fa9ff/);
   assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.green[\s\S]*#35d07f/);
   assert.match(functionBody("drawReviewSlot"), /reviewSlotAppearance\(slot, statusValue\)/);
   assert.match(html, /aria-label="Card outline legend"/);
   assert.match(html, /<strong>Blue<\/strong> Rest of the World Edition/);
   assert.match(html, /<strong>Green<\/strong> Swiss Edition/);
+  assert.match(html, /<strong>Gold dashed<\/strong> Code accepted; boundary estimated/);
   assert.match(html, /<strong>Amber dashed<\/strong> Needs review/);
   assert.doesNotMatch(html, /<strong>Red<\/strong>/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isBlue/);
+  assert.match(styles, /\.photoReviewLegendSwatch\.isEstimated/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isReview/);
+});
+
+test("estimated card geometry renders only the observed code marker", () => {
+  const polygon = functionBody("reviewSlotPolygon");
+  assert.match(polygon, /slot\.geometry_status !== "resolved" && anchor\.length >= 4/);
+  assert.match(polygon, /return anchor/);
+  assert.match(functionBody("reviewImageRect"), /reviewSlotPolygon\(slot\)/);
+  assert.match(functionBody("drawReviewSlot"), /reviewSlotPolygon\(slot\)/);
+  assert.match(functionBody("selectReviewSlotAtEvent"), /reviewSlotPolygon\(slot\)/);
+  assert.match(functionBody("geometryLabel"), /code accepted; card boundary estimated/);
+
+  const selectPolygon = new Function("slot", polygon);
+  const card = [[0.1, 0.1], [0.4, 0.1], [0.4, 0.5], [0.1, 0.5]];
+  const anchor = [[0.3, 0.12], [0.38, 0.12], [0.38, 0.18], [0.3, 0.18]];
+  assert.deepEqual(selectPolygon({ geometry_status: "estimated", normalized_polygon: card, normalized_code_anchor_box: anchor }), anchor);
+  assert.deepEqual(selectPolygon({ geometry_status: "resolved", normalized_polygon: card, normalized_code_anchor_box: anchor }), card);
+
+  const appearance = new Function("slot", "statusValue", functionBody("reviewSlotAppearance"));
+  assert.deepEqual(appearance({ geometry_status: "estimated" }, "matched"), {
+    color: "#ffd166",
+    fillAlpha: 0.10,
+    dashed: true,
+  });
+  const label = new Function("value", functionBody("geometryLabel"));
+  assert.equal(label("estimated"), "code accepted; card boundary estimated");
 });
 
 test("recognized scan results are grouped into compact rows with edition colours", () => {
