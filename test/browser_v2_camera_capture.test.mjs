@@ -30,6 +30,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
     `--remote-debugging-port=${DEBUG_PORT}`,
     `--user-data-dir=${chromeProfile}`,
     "--disable-gpu",
+    "--disable-dev-shm-usage",
     "--no-sandbox",
     "--no-first-run",
     "--no-default-browser-check",
@@ -240,7 +241,7 @@ async function createPage(url) {
 }
 
 async function waitForHttp(url) {
-  const deadline = Date.now() + 10000;
+  const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     try { if ((await fetch(url)).ok) return; } catch { /* retry */ }
     await delay(100);

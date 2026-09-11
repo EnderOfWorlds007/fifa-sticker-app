@@ -18,9 +18,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: browser-actions/setup-chrome@v2
+        id: setup-chrome
+        with:
+          install-dependencies: true
       - name: Check scanner picker contract
         run: node --test test/v2_photo_scanner_review_ux.test.mjs test/v2_camera_capture.test.mjs
       - name: Select the same photo twice through the browser
         env:
-          CHROME_BIN: /usr/bin/google-chrome
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: node --test test/browser_v2_camera_capture.test.mjs
