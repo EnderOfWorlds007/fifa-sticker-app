@@ -1662,6 +1662,77 @@
   background: rgba(255, 196, 87, 0.09);
 }
 
+#photoScannerCodes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#photoScannerCodes .compactScanResultRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.compactScanResultCode {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compactScanResultCode small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.compactScanResultEditions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.compactScanEdition {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: #aab3bc;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.compactScanEdition.is-blue {
+  color: #69b9ff;
+  background: rgba(63, 169, 255, 0.14);
+}
+
+.compactScanEdition.is-green {
+  color: #48dc8c;
+  background: rgba(53, 208, 127, 0.14);
+}
+
+#photoScannerCodes .compactScanResultDetail {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+}
+
+@media (min-width: 760px) {
+  #photoScannerCodes {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+}
+
 .photoReviewStage {
   position: relative;
   min-height: 320px;
