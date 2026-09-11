@@ -29,9 +29,9 @@ test("code review follows backend uncertainty instead of an arbitrary 90 percent
 test("back insignia has an independent human decision with explicit meanings", () => {
   const body = functionBody("insigniaDecisionSection");
   assert.match(body, /Blue/);
-  assert.match(body, /Official Licensed/);
+  assert.match(body, /Rest of the World Edition/);
   assert.match(body, /Green/);
-  assert.match(body, /United Edition/);
+  assert.match(body, /Swiss Edition/);
   assert.match(body, /Can’t tell/);
   assert.match(styles, /\.insigniaDecisionButtons/);
 });
@@ -89,16 +89,15 @@ test("overview labels scale to and stay clipped inside each detected card", () =
 
 test("back-card outlines distinguish insignia variants and explain every review color", () => {
   const appearance = functionBody("reviewSlotAppearance");
-  assert.match(appearance, /statusValue === "review"[^\n]*#ffb000[^\n]*dashed: true/);
-  assert.match(appearance, /statusValue !== "matched"[^\n]*#ff4d4f/);
+  assert.match(appearance, /statusValue !== "matched"[^\n]*#ffb000[^\n]*dashed: true/);
   assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.blue[\s\S]*#3fa9ff/);
   assert.match(appearance, /SCAN_INSIGNIA_VARIANTS\.green[\s\S]*#35d07f/);
   assert.match(functionBody("drawReviewSlot"), /reviewSlotAppearance\(slot, statusValue\)/);
   assert.match(html, /aria-label="Card outline legend"/);
-  assert.match(html, /<strong>Blue<\/strong> Official Licensed/);
-  assert.match(html, /<strong>Green<\/strong> United Edition/);
+  assert.match(html, /<strong>Blue<\/strong> Rest of the World Edition/);
+  assert.match(html, /<strong>Green<\/strong> Swiss Edition/);
   assert.match(html, /<strong>Amber dashed<\/strong> Needs review/);
-  assert.match(html, /<strong>Red<\/strong> Unreadable or unmatched/);
+  assert.doesNotMatch(html, /<strong>Red<\/strong>/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isBlue/);
   assert.match(styles, /\.photoReviewLegendSwatch\.isReview/);
 });
