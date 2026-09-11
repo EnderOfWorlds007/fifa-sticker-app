@@ -30,7 +30,6 @@ import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
-  dominantScannedCardStatus,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
 } from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-c14e7a92d5b8";
@@ -1060,7 +1059,13 @@ function pointInPolygon(point, polygon) {
 
 function compactCodeRow(group, insignias = { blue: 0, green: 0, unknown: 0 }) {
   const row = document.createElement("li");
-  row.className = `compactScanResultRow found ${dominantScannedCardStatus(group)}`;
+  row.className = "compactScanResultRow";
+  const editionBar = document.createElement("span");
+  editionBar.className = "compactScanEditionBar";
+  editionBar.setAttribute("aria-hidden", "true");
+  appendEditionBarSegment(editionBar, "blue", insignias.blue);
+  appendEditionBarSegment(editionBar, "green", insignias.green);
+  appendEditionBarSegment(editionBar, "unknown", insignias.unknown);
   const code = document.createElement("strong");
   code.className = "compactScanResultCode";
   code.textContent = group.code;
@@ -1077,8 +1082,16 @@ function compactCodeRow(group, insignias = { blue: 0, green: 0, unknown: 0 }) {
   const detail = document.createElement("span");
   detail.className = "compactScanResultDetail";
   detail.textContent = compactScannedCardGroupDetail(group);
-  row.append(code, editions, detail);
+  row.append(editionBar, code, editions, detail);
   return row;
+}
+
+function appendEditionBarSegment(bar, colour, quantity) {
+  if (!quantity) return;
+  const segment = document.createElement("span");
+  segment.className = `is-${colour}`;
+  segment.style.flexGrow = String(quantity);
+  bar.append(segment);
 }
 
 function appendEditionMarker(container, colour, quantity, meaning) {
