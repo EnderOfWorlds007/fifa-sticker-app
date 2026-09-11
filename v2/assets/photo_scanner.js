@@ -57,6 +57,10 @@ const reviewQueue = document.querySelector("#photoReviewQueue");
 const reviewQueueText = document.querySelector("#photoReviewQueueText");
 const reviewNextButton = document.querySelector("#photoReviewNext");
 const reviewAllCorrectButton = document.querySelector("#photoReviewAllCorrect");
+const reviewToolbar = document.querySelector("#photoReviewToolbar");
+const reviewZoomOutButton = document.querySelector("#photoReviewZoomOut");
+const reviewZoomInButton = document.querySelector("#photoReviewZoomIn");
+const reviewOverviewButton = document.querySelector("#photoReviewOverview");
 const toast = document.querySelector("#photoScannerToast");
 const backendUrlInput = document.querySelector("[data-ocr-backend-url]");
 const backendTokenInput = document.querySelector("[data-ocr-backend-token]");
@@ -64,6 +68,7 @@ const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
+let photoReviewView = { focused: false, zoomFactor: 1 };
 let latestScanCodes = [];
 let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
 let latestScanStatuses = [];
@@ -89,6 +94,9 @@ reviewStage?.addEventListener("click", selectReviewSlotAtEvent);
 reviewInspector?.addEventListener("submit", saveInspectorCode);
 reviewNextButton?.addEventListener("click", selectNextReviewSlot);
 reviewAllCorrectButton?.addEventListener("click", saveAllReviewSlotsCorrect);
+reviewZoomOutButton?.addEventListener("click", () => adjustReviewZoom(1 / 1.35));
+reviewZoomInButton?.addEventListener("click", () => adjustReviewZoom(1.35));
+reviewOverviewButton?.addEventListener("click", showReviewOverview);
 addCollectionButton?.addEventListener("click", addScanToCollection);
 undoCollectionButton?.addEventListener("click", undoLastScanAdd);
 window.addEventListener("resize", () => drawPhotoReview());
@@ -224,6 +232,7 @@ function showPhotoReviewImage(imageUrl) {
   if (!reviewPanel || !reviewImage) return;
   if (photoReviewState.imageUrl) URL.revokeObjectURL(photoReviewState.imageUrl);
   photoReviewState = { imageUrl, slots: [], selectedSlotId: "" };
+  photoReviewView = { focused: false, zoomFactor: 1 };
   reviewPanel.hidden = false;
   reviewImage.src = imageUrl;
   if (reviewSummary) reviewSummary.textContent = "Waiting for recognizer...";
@@ -281,14 +290,53 @@ function normalizedPolygon(points) {
 
 function drawPhotoReview() {
   if (!reviewCanvas || !reviewCtx || !reviewImage?.complete) return;
-  const rect = reviewCanvas.getBoundingClientRect();
+  const rect = { width: reviewStage?.clientWidth || reviewCanvas.clientWidth, height: reviewStage?.clientHeight || reviewCanvas.clientHeight };
   const scale = window.devicePixelRatio || 1;
   reviewCanvas.width = Math.max(1, Math.round(rect.width * scale));
   reviewCanvas.height = Math.max(1, Math.round(rect.height * scale));
   reviewCtx.setTransform(scale, 0, 0, scale, 0, 0);
   reviewCtx.clearRect(0, 0, rect.width, rect.height);
-  const imageRect = photoImageRect(rect);
-  for (const slot of photoReviewState.slots) drawReviewSlot(slot, imageRect);
+  const baseImageRect = photoImageRect(rect);
+  const imageRect = reviewImageRect(baseImageRect, rect);
+  const slots = photoReviewView.focused ? [selectedSlot()].filter(Boolean) : photoReviewState.slots;
+  for (const slot of slots) drawReviewSlot(slot, imageRect);
+  applyReviewImageTransform(baseImageRect, imageRect);
+}
+
+function reviewImageRect(baseImageRect, stageRect) {
+  const slot = selectedSlot();
+  if (!photoReviewView.focused || !slot) return baseImageRect;
+  const polygon = slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : slot.normalized_code_anchor_box;
+  const points = polygon.map(([x, y]) => [baseImageRect.x + x * baseImageRect.width, baseImageRect.y + y * baseImageRect.height]);
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  const width = Math.max(1, Math.max(...xs) - Math.min(...xs));
+  const height = Math.max(1, Math.max(...ys) - Math.min(...ys));
+  const fitScale = Math.min((stageRect.width * 0.82) / width, (stageRect.height * 0.82) / height, 10);
+  const scale = Math.max(1, Math.min(12, fitScale * photoReviewView.zoomFactor));
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return {
+    x: stageRect.width / 2 + (baseImageRect.x - centerX) * scale,
+    y: stageRect.height / 2 + (baseImageRect.y - centerY) * scale,
+    width: baseImageRect.width * scale,
+    height: baseImageRect.height * scale,
+  };
+}
+
+function applyReviewImageTransform(baseImageRect, imageRect) {
+  if (!reviewImage) return;
+  if (!photoReviewView.focused) {
+    reviewImage.style.transform = "";
+    reviewStage?.classList.remove("isFocused");
+    return;
+  }
+  const scale = imageRect.width / Math.max(1, baseImageRect.width);
+  const translateX = imageRect.x - baseImageRect.x * scale;
+  const translateY = imageRect.y - baseImageRect.y * scale;
+  reviewImage.style.transformOrigin = "0 0";
+  reviewImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+  reviewStage?.classList.add("isFocused");
 }
 
 function photoImageRect(rect) {
@@ -334,16 +382,19 @@ function drawReviewSlot(slot, imageRect) {
 
 function selectReviewSlotAtEvent(event) {
   if (!photoReviewState.slots.length || !reviewCanvas) return;
-  const rect = reviewCanvas.getBoundingClientRect();
-  const imageRect = photoImageRect(rect);
-  const point = [event.clientX - rect.left, event.clientY - rect.top];
+  const bounds = reviewCanvas.getBoundingClientRect();
+  const rect = { width: reviewStage?.clientWidth || reviewCanvas.clientWidth, height: reviewStage?.clientHeight || reviewCanvas.clientHeight };
+  const imageRect = reviewImageRect(photoImageRect(rect), rect);
+  const point = [event.clientX - bounds.left, event.clientY - bounds.top];
   for (let index = photoReviewState.slots.length - 1; index >= 0; index -= 1) {
     const slot = photoReviewState.slots[index];
     const polygon = (slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : slot.normalized_code_anchor_box)
       .map(([x, y]) => [imageRect.x + x * imageRect.width, imageRect.y + y * imageRect.height]);
     if (pointInPolygon(point, polygon)) {
       photoReviewState.selectedSlotId = slot.id;
+      if (photoReviewView.focused) photoReviewView.zoomFactor = 1;
       renderInspector();
+      renderReviewQueue();
       drawPhotoReview();
       return;
     }
@@ -628,14 +679,35 @@ function renderReviewQueue() {
   reviewQueue.hidden = reviewSlots.length === 0;
   reviewQueueText.textContent = `${reviewSlots.length} uncertain match${reviewSlots.length === 1 ? "" : "es"} to review`;
   reviewNextButton.disabled = reviewSlots.length === 0;
+  reviewNextButton.textContent = photoReviewView.focused ? "Next uncertain" : "Review uncertain";
+  const focused = photoReviewView.focused && selectedSlot();
+  const focusedIndex = focused ? reviewSlots.findIndex((slot) => slot.id === focused.id) : -1;
+  if (focusedIndex >= 0) reviewQueueText.textContent = `Reviewing ${focusedIndex + 1} of ${reviewSlots.length} · ${focused.code || "Unknown card"}`;
+  if (reviewToolbar) reviewToolbar.hidden = !focused;
 }
 
 function selectNextReviewSlot() {
   const reviewSlots = photoReviewState.slots.filter((slot) => slotNeedsReview(slot));
   if (!reviewSlots.length) return;
   const currentIndex = reviewSlots.findIndex((slot) => slot.id === photoReviewState.selectedSlotId);
-  photoReviewState.selectedSlotId = reviewSlots[(currentIndex + 1) % reviewSlots.length].id;
+  if (photoReviewView.focused) photoReviewState.selectedSlotId = reviewSlots[(currentIndex + 1) % reviewSlots.length].id;
+  else if (currentIndex < 0) photoReviewState.selectedSlotId = reviewSlots[0].id;
+  photoReviewView = { focused: true, zoomFactor: 1 };
   renderInspector();
+  renderReviewQueue();
+  drawPhotoReview();
+  reviewStage?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function adjustReviewZoom(multiplier) {
+  if (!photoReviewView.focused) return;
+  photoReviewView.zoomFactor = Math.max(0.55, Math.min(3, photoReviewView.zoomFactor * multiplier));
+  drawPhotoReview();
+}
+
+function showReviewOverview() {
+  photoReviewView = { focused: false, zoomFactor: 1 };
+  renderReviewQueue();
   drawPhotoReview();
 }
 
