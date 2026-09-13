@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   photo-picker:
-    name: Photo OCR and media interactions
+    # Keep this display name stable: main-branch protection requires the
+    # historical check context even though the job now covers more behavior.
+    name: Photo picker regression
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

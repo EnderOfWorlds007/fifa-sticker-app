@@ -53,3 +53,8 @@ Chrome to exercise the production click listener deterministically, then keeps
 the input-target, OCR-request, textbox, and summary assertions.
 The deterministic in-browser activation follow-up re-review verdict was
 **APPROVE**.
+
+Branch protection requires the historical `Photo picker regression` check
+context. The expanded workflow retains that job display name so added coverage
+does not silently invalidate the repository's merge policy.
+The check-context compatibility follow-up re-review verdict was **APPROVE**.
