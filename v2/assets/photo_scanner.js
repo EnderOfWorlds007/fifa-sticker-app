@@ -10,35 +10,35 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-7d84c2e91a6f";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6c2d5c6c0035";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7d84c2e91a6f";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-7d84c2e91a6f";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-7d84c2e91a6f";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6c2d5c6c0035";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-6c2d5c6c0035";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-6c2d5c6c0035";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-7d84c2e91a6f";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7d84c2e91a6f";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-7d84c2e91a6f";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-7d84c2e91a6f";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-6c2d5c6c0035";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6c2d5c6c0035";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-6c2d5c6c0035";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-6c2d5c6c0035";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-7d84c2e91a6f";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-6c2d5c6c0035";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-7d84c2e91a6f";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-6c2d5c6c0035";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -62,6 +62,7 @@ const reviewStage = document.querySelector("#photoReviewStage");
 const reviewImage = document.querySelector("#photoReviewImage");
 const reviewCanvas = document.querySelector("#photoReviewOverlay");
 const reviewCtx = reviewCanvas?.getContext("2d");
+const reviewUnplaced = document.querySelector("#photoReviewUnplaced");
 const reviewInspector = document.querySelector("#photoReviewInspector");
 const reviewQueue = document.querySelector("#photoReviewQueue");
 const reviewQueueText = document.querySelector("#photoReviewQueueText");
@@ -298,7 +299,10 @@ function showPhotoReviewImage(imageUrl) {
 
 function renderPhotoReview(payload) {
   const overview = payload?.overview_map || payload?.overview?.map || payload?.scanner_overview || null;
-  const slots = normalizeReviewSlots(overview?.slots || payload?.slots || [], payload);
+  const slots = appendUnplacedPayloadCodes(
+    normalizeReviewSlots(overview?.slots || payload?.slots || [], payload),
+    payload,
+  );
   photoReviewState.slots = slots;
   const firstReviewSlot = reviewSlots()[0];
   photoReviewState.selectedSlotId = firstReviewSlot?.id || slots[0]?.id || "";
@@ -328,6 +332,7 @@ function normalizeReviewSlots(slots, payload = {}) {
       id: String(slot.id || `slot-${index + 1}`),
       code: String(slot.code || "").toUpperCase(),
       name: String(slot.name || reviewSlotCatalogName(slot.code) || "").trim(),
+      team: String(slot.team || reviewSlotCatalogCard(slot.code).team || "").trim(),
       original_code: String(slot.code || "").toUpperCase(),
       original_back_insignia_type: String(slot.back_insignia_type || "no_clue"),
       original_back_insignia_confidence: Number(slot.back_insignia_confidence || 0),
@@ -339,8 +344,68 @@ function normalizeReviewSlots(slots, payload = {}) {
       confidence: Number(slot.confidence ?? slot.best_score ?? 0),
       normalized_polygon: normalizedPolygon(slot.normalized_polygon || slot.polygon),
       normalized_code_anchor_box: normalizedPolygon(slot.normalized_code_anchor_box),
+      normalized_back_insignia_box: normalizeBackInsigniaBox(slot),
     }))
-    .filter((slot) => (slot.normalized_polygon?.length || slot.normalized_code_anchor_box?.length) >= 4);
+    .filter((slot) => slot.code || slot.name || slot.normalized_polygon?.length >= 4 || slot.normalized_code_anchor_box?.length >= 4 || slot.normalized_back_insignia_box?.length >= 4);
+}
+
+function appendUnplacedPayloadCodes(slots, payload = {}) {
+  const remaining = new Map();
+  for (const slot of slots) {
+    const code = normalizeCodeList([slot.code])[0] || "";
+    if (code) remaining.set(code, (remaining.get(code) || 0) + 1);
+  }
+  const requestedSide = String(payload?.ocr?.side || side?.value || photoOcrSide());
+  const additions = [];
+  for (const [index, rawCode] of (Array.isArray(payload?.codes) ? payload.codes : []).entries()) {
+    const code = normalizeCodeList([rawCode])[0] || "";
+    if (!code) continue;
+    const represented = remaining.get(code) || 0;
+    if (represented) {
+      remaining.set(code, represented - 1);
+      continue;
+    }
+    const catalog = reviewSlotCatalogCard(code);
+    additions.push({
+      id: `unplaced:${index + 1}:${code}`,
+      code,
+      name: catalog.name,
+      team: catalog.team,
+      original_code: code,
+      state: "confirmed",
+      review_status: "matched",
+      geometry_status: "unavailable",
+      needs_user_help: true,
+      confidence: 0,
+      code_candidates: [{ code }],
+      requested_side: requestedSide,
+      upload_id: String(payload?.upload_id || payload?.ocr?.upload_id || ""),
+      job_id: String(payload?.job_id || ""),
+      back_insignia_type: "no_clue",
+      original_back_insignia_type: "no_clue",
+      original_back_insignia_confidence: 0,
+      insignia_review_status: "",
+      normalized_polygon: [],
+      normalized_code_anchor_box: [],
+      normalized_back_insignia_box: [],
+    });
+  }
+  return [...slots, ...additions];
+}
+
+function normalizeBackInsigniaBox(slot) {
+  const polygon = normalizedPolygon(
+    slot?.normalized_back_insignia_box
+    || slot?.normalized_insignia_box
+    || slot?.back_insignia?.normalized_box,
+  );
+  if (polygon.length >= 4) return polygon;
+  const center = slot?.normalized_back_insignia_center || slot?.normalized_insignia_center;
+  if (!Array.isArray(center) || center.length < 2) return [];
+  const x = Number(center[0]);
+  const y = Number(center[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
+  return [[x - 0.015, y - 0.015], [x + 0.015, y - 0.015], [x + 0.015, y + 0.015], [x - 0.015, y + 0.015]];
 }
 
 function matchedReviewSlotCodes(slots) {
@@ -373,6 +438,7 @@ function reviewImageRect(baseImageRect, stageRect) {
   const slot = selectedSlot();
   if (!photoReviewView.focused || !slot) return baseImageRect;
   const polygon = reviewSlotPolygon(slot);
+  if (polygon.length < 4) return baseImageRect;
   const points = polygon.map(([x, y]) => [baseImageRect.x + x * baseImageRect.width, baseImageRect.y + y * baseImageRect.height]);
   const xs = points.map((point) => point[0]);
   const ys = points.map((point) => point[1]);
@@ -557,13 +623,29 @@ function reviewSlotAppearance(slot, statusValue) {
 function reviewSlotPolygon(slot) {
   const card = slot.normalized_polygon?.length >= 4 ? slot.normalized_polygon : [];
   const anchor = slot.normalized_code_anchor_box?.length >= 4 ? slot.normalized_code_anchor_box : [];
+  const insignia = slot.normalized_back_insignia_box?.length >= 4 ? slot.normalized_back_insignia_box : [];
   if (slot.geometry_status === "estimated" && card.length >= 4) {
-    if (!isPlausibleEstimatedReviewPolygon(card, anchor)) return anchor;
+    if (!isPlausibleEstimatedReviewPolygon(card, anchor)) return expandReviewAnchorPolygon(insignia.length ? insignia : anchor);
     const calibrated = calibrateEstimatedReviewPolygon(card, photoReviewState.slots);
     return isPlausibleEstimatedReviewPolygon(calibrated, anchor) ? calibrated : card;
   }
-  if (slot.geometry_status !== "resolved" && anchor.length >= 4) return anchor;
-  return card.length >= 4 ? card : anchor;
+  if (slot.geometry_status !== "resolved" && insignia.length >= 4) return expandReviewAnchorPolygon(insignia);
+  if (slot.geometry_status !== "resolved" && anchor.length >= 4) return expandReviewAnchorPolygon(anchor);
+  return card.length >= 4 ? card : expandReviewAnchorPolygon(insignia.length ? insignia : anchor);
+}
+
+function expandReviewAnchorPolygon(anchor) {
+  if (!Array.isArray(anchor) || anchor.length < 4) return [];
+  const xs = anchor.map((point) => Number(point?.[0])).filter(Number.isFinite);
+  const ys = anchor.map((point) => Number(point?.[1])).filter(Number.isFinite);
+  if (xs.length < 4 || ys.length < 4) return [];
+  const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const width = Math.max(0.14, (Math.max(...xs) - Math.min(...xs)) * 1.2);
+  const height = Math.max(0.07, (Math.max(...ys) - Math.min(...ys)) * 1.2);
+  const left = Math.max(0, Math.min(1 - width, centerX - width / 2));
+  const top = Math.max(0, Math.min(1 - height, centerY - height / 2));
+  return [[left, top], [left + width, top], [left + width, top + height], [left, top + height]];
 }
 
 function isPlausibleEstimatedReviewPolygon(card, anchor = []) {
@@ -717,6 +799,7 @@ function selectReviewSlotAtEvent(event) {
 }
 
 function renderInspector() {
+  renderUnplacedReviewSlots();
   if (!reviewInspector) return;
   const slot = selectedSlot();
   if (!slot) {
@@ -766,6 +849,45 @@ function renderInspector() {
   form.append(input, save);
   reviewInspector.append(identitySection);
   if (isBackScanSlot(slot)) reviewInspector.append(insigniaDecisionSection(slot));
+}
+
+function renderUnplacedReviewSlots() {
+  if (!reviewUnplaced) return;
+  const slots = photoReviewState.slots.filter((slot) => reviewSlotPolygon(slot).length < 4);
+  reviewUnplaced.hidden = slots.length === 0;
+  if (!slots.length) {
+    reviewUnplaced.replaceChildren();
+    return;
+  }
+  const heading = document.createElement("strong");
+  heading.textContent = `${slots.length} recognized without a photo location`;
+  const help = document.createElement("span");
+  help.textContent = "Tap a card to confirm or correct it.";
+  const list = document.createElement("div");
+  list.className = "photoReviewUnplacedList";
+  for (const slot of slots) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "photoReviewUnplacedCard";
+    button.classList.toggle("selected", slot.id === photoReviewState.selectedSlotId);
+    button.setAttribute("aria-pressed", String(slot.id === photoReviewState.selectedSlotId));
+    const label = reviewSlotLabel(slot);
+    const code = document.createElement("strong");
+    code.textContent = label.primary;
+    const details = document.createElement("span");
+    details.textContent = [label.secondary, slot.team].filter((value, index, values) => value && values.indexOf(value) === index).join(" · ") || "Name unavailable";
+    button.append(code, details);
+    button.addEventListener("click", () => {
+      photoReviewState.selectedSlotId = slot.id;
+      photoReviewView = { focused: false, zoomFactor: 1 };
+      renderInspector();
+      renderReviewQueue();
+      drawPhotoReview();
+      reviewInspector?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    list.append(button);
+  }
+  reviewUnplaced.replaceChildren(heading, help, list);
 }
 
 function insigniaDecisionSection(slot) {
@@ -861,16 +983,21 @@ function geometryLabel(value) {
   if (value === "estimated") return "code accepted; card outline estimated";
   if (value === "orientation_uncertain") return "card orientation uncertain";
   if (value === "code_only") return "code only; no complete card crop";
+  if (value === "unavailable") return "photo location unavailable";
   return value || "geometry unknown";
 }
 
-function reviewSlotCatalogName(code) {
+function reviewSlotCatalogCard(code) {
   const normalized = String(code || "").trim().toUpperCase();
-  if (!normalized) return "";
+  if (!normalized) return { name: "", team: "" };
   const card = latestInventoryProjection?.catalog?.cards?.find(
     (candidate) => String(candidate?.code || "").trim().toUpperCase() === normalized,
   );
-  return String(card?.name || "").trim();
+  return { name: String(card?.name || "").trim(), team: String(card?.team || "").trim() };
+}
+
+function reviewSlotCatalogName(code) {
+  return reviewSlotCatalogCard(code).name;
 }
 
 async function saveInspectorCode(event) {
@@ -924,6 +1051,7 @@ async function persistReviewLabel(slot, correctedCode) {
     geometry_status: slot.geometry_status || "",
     normalized_polygon: slot.normalized_polygon || [],
     normalized_code_anchor_box: slot.normalized_code_anchor_box || [],
+    normalized_back_insignia_box: slot.normalized_back_insignia_box || [],
   });
 }
 
@@ -1148,11 +1276,12 @@ function selectNextReviewSlot(options = {}) {
   const currentPosition = photoReviewState.slots.findIndex((slot) => slot.id === currentId);
   const next = pending.find((slot) => photoReviewState.slots.indexOf(slot) > currentPosition) || pending[0];
   photoReviewState.selectedSlotId = next.id;
-  photoReviewView = { focused: true, zoomFactor: 1 };
+  const hasPhotoLocation = reviewSlotPolygon(next).length >= 4;
+  photoReviewView = { focused: hasPhotoLocation, zoomFactor: 1 };
   renderInspector();
   renderReviewQueue();
   drawPhotoReview();
-  reviewStage?.scrollIntoView({ behavior: "smooth", block: "center" });
+  (hasPhotoLocation ? reviewStage : reviewUnplaced)?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function adjustReviewZoom(multiplier) {
@@ -1193,7 +1322,10 @@ function slotNeedsReview(slot) {
 }
 
 function slotNeedsCodeReview(slot) {
-  return Boolean(!slot.code || slot.needs_user_help || slotStatus(slot) !== "matched");
+  const hasNoSourceLocation = !slot.normalized_polygon?.length
+    && !slot.normalized_code_anchor_box?.length
+    && !slot.normalized_back_insignia_box?.length;
+  return Boolean(!slot.code || slot.needs_user_help || (hasNoSourceLocation && !slot.saved_review) || slotStatus(slot) !== "matched");
 }
 
 function slotNeedsInsigniaReview(slot) {
@@ -1221,6 +1353,7 @@ function slotReviewReason(slot) {
   const code = slotNeedsCodeReview(slot);
   const insignia = slotNeedsInsigniaReview(slot);
   if (code && insignia) return "check code and back";
+  if (code && reviewSlotPolygon(slot).length < 4) return "confirm code without photo location";
   if (code) return "check code";
   return "choose back insignia";
 }
