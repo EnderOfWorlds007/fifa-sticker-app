@@ -136,9 +136,9 @@ export async function albumPageBackendReadiness() {
   };
 }
 
-export async function waitForPhotoCodeJob(jobId, { onStatus } = {}) {
+export async function waitForPhotoCodeJob(jobId, { onStatus, pollIntervalMs = 1000 } = {}) {
   if (!jobId) throw new Error("Backend did not return a job id.");
-  for (let attempt = 0; attempt < 90; attempt += 1) {
+  while (true) {
     const response = await fetch(recognitionUrl(`${PHOTO_CODE_JOBS_PATH}/${encodeURIComponent(jobId)}`), {
       cache: "no-store",
       headers: authHeaders(),
@@ -148,10 +148,12 @@ export async function waitForPhotoCodeJob(jobId, { onStatus } = {}) {
     const payload = await response.json();
     if (payload.status === "done") return payload;
     if (payload.status === "error") throw new Error(payload.error || "Photo recognition failed.");
+    if (payload.status !== "queued" && payload.status !== "running") {
+      throw new Error(`Recognition returned an unknown status: ${String(payload.status || "missing")}.`);
+    }
     if (onStatus) onStatus(payload.status === "running" ? "Recognizing photo..." : "Waiting for recognizer...");
-    await delay(1000);
+    await delay(pollIntervalMs);
   }
-  throw new Error("Recognition timed out.");
 }
 
 export async function savePhotoCodeReviewLabel(payload) {
