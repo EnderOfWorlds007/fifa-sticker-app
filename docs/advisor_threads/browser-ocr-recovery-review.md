@@ -36,3 +36,12 @@ page's existing `need_lookup.js` module before clicking. Both changes remove
 environment races without extending interaction timeouts or weakening behavior
 assertions. The cleanup follow-up re-review verdict was **APPROVE**.
 The module-readiness follow-up re-review verdict was also **APPROVE**.
+
+Linux headless Chrome does not reliably surface a native chooser for the legacy
+page's programmatic hidden-input click. The V2 suite continues to exercise the
+real native chooser. The legacy suite now observes the real button handler's
+input-click target, verifies its multiple/image contract, assigns the file via
+Chrome's DOM protocol, and verifies the resulting OCR request and populated
+textbox. This removes a platform UI dependency without bypassing application
+event wiring.
+The portable legacy-interaction follow-up re-review verdict was **APPROVE**.

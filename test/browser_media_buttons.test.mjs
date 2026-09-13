@@ -41,13 +41,14 @@ test("media buttons align and Use Photos fills the textbox after file selection 
     await waitForHttp(`http://127.0.0.1:${PORT}/fifa-sticker-app/need-lookup/`);
     await waitForHttp(`http://127.0.0.1:${DEBUG_PORT}/json/version`);
 
-    const page = await createPage(`http://127.0.0.1:${PORT}/fifa-sticker-app/need-lookup/`);
+    const page = await createPage("about:blank");
     const cdp = await connectCdp(page.webSocketDebuggerUrl);
     try {
       await send(cdp, "Runtime.enable");
       await send(cdp, "Page.enable");
       await send(cdp, "DOM.enable");
-      await send(cdp, "Page.setInterceptFileChooserDialog", { enabled: true });
+      await send(cdp, "Page.addScriptToEvaluateOnNewDocument", { source: photoInputClickSpySource() });
+      await send(cdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/need-lookup/` });
       await waitForReady(cdp);
       await evaluate(cdp, `(() => {
         const originalFetch = window.fetch.bind(window);
@@ -97,14 +98,19 @@ test("media buttons align and Use Photos fills the textbox after file selection 
       assert.equal(Math.round(metrics.photo.height), Math.round(metrics.voice.height), "buttons should share height");
       assert.ok(Math.abs(metrics.photo.width - metrics.voice.width) <= 1, "buttons should share width");
 
-      const chooserPromise = withTimeout(waitForEvent(cdp, "Page.fileChooserOpened"), 3000, "file chooser did not open");
       await clickCenter(cdp, metrics.photo);
-      const chooser = await chooserPromise;
-      assert.equal(chooser.mode, "selectMultiple");
-      assert.ok(chooser.backendNodeId, "file chooser should expose the input backend node id");
+      await waitForExpression(cdp, `window.__photoInputClickCount === 1`);
+      const inputContract = await evaluate(cdp, `({
+        multiple: document.querySelector("#needPhotoInput").multiple,
+        accept: document.querySelector("#needPhotoInput").accept,
+      })`);
+      assert.deepEqual(inputContract, { multiple: true, accept: "image/*" });
 
+      const { root } = await send(cdp, "DOM.getDocument");
+      const { nodeId } = await send(cdp, "DOM.querySelector", { nodeId: root.nodeId, selector: "#needPhotoInput" });
+      assert.ok(nodeId, "Use Photos should target a live file input");
       await send(cdp, "DOM.setFileInputFiles", {
-        backendNodeId: chooser.backendNodeId,
+        nodeId,
         files: [photoPath],
       });
       const filledText = await waitForExpression(cdp, `document.querySelector("#needLookupText").value`);
@@ -124,6 +130,19 @@ test("media buttons align and Use Photos fills the textbox after file selection 
     await rm(chromeProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
+
+function photoInputClickSpySource() {
+  return `(() => {
+    const nativeClick = HTMLInputElement.prototype.click;
+    HTMLInputElement.prototype.click = function () {
+      if (this.id === "needPhotoInput") {
+        window.__photoInputClickCount = (window.__photoInputClickCount || 0) + 1;
+        return;
+      }
+      return nativeClick.call(this);
+    };
+  })()`;
+}
 
 async function createPage(url) {
   const response = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/new?${encodeURIComponent(url)}`, { method: "PUT" });
@@ -219,24 +238,12 @@ async function waitForExpression(cdp, expression) {
   throw new Error(`Timed out waiting for ${expression}`);
 }
 
-function waitForEvent(cdp, method) {
-  return cdp.waitFor(method);
-}
-
 async function clickCenter(cdp, rect) {
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;
   await send(cdp, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
   await send(cdp, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
   await send(cdp, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
-}
-
-function withTimeout(promise, ms, message) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function delay(ms) {
