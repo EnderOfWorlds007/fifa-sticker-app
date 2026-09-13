@@ -2,8 +2,8 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   loadCachedInventoryPayload,
-} from "./inventory_source.js?v=build-3c9e7a12f604";
-import { ensureActiveProfileId } from "./v2_profile.js?v=build-3c9e7a12f604";
+} from "./inventory_source.js?v=build-7d84c2e91a6f";
+import { ensureActiveProfileId } from "./v2_profile.js?v=build-7d84c2e91a6f";
 
 const ALBUM_SCAN_SOURCE_LABEL = "album page scan";
 const TEXT_INVENTORY_SOURCE_LABEL = "pasted text inventory";

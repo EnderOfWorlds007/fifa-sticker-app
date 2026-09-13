@@ -4,6 +4,7 @@ import test from "node:test";
 
 const source = readFileSync(new URL("../v2/assets/photo_scanner.js", import.meta.url), "utf8");
 const backendSource = readFileSync(new URL("../v2/assets/ocr_backend.js", import.meta.url), "utf8");
+const tradePasteSource = readFileSync(new URL("../v2/assets/trade_paste_box.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../v2/scanner/index.html", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../v2/assets/styles.css", import.meta.url), "utf8");
 
@@ -69,6 +70,7 @@ test("iPhone gets a reliable single-photo picker without losing batch selection"
   assert.match(html, /id="photoScannerBatchInput" class="photoPickerNativeInput" type="file" accept="image\/\*" multiple/);
   assert.match(html, /id="photoScannerButton"[^>]*>Choose photo<\/button>/);
   assert.match(html, /id="photoScannerBatchButton"[^>]*>Select several<\/button>/);
+  assert.match(html, /id="photoScannerCancelButton"[^>]*hidden[^>]*>Cancel scan<\/button>/);
   assert.match(styles, /\.photoPickerNativeInput[\s\S]*position: absolute[\s\S]*inset: 0[\s\S]*opacity: 0/);
   assert.doesNotMatch(source, /scanButton\?\.addEventListener\("click"/);
   assert.match(source, /picker\?\.addEventListener\("input", scanSelectedPhotos\)/);
@@ -78,6 +80,18 @@ test("iPhone gets a reliable single-photo picker without losing batch selection"
   assert.doesNotMatch(functionBody("scanPhotos"), /input\.disabled|batchInput\.disabled/);
   assert.match(functionBody("scanPhotos"), /setPhotoPickersBusy\(true\)/);
   assert.match(styles, /\.photoPickerControl\.isBusy[\s\S]*pointer-events: none/);
+});
+
+test("both V2 photo entry points expose cancellation and share one signal across create and poll", () => {
+  assert.match(source, /activePhotoScanController = new AbortController\(\)/);
+  assert.match(source, /activePhotoScanController\?\.abort\(\)/);
+  assert.ok((source.match(/signal,/g) || []).length >= 2);
+  assert.match(html, /id="photoScannerCancelButton"[^>]*>Cancel scan<\/button>/);
+
+  assert.match(tradePasteSource, /photoScanController = new AbortController\(\)/);
+  assert.match(tradePasteSource, /photoScanController\?\.abort\(\)/);
+  assert.ok((tradePasteSource.match(/signal: options\.signal/g) || []).length >= 2);
+  assert.match(tradePasteSource, /button\.textContent = "Cancel scan"/);
 });
 
 test("overview labels scale to and stay clipped inside each detected card", () => {

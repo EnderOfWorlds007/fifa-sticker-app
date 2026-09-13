@@ -175,7 +175,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-3c9e7a12f604", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-7d84c2e91a6f", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
@@ -234,14 +234,17 @@ function installOcrMockSource() {
   return `(() => {
     const originalFetch = window.fetch.bind(window);
     window.fetch = (url, init) => {
-      if (String(url).includes("/api/photo-code-jobs") && init?.method === "POST") {
+      const photoJobMatch = String(url).match(new RegExp("/api/photo-code-jobs/([0-9a-f]{32})$"));
+      if (photoJobMatch && init?.method === "PUT") {
         const file = init.body;
+        window.__cameraJobId = photoJobMatch[1];
         window.__cameraUploadCount = (window.__cameraUploadCount || 0) + 1;
         window.__cameraUpload = file ? { name: file.name, type: file.type, size: file.size } : null;
-        return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: "camera-job", status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
+        return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: window.__cameraJobId, status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
       }
-      if (String(url).includes("/api/photo-code-jobs/camera-job")) {
+      if (photoJobMatch && photoJobMatch[1] === window.__cameraJobId) {
         return Promise.resolve(new Response(JSON.stringify({
+          job_id: window.__cameraJobId,
           status: "done",
           result: {
             codes: ["TUR5"],
