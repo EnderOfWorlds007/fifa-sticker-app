@@ -35,4 +35,15 @@ Verdict: **request changes**.
 - The V2 Chrome test cancels deferred polling through both the scanner and
   reusable trade-photo UI and verifies that controls return to their idle state.
 
-Final re-review status: pending.
+## Final re-review
+
+- Corrective commit reviewed: `5542e27fe73d027a5cb630b7734b1a4fce934805`
+- Verdict: **APPROVE** — no remaining P0, P1, or P2 findings.
+- The reviewer confirmed that truncated successful PUT acknowledgements reconcile
+  by GET without re-uploading, while malformed polling and protocol responses
+  remain terminal.
+- The reviewer confirmed behavioral cancellation coverage for the initial PUT,
+  reconciliation GET, scanner polling, and trade-photo polling, including idle
+  control restoration.
+- Build `build-7d84c2e91a6f` remains internally consistent and preserves the
+  collection-safe recovery page.
