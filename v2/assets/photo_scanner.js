@@ -10,35 +10,35 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-7d84c2e91a6f";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3c9e7a12f604";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-3c9e7a12f604";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7d84c2e91a6f";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-7d84c2e91a6f";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-7d84c2e91a6f";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-3c9e7a12f604";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-3c9e7a12f604";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-3c9e7a12f604";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-7d84c2e91a6f";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7d84c2e91a6f";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-7d84c2e91a6f";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-7d84c2e91a6f";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-7d84c2e91a6f";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-7d84c2e91a6f";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -46,6 +46,7 @@ const side = document.querySelector("#photoScannerSide");
 const scanButton = document.querySelector("#photoScannerButton");
 const batchButton = document.querySelector("#photoScannerBatchButton");
 const cameraButton = document.querySelector("#photoScannerCameraButton");
+const cancelButton = document.querySelector("#photoScannerCancelButton");
 const cameraDiagnostics = document.querySelector("#photoCameraDiagnostics");
 const copyButton = document.querySelector("#photoScannerCopyButton");
 const status = document.querySelector("#photoScannerStatus");
@@ -85,6 +86,7 @@ let latestScanStatuses = [];
 let latestInventoryProjection = null;
 let latestAppliedScan = { signature: "", transactionId: "" };
 let scanInFlight = false;
+let activePhotoScanController = null;
 let latestCaptureSummary = "";
 
 applyOcrBackendFromQuery();
@@ -97,6 +99,7 @@ refreshScannerCollectionProjection().then(() => {
   renderRecognizedCodeRows();
 });
 cameraButton?.addEventListener("click", captureCameraPhoto);
+cancelButton?.addEventListener("click", () => activePhotoScanController?.abort());
 for (const picker of [input, batchInput]) {
   picker?.addEventListener("input", scanSelectedPhotos);
   picker?.addEventListener("change", scanSelectedPhotos);
@@ -138,11 +141,13 @@ async function scanSelectedPhotos(event) {
   latestCaptureSummary = "";
   if (cameraDiagnostics) cameraDiagnostics.textContent = "Using photo-library image; in-app camera diagnostics do not apply.";
   scanInFlight = true;
+  activePhotoScanController = new AbortController();
   try {
     await allowNativePickerToDismiss();
-    await scanPhotos(files);
+    await scanPhotos(files, activePhotoScanController.signal);
   } finally {
     scanInFlight = false;
+    activePhotoScanController = null;
     if (picker) picker.value = "";
   }
 }
@@ -167,14 +172,16 @@ async function captureCameraPhoto() {
   latestCaptureSummary = capture.summary;
   if (cameraDiagnostics) cameraDiagnostics.textContent = capture.summary;
   scanInFlight = true;
+  activePhotoScanController = new AbortController();
   try {
-    await scanPhotos([capture.file]);
+    await scanPhotos([capture.file], activePhotoScanController.signal);
   } finally {
     scanInFlight = false;
+    activePhotoScanController = null;
   }
 }
 
-async function scanPhotos(files) {
+async function scanPhotos(files, signal) {
   if (scannerMode() !== "back-card") {
     status.textContent = "This scanner route is not configured for card backs.";
     return;
@@ -187,6 +194,7 @@ async function scanPhotos(files) {
   if (batchButton) batchButton.disabled = true;
   setPhotoPickersBusy(true);
   if (cameraButton) cameraButton.disabled = true;
+  if (cancelButton) cancelButton.hidden = false;
   copyButton.disabled = true;
   result.value = "";
   latestScanCodes = [];
@@ -206,9 +214,14 @@ async function scanPhotos(files) {
     for (let index = 0; index < selected.length; index += 1) {
       setScanProgress(`Scanning... ${index + 1}/${selected.length}`);
       try {
-        const job = await createPhotoCodeJob(selected[index], { side: side.value || photoOcrSide() });
+        const job = await createPhotoCodeJob(selected[index], {
+          side: side.value || photoOcrSide(),
+          onStatus: (message) => { setScanProgress(message); },
+          signal,
+        });
         const payload = await waitForPhotoCodeJob(job.job_id, {
           onStatus: (message) => { setScanProgress(message); },
+          signal,
         });
         const resultPayload = payload.result || payload;
         resultPayload.upload_id ||= payload.upload_id || job.upload_id || "";
@@ -216,6 +229,7 @@ async function scanPhotos(files) {
         recognizedPayloads.push(resultPayload);
       } catch (error) {
         lastError = error;
+        if (error?.kind === "cancelled") break;
       }
     }
     await renderResults(recognizedPayloads, { requestedCount: selected.length, lastError });
@@ -227,6 +241,7 @@ async function scanPhotos(files) {
     if (batchButton) batchButton.disabled = false;
     setPhotoPickersBusy(false);
     if (cameraButton) cameraButton.disabled = false;
+    if (cancelButton) cancelButton.hidden = true;
     scanButton.classList.remove("scanning");
     scanButton.setAttribute("aria-busy", "false");
     scanButton.textContent = "Choose photo";

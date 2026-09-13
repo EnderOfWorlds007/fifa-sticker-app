@@ -135,6 +135,26 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       assert.match(iosResult.diagnostics, /iPhone\/iPad camera frame \(native still bypassed\)/);
 
       await waitForExpression(cdp, `document.querySelector("#photoScannerStatus").textContent.includes("recognized") && !document.querySelector("#photoScannerCameraButton").disabled`);
+      await evaluate(cdp, `window.__holdPhotoJob = true`);
+      const cancelPhotoRect = await evaluate(cdp, `(() => {
+        const rect = document.querySelector("#photoScannerButton").getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      })()`);
+      const cancelChooserPromise = withTimeout(cdp.waitFor("Page.fileChooserOpened"), 2000, "cancel-test photo chooser did not open");
+      await clickCenter(cdp, cancelPhotoRect);
+      const cancelChooser = await cancelChooserPromise;
+      await send(cdp, "DOM.setFileInputFiles", { backendNodeId: cancelChooser.backendNodeId, files: [photoPath] });
+      await waitForExpression(cdp, `window.__heldPhotoPollStarted === true`);
+      await evaluate(cdp, `document.querySelector("#photoScannerCancelButton").click()`);
+      await waitForExpression(cdp, `document.querySelector("#photoScannerCancelButton").hidden && document.querySelector("#photoScannerStatus").textContent.includes("cancelled")`);
+      const cancelledScanner = await evaluate(cdp, `({
+        pickerBusy: document.querySelector("#photoScannerInput").closest(".photoPickerControl").classList.contains("isBusy"),
+        cameraDisabled: document.querySelector("#photoScannerCameraButton").disabled,
+        cancelHidden: document.querySelector("#photoScannerCancelButton").hidden,
+      })`);
+      assert.deepEqual(cancelledScanner, { pickerBusy: false, cameraDisabled: false, cancelHidden: true });
+      await evaluate(cdp, `window.__holdPhotoJob = false`);
+
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraFallbackButton")`);
       const fallbackRect = await evaluate(cdp, `(() => {
@@ -148,6 +168,22 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
       await send(cdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/compare/` });
       await waitForExpression(cdp, `document.querySelector("#compareText")`);
+      await evaluate(cdp, installOcrMockSource());
+      await evaluate(cdp, `window.__holdPhotoJob = true`);
+      const tradePhotoRect = await evaluate(cdp, `(() => {
+        const rect = document.querySelector(".photoUploadButton").getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      })()`);
+      const tradeChooserPromise = withTimeout(cdp.waitFor("Page.fileChooserOpened"), 2000, "trade photo chooser did not open");
+      await clickCenter(cdp, tradePhotoRect);
+      const tradeChooser = await tradeChooserPromise;
+      assert.equal(tradeChooser.mode, "selectMultiple");
+      await send(cdp, "DOM.setFileInputFiles", { backendNodeId: tradeChooser.backendNodeId, files: [photoPath] });
+      await waitForExpression(cdp, `window.__heldPhotoPollStarted === true && document.querySelector(".photoUploadButton").textContent === "Cancel scan"`);
+      await evaluate(cdp, `document.querySelector(".photoUploadButton").click()`);
+      await waitForExpression(cdp, `document.querySelector(".photoUploadButton").textContent === "Use Photos" && document.querySelector(".pasteCapabilityStatus:not(.liveTranscriptPanel)").textContent.includes("cancelled")`);
+      await evaluate(cdp, `window.__holdPhotoJob = false`);
+
       await evaluate(cdp, `(() => {
         const input = document.querySelector("#compareText");
         input.value = "TUR5 ×2, AUS16";
@@ -175,7 +211,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-3c9e7a12f604", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-7d84c2e91a6f", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
@@ -234,14 +270,25 @@ function installOcrMockSource() {
   return `(() => {
     const originalFetch = window.fetch.bind(window);
     window.fetch = (url, init) => {
-      if (String(url).includes("/api/photo-code-jobs") && init?.method === "POST") {
+      const photoJobMatch = String(url).match(new RegExp("/api/photo-code-jobs/([0-9a-f]{32})$"));
+      if (photoJobMatch && init?.method === "PUT") {
         const file = init.body;
+        window.__cameraJobId = photoJobMatch[1];
         window.__cameraUploadCount = (window.__cameraUploadCount || 0) + 1;
         window.__cameraUpload = file ? { name: file.name, type: file.type, size: file.size } : null;
-        return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: "camera-job", status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
+        return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: window.__cameraJobId, status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
       }
-      if (String(url).includes("/api/photo-code-jobs/camera-job")) {
+      if (photoJobMatch && photoJobMatch[1] === window.__cameraJobId) {
+        if (window.__holdPhotoJob) {
+          window.__heldPhotoPollStarted = true;
+          return new Promise((_resolve, reject) => {
+            const abort = () => reject(new DOMException("aborted", "AbortError"));
+            if (init?.signal?.aborted) abort();
+            else init?.signal?.addEventListener("abort", abort, { once: true });
+          });
+        }
         return Promise.resolve(new Response(JSON.stringify({
+          job_id: window.__cameraJobId,
           status: "done",
           result: {
             codes: ["TUR5"],
@@ -338,6 +385,10 @@ async function waitForExpression(cdp, expression) {
     result: document.querySelector("#photoScannerResult")?.value || "",
     upload: window.__cameraUpload || null,
     uploadCount: window.__cameraUploadCount || 0,
+    photoButton: document.querySelector(".photoUploadButton")?.textContent || "",
+    capabilityStatus: document.querySelector(".pasteCapabilityStatus:not(.liveTranscriptPanel)")?.textContent || "",
+    capabilityBusy: document.querySelector(".pasteCapabilityStatus:not(.liveTranscriptPanel)")?.getAttribute("aria-busy") || "",
+    heldPollStarted: window.__heldPhotoPollStarted || false,
     href: location.href,
   })`);
   throw new Error(`Timed out waiting for ${expression}. State: ${JSON.stringify(debug)}`);

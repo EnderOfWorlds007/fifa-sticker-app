@@ -2,13 +2,13 @@ import {
   createPhotoCodeJob,
   recognitionBaseUrl,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-7d84c2e91a6f";
 import {
   normalizeCodeInput,
   normalizePastedCardText,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3c9e7a12f604";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-3c9e7a12f604";
-import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-3c9e7a12f604";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7d84c2e91a6f";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-7d84c2e91a6f";
+import { mountPasteCardStatusPreview } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-7d84c2e91a6f";
 
 const VOICE_LANGUAGE_KEY = "panini.voiceLanguage.v1";
 const VOICE_LANGUAGES = [
@@ -129,6 +129,7 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
   row.className = "tradeLookupActions pasteCapabilityActions";
   const acquisitionButtons = [];
   let photoScanRunning = false;
+  let photoScanController = null;
   let lastPhotoSelectionSignature = "";
   const voiceState = {
     recognition: null,
@@ -154,6 +155,10 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
     photoButton.className = "photoUploadButton";
     photoButton.textContent = "Use Photos";
     photoButton.addEventListener("click", () => {
+      if (photoScanRunning) {
+        photoScanController?.abort();
+        return;
+      }
       lastPhotoSelectionSignature = "";
       photoInput.click();
     });
@@ -164,9 +169,14 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
       lastPhotoSelectionSignature = signature;
       if (photoScanRunning) return;
       photoScanRunning = true;
+      photoScanController = new AbortController();
       setOtherAcquisitionButtonsDisabled(photoButton, true);
-      scanPhotosIntoText(files, textarea, status, photoButton, options).finally(() => {
+      scanPhotosIntoText(files, textarea, status, photoButton, {
+        ...options,
+        signal: photoScanController.signal,
+      }).finally(() => {
         photoScanRunning = false;
+        photoScanController = null;
         setOtherAcquisitionButtonsDisabled(photoButton, false);
         photoInput.value = "";
       });
@@ -179,7 +189,10 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
     cameraButton.className = "cameraCaptureButton";
     cameraButton.textContent = "Use Camera";
     cameraButton.addEventListener("click", async () => {
-      if (photoScanRunning) return;
+      if (photoScanRunning) {
+        photoScanController?.abort();
+        return;
+      }
       const capture = await openCameraCapture({
         invoker: cameraButton,
         onFallback: () => {
@@ -190,14 +203,17 @@ function buildCapabilityRow(textarea, status, voiceStatus, capabilities, options
       });
       if (!capture?.file || photoScanRunning) return;
       photoScanRunning = true;
+      photoScanController = new AbortController();
       setOtherAcquisitionButtonsDisabled(cameraButton, true);
       await scanPhotosIntoText([capture.file], textarea, status, cameraButton, {
         ...options,
         buttonLabel: "Use Camera",
         captureSummary: capture.summary,
         source: "camera",
+        signal: photoScanController.signal,
       }).finally(() => {
         photoScanRunning = false;
+        photoScanController = null;
         setOtherAcquisitionButtonsDisabled(cameraButton, false);
       });
     });
@@ -289,9 +305,13 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
     for (let index = 0; index < selected.length; index += 1) {
       setPhotoProgress(button, status, `Scanning... ${index + 1}/${selected.length}`);
       try {
-        const job = await createPhotoCodeJob(selected[index]);
+        const job = await createPhotoCodeJob(selected[index], {
+          onStatus: (message) => setPhotoProgress(button, status, message),
+          signal: options.signal,
+        });
         const payload = await waitForPhotoCodeJob(job.job_id, {
           onStatus: (message) => setPhotoProgress(button, status, message),
+          signal: options.signal,
         });
         const result = payload.result || payload;
         const text = String(result?.grouped_text || (Array.isArray(result?.codes) ? result.codes.join(", ") : "")).trim();
@@ -303,6 +323,7 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
       } catch (error) {
         failureCount += 1;
         lastError = error;
+        if (error?.kind === "cancelled") break;
       }
     }
     if (!recognized.length) {
@@ -325,10 +346,10 @@ async function scanPhotosIntoText(files, textarea, status, button, options = {})
 }
 
 function setPhotoProgress(button, status, text) {
-  button.disabled = true;
+  button.disabled = false;
   button.classList.add("scanning");
   button.setAttribute("aria-busy", "true");
-  button.textContent = text;
+  button.textContent = "Cancel scan";
   showCapabilityMessage(status, "Photo scan", text, { busy: true });
 }
 
