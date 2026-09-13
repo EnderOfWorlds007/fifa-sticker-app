@@ -80,6 +80,44 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       })`);
       assert.deepEqual(reusablePicker, { connected: true, disabled: false, busy: false, value: "", label: "Choose photo" });
 
+      await evaluate(cdp, `window.__simulateLostUploadAck = true`);
+      const recoveryRect = await evaluate(cdp, `(() => {
+        const rect = document.querySelector("#photoScannerButton").getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      })()`);
+      const recoveryChooserPromise = withTimeout(cdp.waitFor("Page.fileChooserOpened"), 2000, "recovery-test photo chooser did not open");
+      await clickCenter(cdp, recoveryRect);
+      const recoveryChooser = await recoveryChooserPromise;
+      await send(cdp, "DOM.setFileInputFiles", { backendNodeId: recoveryChooser.backendNodeId, files: [photoPath] });
+      await waitForExpression(cdp, `document.querySelector("#photoScannerStatus").textContent.includes("Connection interrupted")`);
+      await waitForExpression(cdp, `document.querySelector("#photoScannerResult").value === "ENG5"`);
+      const recoveredUpload = await evaluate(cdp, `({
+        requestLog: window.__recoveryRequestLog,
+        uploadCount: window.__cameraUploadCount,
+        status: document.querySelector("#photoScannerStatus").textContent,
+        busy: document.querySelector("#photoScannerInput").closest(".photoPickerControl").classList.contains("isBusy"),
+        inputDisabled: document.querySelector("#photoScannerInput").disabled,
+        scanButtonDisabled: document.querySelector("#photoScannerButton").disabled,
+        cameraButtonDisabled: document.querySelector("#photoScannerCameraButton").disabled,
+        cancelHidden: document.querySelector("#photoScannerCancelButton").hidden,
+        ariaBusy: document.querySelector("#photoScannerButton").getAttribute("aria-busy"),
+        label: document.querySelector("#photoScannerButton").textContent,
+      })`);
+      assert.deepEqual(recoveredUpload.requestLog, [
+        `PUT:${recoveredUpload.requestLog[0].slice(4)}`,
+        `GET:${recoveredUpload.requestLog[0].slice(4)}`,
+        `GET:${recoveredUpload.requestLog[0].slice(4)}`,
+      ]);
+      assert.equal(recoveredUpload.uploadCount, 3, "lost acknowledgement must not trigger a second upload");
+      assert.equal(recoveredUpload.status, "1 cards recognized.");
+      assert.equal(recoveredUpload.busy, false);
+      assert.equal(recoveredUpload.inputDisabled, false);
+      assert.equal(recoveredUpload.scanButtonDisabled, false);
+      assert.equal(recoveredUpload.cameraButtonDisabled, false);
+      assert.equal(recoveredUpload.cancelHidden, true);
+      assert.equal(recoveredUpload.ariaBusy, "false");
+      assert.equal(recoveredUpload.label, "Choose photo");
+
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraCaptureDialog")`);
       await waitForExpression(cdp, `document.querySelector(".cameraTakeButton:not([disabled])")`);
@@ -88,7 +126,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       assert.match(livePreview, /still-photo flash ready/);
 
       await evaluate(cdp, `document.querySelector(".cameraTakeButton").click()`);
-      await waitForExpression(cdp, `window.__cameraUploadCount === 3`);
+      await waitForExpression(cdp, `window.__cameraUploadCount === 4`);
       await waitForExpression(cdp, `document.querySelector("#photoScannerResult").value === "TUR5"`);
       const result = await evaluate(cdp, `({
         upload: window.__cameraUpload,
@@ -124,7 +162,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       const iosPreview = await evaluate(cdp, `document.querySelector(".cameraCaptureStatus").textContent`);
       assert.match(iosPreview, /torch confirmed active/);
       await evaluate(cdp, `document.querySelector(".cameraTakeButton").click()`);
-      await waitForExpression(cdp, `window.__cameraUploadCount === 4`);
+      await waitForExpression(cdp, `window.__cameraUploadCount === 5`);
       const iosResult = await evaluate(cdp, `({
         nativeCalls: window.__nativeTakePhotoCalls,
         diagnostics: document.querySelector("#photoCameraDiagnostics").textContent,
@@ -276,7 +314,31 @@ function installOcrMockSource() {
         window.__cameraJobId = photoJobMatch[1];
         window.__cameraUploadCount = (window.__cameraUploadCount || 0) + 1;
         window.__cameraUpload = file ? { name: file.name, type: file.type, size: file.size } : null;
+        if (window.__simulateLostUploadAck) {
+          window.__simulateLostUploadAck = false;
+          window.__recoveryJobId = window.__cameraJobId;
+          window.__recoveryGetCount = 0;
+          window.__recoveryRequestLog = ["PUT:" + window.__cameraJobId];
+          return Promise.reject(new TypeError("simulated lost upload acknowledgement"));
+        }
         return new Promise((resolve) => setTimeout(() => resolve(new Response(JSON.stringify({ job_id: window.__cameraJobId, status: "queued" }), { status: 202, headers: { "content-type": "application/json" } })), 150));
+      }
+      if (photoJobMatch && photoJobMatch[1] === window.__recoveryJobId) {
+        const method = init?.method || "GET";
+        window.__recoveryRequestLog.push(method + ":" + photoJobMatch[1]);
+        if (method !== "GET") return Promise.reject(new Error("unexpected recovery method " + method));
+        window.__recoveryGetCount += 1;
+        if (window.__recoveryGetCount === 1) {
+          return Promise.resolve(new Response(JSON.stringify({
+            job_id: window.__recoveryJobId,
+            status: "running",
+          }), { status: 200, headers: { "content-type": "application/json" } }));
+        }
+        return Promise.resolve(new Response(JSON.stringify({
+          job_id: window.__recoveryJobId,
+          status: "done",
+          result: { codes: ["ENG5"] },
+        }), { status: 200, headers: { "content-type": "application/json" } }));
       }
       if (photoJobMatch && photoJobMatch[1] === window.__cameraJobId) {
         if (window.__holdPhotoJob) {

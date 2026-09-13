@@ -1,4 +1,4 @@
-name: Photo picker regression
+name: Browser tests
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   photo-picker:
-    name: Photo picker regression
+    name: Photo OCR and media interactions
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,7 +24,11 @@ jobs:
           install-dependencies: true
       - name: Check scanner picker contract
         run: node --test test/v2_photo_scanner_review_ux.test.mjs test/v2_camera_capture.test.mjs
-      - name: Select the same photo twice through the browser
+      - name: Exercise V2 photo OCR in Chrome
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: node --test test/browser_v2_camera_capture.test.mjs
+      - name: Exercise legacy media controls in Chrome
+        env:
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+        run: node --test test/browser_media_buttons.test.mjs

@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import test from "node:test";
 
-const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME = process.env.CHROME_BIN || (process.platform === "darwin"
+  ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  : "/usr/bin/google-chrome");
 const PORT = 8791;
 const DEBUG_PORT = 9331;
 
@@ -28,6 +30,8 @@ test("media buttons align and Use Photos fills the textbox after file selection 
     `--remote-debugging-port=${DEBUG_PORT}`,
     `--user-data-dir=${chromeProfile}`,
     "--disable-gpu",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
     "--no-first-run",
     "--no-default-browser-check",
     "about:blank",
