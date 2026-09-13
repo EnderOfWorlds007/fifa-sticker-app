@@ -121,13 +121,17 @@ export async function createPhotoCodeJob(file, {
         body: file,
         signal,
       });
-      if (response.ok) return await parsePhotoJobResponse(response, jobId, signal);
+      if (response.ok) {
+        return await parsePhotoJobResponse(response, jobId, signal, {
+          bodyFailureKind: "ambiguous_ack",
+        });
+      }
       if (!isTransientStatus(response.status)) throw await photoJobHttpError(response, "Upload");
       retryAttempt += 1;
       notifyConnectionInterrupted(onStatus);
       await retryDelay(response, retryAttempt, retryBaseMs, retryMaxMs, signal);
     } catch (error) {
-      if (error instanceof PhotoJobRequestError) throw error;
+      if (error instanceof PhotoJobRequestError && error.kind !== "ambiguous_ack") throw error;
       assertNotCancelled(signal, error);
       retryAttempt += 1;
       notifyConnectionInterrupted(onStatus);
@@ -347,7 +351,7 @@ function isTransientStatus(status) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
-async function parsePhotoJobResponse(response, expectedJobId, signal) {
+async function parsePhotoJobResponse(response, expectedJobId, signal, { bodyFailureKind = "protocol" } = {}) {
   let payload;
   try {
     payload = await response.json();
@@ -355,7 +359,7 @@ async function parsePhotoJobResponse(response, expectedJobId, signal) {
     assertNotCancelled(signal, cause);
     if (!(cause instanceof SyntaxError)) throw cause;
     throw new PhotoJobRequestError("Recognition backend returned invalid JSON.", {
-      kind: "protocol",
+      kind: bodyFailureKind,
       status: response.status,
       cause,
     });

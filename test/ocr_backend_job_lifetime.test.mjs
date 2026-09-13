@@ -26,6 +26,14 @@ function jsonResponse(status, payload, headers = {}) {
   };
 }
 
+async function waitUntil(predicate, message = "condition") {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`Timed out waiting for ${message}`);
+}
+
 test("lost PUT acknowledgement reconciles the accepted job without re-uploading", async () => {
   const { createPhotoCodeJob } = await loadOcrBackend();
   const calls = [];
@@ -49,16 +57,16 @@ test("lost PUT acknowledgement reconciles the accepted job without re-uploading"
   assert.equal(calls[0].url, calls[1].url);
 });
 
-test("truncated PUT response body is reconciled as a transport failure", async () => {
+test("syntactically truncated PUT response reconciles instead of failing the accepted job", async () => {
   const { createPhotoCodeJob } = await loadOcrBackend();
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
     if (calls === 1) {
-      return {
-        ...jsonResponse(202, null),
-        json: async () => { throw new TypeError("body stream ended"); },
-      };
+      return new Response(
+        `{"job_id":"${"0".repeat(32)}","status":"queued"`,
+        { status: 202, headers: { "content-type": "application/json" } },
+      );
     }
     return jsonResponse(200, { job_id: "0".repeat(32), status: "running" });
   };
@@ -69,6 +77,57 @@ test("truncated PUT response body is reconciled as a transport failure", async (
   });
   assert.equal(job.status, "running");
   assert.equal(calls, 2);
+});
+
+test("cancellation aborts an in-flight initial PUT without another request", async () => {
+  const { createPhotoCodeJob } = await loadOcrBackend();
+  const controller = new AbortController();
+  let calls = 0;
+  globalThis.fetch = async (_url, options = {}) => {
+    calls += 1;
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(new DOMException("aborted", "AbortError"));
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener("abort", abort, { once: true });
+    });
+  };
+
+  const pending = createPhotoCodeJob({ type: "image/jpeg" }, {
+    jobId: "1".repeat(32),
+    signal: controller.signal,
+    retryBaseMs: 0,
+  });
+  await waitUntil(() => calls === 1, "initial PUT");
+  controller.abort();
+
+  await assert.rejects(pending, (error) => error.kind === "cancelled");
+  assert.equal(calls, 1);
+});
+
+test("cancellation aborts an in-flight reconciliation GET without re-uploading", async () => {
+  const { createPhotoCodeJob } = await loadOcrBackend();
+  const controller = new AbortController();
+  const calls = [];
+  globalThis.fetch = async (_url, options = {}) => {
+    calls.push(options.method || "GET");
+    if (calls.length === 1) throw new TypeError("lost acknowledgement");
+    return new Promise((_resolve, reject) => {
+      const abort = () => reject(new DOMException("aborted", "AbortError"));
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener("abort", abort, { once: true });
+    });
+  };
+
+  const pending = createPhotoCodeJob({ type: "image/jpeg" }, {
+    jobId: "2".repeat(32),
+    signal: controller.signal,
+    retryBaseMs: 0,
+  });
+  await waitUntil(() => calls.length === 2, "reconciliation GET");
+  controller.abort();
+
+  await assert.rejects(pending, (error) => error.kind === "cancelled");
+  assert.deepEqual(calls, ["PUT", "GET"]);
 });
 
 test("unaccepted PUT retries the same client job id and body after reconciliation 404", async () => {
