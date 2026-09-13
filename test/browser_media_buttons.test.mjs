@@ -82,6 +82,7 @@ test("media buttons align and Use Photos fills the textbox after file selection 
         };
         window.PANINI_CONFIG.recognitionBaseUrl = "https://ocr.test";
       })()`);
+      await evaluate(cdp, `import("/fifa-sticker-app/assets/need_lookup.js?v=ocr-funnel-1").then(() => true)`);
 
       const metrics = await evaluate(cdp, `(() => {
         const photo = document.querySelector("#needPhotoButton").getBoundingClientRect();

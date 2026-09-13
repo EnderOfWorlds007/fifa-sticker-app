@@ -30,4 +30,9 @@ Verdict: **APPROVE** — no remaining P0, P1, or P2 findings.
 The first GitHub Actions run exposed a Linux-only Chrome profile cleanup race
 (`ENOTEMPTY` after the browser exited). Cleanup now uses the same bounded retry
 policy as the established V2 browser harness. Test assertions and production
-code were unchanged. The follow-up re-review verdict was **APPROVE**.
+code were unchanged. The next run exposed that document readiness can precede
+deferred ES-module evaluation on Linux; the test now explicitly awaits the
+page's existing `need_lookup.js` module before clicking. Both changes remove
+environment races without extending interaction timeouts or weakening behavior
+assertions. The cleanup follow-up re-review verdict was **APPROVE**.
+The module-readiness follow-up re-review verdict was also **APPROVE**.
