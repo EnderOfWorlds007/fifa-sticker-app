@@ -9,8 +9,9 @@ const collectionSource = readFileSync(new URL("../v2/assets/collection_tracker.j
 const compareSource = readFileSync(new URL("../v2/assets/compare.js", import.meta.url), "utf8");
 const tradeBuilderSource = readFileSync(new URL("../v2/assets/trade_builder.js", import.meta.url), "utf8");
 const collectionModelSource = readFileSync(new URL("../v2/assets/collection_model.js", import.meta.url), "utf8");
+const scanCardStatusSource = readFileSync(new URL("../v2/assets/scan_card_status.js", import.meta.url), "utf8");
 const collectionInventory = JSON.parse(
-  readFileSync(new URL("../v2/data/collection_inventory.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./fixtures/collection_inventory.json", import.meta.url), "utf8"),
 );
 
 const EXPECTED_MISSING_CODES = [
@@ -110,7 +111,7 @@ test("scanner album labels honor explicit collection overrides", () => {
 });
 
 test("inventory-aware screens use the shared resolved collection model", () => {
-  assert.match(projectionSource, /import \{ deriveResolvedCollectionModel \} from "\/fifa-sticker-app\/v2\/assets\/collection_model\.js/);
+  assert.match(projectionSource, /import \{ deriveResolvedCollectionModel \} from "\.\/collection_model\.js/);
   assert.match(projectionSource, /const collectionModel = deriveResolvedCollectionModel\(\{/);
   assert.doesNotMatch(projectionSource, /deriveCollectionModel/);
   assert.doesNotMatch(collectionSource, /function applyAlbumStatusOverrides/);
@@ -118,8 +119,9 @@ test("inventory-aware screens use the shared resolved collection model", () => {
 });
 
 test("recognized code rows use one shared renderer", () => {
-  const directRenderExpressions = source.match(/codesList\.replaceChildren\(\.\.\.\(latestScanCodes\.length/g) || [];
-  assert.equal(directRenderExpressions.length, 1);
+  const rendererBody = functionBody("renderRecognizedCodeRows");
+  assert.match(rendererBody, /codesList\.replaceChildren/);
+  assert.match(rendererBody, /groups\.map\(\(group\) => compactCodeRow/);
   assert.match(functionBody("renderResults"), /renderRecognizedCodeRows\(\)/);
   assert.match(functionBody("updateResultFromReviewSlots"), /renderRecognizedCodeRows\(\)/);
 });
@@ -128,11 +130,11 @@ test("scanner labels album additions, first trading copies, and existing trading
   assert.match(source, /scan_card_status\.js/);
   assert.match(source, /classifyScannedCards/);
   assert.match(source, /summarizeScannedCardStatuses/);
-  const rowBody = functionBody("codeRow");
-  assert.match(rowBody, /New for album/);
-  assert.match(rowBody, /New trading card · first spare/);
-  assert.match(rowBody, /Duplicate trading card/);
-  assert.match(rowBody, /spares?\$\{prior === 1/);
+  assert.match(functionBody("compactCodeRow"), /compactScannedCardGroupDetail\(group\)/);
+  assert.match(scanCardStatusSource, /Album \+\$\{nonNegativeQuantity\(group\.newForAlbum\)\}/);
+  assert.match(scanCardStatusSource, /First spare \+\$\{nonNegativeQuantity\(group\.newTradingCards\)\}/);
+  assert.match(scanCardStatusSource, /Duplicate \+\$\{nonNegativeQuantity\(group\.duplicateTradingCards\)\}/);
+  assert.match(scanCardStatusSource, /spares \$\{spareRange\.before\}→\$\{spareRange\.after\}/);
 });
 
 test("adding a scan preserves its scan-time trading classification", () => {
