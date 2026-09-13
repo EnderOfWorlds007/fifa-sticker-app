@@ -24,3 +24,10 @@ No P0 or P1 findings. Two P2 test gaps were identified:
 ## Final re-review
 
 Verdict: **APPROVE** — no remaining P0, P1, or P2 findings.
+
+## CI portability follow-up
+
+The first GitHub Actions run exposed a Linux-only Chrome profile cleanup race
+(`ENOTEMPTY` after the browser exited). Cleanup now uses the same bounded retry
+policy as the established V2 browser harness. Test assertions and production
+code were unchanged. The follow-up re-review verdict was **APPROVE**.

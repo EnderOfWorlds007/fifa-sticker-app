@@ -119,8 +119,8 @@ test("media buttons align and Use Photos fills the textbox after file selection 
     server.kill();
     chrome.kill();
     await Promise.allSettled([once(server, "exit"), once(chrome, "exit")]);
-    await rm(serverRoot, { recursive: true, force: true });
-    await rm(chromeProfile, { recursive: true, force: true });
+    await rm(serverRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(chromeProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
