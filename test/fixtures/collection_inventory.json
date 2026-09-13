@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "fixture": "synthetic missing-card seed",
+  "stats": {
+    "catalog_count": 29,
+    "album_owned_count": 2,
+    "missing_count": 27
+  },
+  "cards": [
+    { "code": "ALG12", "source": "missing", "in_album": false },
+    { "code": "ARG10", "source": "missing", "in_album": false },
+    { "code": "AUS13", "source": "missing", "in_album": false },
+    { "code": "AUS14", "source": "missing", "in_album": false },
+    { "code": "AUS16", "source": "missing", "in_album": false },
+    { "code": "AUS18", "source": "missing", "in_album": false },
+    { "code": "AUT18", "source": "missing", "in_album": false },
+    { "code": "BIH2", "source": "missing", "in_album": false },
+    { "code": "CIV17", "source": "missing", "in_album": false },
+    { "code": "CZE13", "source": "missing", "in_album": false },
+    { "code": "ENG13", "source": "missing", "in_album": false },
+    { "code": "FRA1", "source": "missing", "in_album": false },
+    { "code": "GER14", "source": "missing", "in_album": false },
+    { "code": "GER15", "source": "missing", "in_album": false },
+    { "code": "HAI3", "source": "missing", "in_album": false },
+    { "code": "HAI4", "source": "missing", "in_album": false },
+    { "code": "IRN6", "source": "missing", "in_album": false },
+    { "code": "IRQ9", "source": "missing", "in_album": false },
+    { "code": "JOR6", "source": "missing", "in_album": false },
+    { "code": "NED15", "source": "missing", "in_album": false },
+    { "code": "PAR2", "source": "missing", "in_album": false },
+    { "code": "QAT19", "source": "missing", "in_album": false },
+    { "code": "RSA10", "source": "missing", "in_album": false },
+    { "code": "SCO10", "source": "missing", "in_album": false },
+    { "code": "SUI13", "source": "missing", "in_album": false },
+    { "code": "TUN8", "source": "missing", "in_album": false },
+    { "code": "URU19", "source": "missing", "in_album": false },
+    { "code": "USA2", "source": "album", "in_album": true },
+    { "code": "USA7", "source": "album", "in_album": true }
+  ]
+}

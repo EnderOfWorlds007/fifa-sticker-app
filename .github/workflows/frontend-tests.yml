@@ -1,0 +1,31 @@
+name: Frontend tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  unit-and-contract:
+    name: Frontend unit and contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run every non-browser frontend test
+        shell: bash
+        run: |
+          # Browser tests follow the browser_*.test.mjs naming contract and run
+          # in their own Chrome job. Discover unit/contract tests recursively.
+          mapfile -d '' tests < <(find test -type f -name '*.test.mjs' ! -name 'browser_*.test.mjs' -print0 | sort -z)
+          if (( ${#tests[@]} == 0 )); then
+            echo "No frontend tests found." >&2
+            exit 1
+          fi
+          node --test "${tests[@]}"

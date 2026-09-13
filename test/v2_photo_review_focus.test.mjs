@@ -14,8 +14,8 @@ test("uncertain review enters a visible focused-card mode with zoom and overview
 
   assert.match(js, /photoReviewView = \{ focused: false, zoomFactor: 1 \}/);
   assert.match(js, /photoReviewView = \{ focused: true, zoomFactor: 1 \}/);
-  assert.match(js, /reviewNextButton\.textContent = photoReviewView\.focused \? "Next uncertain" : "Review uncertain"/);
-  assert.match(js, /`Reviewing \$\{focusedIndex \+ 1\} of \$\{reviewSlots\.length\} · \$\{focused\.code/);
+  assert.match(js, /reviewNextButton\.textContent = photoReviewView\.focused \? "Next review" : insigniaCount && !codeCount \? "Review backs" : "Start review"/);
+  assert.match(js, /`Reviewing \$\{focusedIndex \+ 1\} of \$\{pending\.length\} · \$\{focused\.code/);
   assert.match(js, /reviewToolbar\.hidden = !focused/);
   assert.match(js, /reviewStage\?\.scrollIntoView/);
   assert.match(js, /function adjustReviewZoom\(multiplier\)/);
