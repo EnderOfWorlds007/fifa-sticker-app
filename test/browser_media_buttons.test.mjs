@@ -98,7 +98,7 @@ test("media buttons align and Use Photos fills the textbox after file selection 
       assert.equal(Math.round(metrics.photo.height), Math.round(metrics.voice.height), "buttons should share height");
       assert.ok(Math.abs(metrics.photo.width - metrics.voice.width) <= 1, "buttons should share width");
 
-      await clickCenter(cdp, metrics.photo);
+      await evaluate(cdp, `document.querySelector("#needPhotoButton").click()`);
       await waitForExpression(cdp, `window.__photoInputClickCount === 1`);
       const inputContract = await evaluate(cdp, `({
         multiple: document.querySelector("#needPhotoInput").multiple,
@@ -236,14 +236,6 @@ async function waitForExpression(cdp, expression) {
     await delay(50);
   }
   throw new Error(`Timed out waiting for ${expression}`);
-}
-
-async function clickCenter(cdp, rect) {
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
-  await send(cdp, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
-  await send(cdp, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
-  await send(cdp, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
 }
 
 function delay(ms) {

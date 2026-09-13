@@ -45,3 +45,11 @@ Chrome's DOM protocol, and verifies the resulting OCR request and populated
 textbox. This removes a platform UI dependency without bypassing application
 event wiring.
 The portable legacy-interaction follow-up re-review verdict was **APPROVE**.
+
+Linux headless Chrome also ignored the legacy page's coordinate-dispatched
+pointer activation. Because the V2 suite already covers real pointer and native
+chooser behavior, the legacy suite now invokes `HTMLElement.click()` inside
+Chrome to exercise the production click listener deterministically, then keeps
+the input-target, OCR-request, textbox, and summary assertions.
+The deterministic in-browser activation follow-up re-review verdict was
+**APPROVE**.
