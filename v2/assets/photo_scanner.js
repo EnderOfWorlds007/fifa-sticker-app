@@ -10,35 +10,35 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6c2d5c6c0035";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b6977a2e0f3c";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6c2d5c6c0035";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-6c2d5c6c0035";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-6c2d5c6c0035";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b6977a2e0f3c";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b6977a2e0f3c";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-b6977a2e0f3c";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-6c2d5c6c0035";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6c2d5c6c0035";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-6c2d5c6c0035";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-6c2d5c6c0035";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-b6977a2e0f3c";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-b6977a2e0f3c";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b6977a2e0f3c";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-b6977a2e0f3c";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-6c2d5c6c0035";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-b6977a2e0f3c";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-6c2d5c6c0035";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-b6977a2e0f3c";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -533,9 +533,9 @@ function drawReviewSlot(slot, imageRect) {
     reviewCtx.fillStyle = "rgba(0, 0, 0, 0.74)";
     reviewCtx.fillRect(
       center[0] - backgroundWidth / 2,
-      center[1] - labelMetrics.height / 2,
+      center[1] - labelMetrics.backgroundHeight / 2,
       backgroundWidth,
-      labelMetrics.height,
+      labelMetrics.backgroundHeight,
     );
     reviewCtx.fillStyle = "#fff";
     reviewCtx.font = primaryFont;
@@ -752,15 +752,18 @@ function reviewLabelMetrics(points, label, focused = false, hasSecondary = false
   const fontSize = Math.max(5, Math.min(focused ? 18 : 13, maxHeight / 1.4, maxWidth / characterWidth));
   const secondaryFontSize = Math.max(6, Math.min(focused ? 12 : 9, fontSize * 0.74));
   const paddingX = Math.min(fontSize * 0.38, maxWidth * 0.08);
+  const paddingY = Math.max(2, fontSize * 0.18);
+  const textHeight = hasSecondary
+    ? Math.min(bounds.height * 0.36, fontSize * 1.15 + secondaryFontSize * 1.25 + 3)
+    : Math.min(maxHeight, fontSize * 1.4);
   return {
     fontSize,
     secondaryFontSize,
     paddingX,
+    paddingY,
     maxWidth,
     maxTextWidth: Math.max(1, maxWidth - paddingX * 2),
-    height: hasSecondary
-      ? Math.min(bounds.height * 0.36, fontSize * 1.15 + secondaryFontSize * 1.25 + 3)
-      : Math.min(maxHeight, fontSize * 1.4),
+    backgroundHeight: Math.min(bounds.height * 0.46, textHeight + paddingY * 2),
   };
 }
 

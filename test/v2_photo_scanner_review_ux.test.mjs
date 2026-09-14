@@ -101,8 +101,11 @@ test("overview labels scale to and stay clipped inside each detected card", () =
   assert.match(metrics, /maxHeight = bounds\.height \* 0\.24/);
   assert.match(metrics, /maxWidth \/ characterWidth/);
   assert.match(metrics, /focused \? 18 : 13/);
+  assert.match(metrics, /paddingY = Math\.max\(2, fontSize \* 0\.18\)/);
+  assert.match(metrics, /backgroundHeight: Math\.min\(bounds\.height \* 0\.46, textHeight \+ paddingY \* 2\)/);
   assert.match(draw, /reviewCtx\.clip\(\)/);
   assert.match(draw, /Math\.min\(labelMetrics\.maxWidth, Math\.max\(primaryWidth, secondaryWidth\) \+ labelMetrics\.paddingX \* 2\)/);
+  assert.match(draw, /center\[1\] - labelMetrics\.backgroundHeight \/ 2/);
   assert.match(draw, /fillText\(primary, center\[0\], primaryY, labelMetrics\.maxTextWidth\)/);
   assert.doesNotMatch(draw, /fillRect\(center\[0\] - 48/);
 });
