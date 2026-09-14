@@ -23,7 +23,7 @@ function functionBody(name) {
 
 test("code review follows backend uncertainty instead of an arbitrary 90 percent cutoff", () => {
   const body = functionBody("slotNeedsCodeReview");
-  assert.match(body, /!slot\.code \|\| slot\.needs_user_help \|\| slotStatus\(slot\) !== "matched"/);
+  assert.match(body, /!slot\.code \|\| slot\.needs_user_help \|\| \(hasNoSourceLocation && !slot\.saved_review\) \|\| slotStatus\(slot\) !== "matched"/);
   assert.doesNotMatch(body, /0\.90|confidence/);
 });
 
@@ -201,6 +201,34 @@ test("catalogue projection loads before review slots are normalized", () => {
   const render = functionBody("renderResults");
   assert.ok(render.indexOf("await refreshScannerCollectionProjection()") < render.indexOf("renderPhotoReview(payloads[0] || null)"));
   assert.match(functionBody("normalizeReviewSlots"), /reviewSlotCatalogName\(slot\.code\)/);
+});
+
+test("recognized cards without card geometry remain selectable for review", () => {
+  const normalize = functionBody("normalizeReviewSlots");
+  const append = functionBody("appendUnplacedPayloadCodes");
+  const render = functionBody("renderUnplacedReviewSlots");
+  assert.match(normalize, /normalized_back_insignia_box: normalizeBackInsigniaBox\(slot\)/);
+  assert.match(normalize, /slot\.code \|\| slot\.name/);
+  assert.doesNotMatch(normalize, /\(slot\.normalized_polygon\?\.length \|\| slot\.normalized_code_anchor_box\?\.length\) >= 4/);
+  assert.match(append, /geometry_status: "unavailable"/);
+  assert.match(append, /reviewSlotCatalogCard\(code\)/);
+  assert.match(render, /reviewSlotPolygon\(slot\)\.length < 4/);
+  assert.match(render, /Tap a card to confirm or correct it/);
+  assert.match(render, /photoReviewState\.selectedSlotId = slot\.id/);
+  assert.match(functionBody("persistReviewLabel"), /normalized_back_insignia_box/);
+  assert.match(html, /id="photoReviewUnplaced"/);
+  assert.match(styles, /\.photoReviewUnplacedCard/);
+});
+
+test("an insignia location anchors a readable clickable label when card geometry is absent", () => {
+  const polygon = functionBody("reviewSlotPolygon");
+  assert.match(polygon, /normalized_back_insignia_box/);
+  assert.match(polygon, /expandReviewAnchorPolygon\(insignia\)/);
+  const expand = new Function("anchor", functionBody("expandReviewAnchorPolygon"));
+  const expanded = expand([[0.49, 0.49], [0.51, 0.49], [0.51, 0.51], [0.49, 0.51]]);
+  assert.ok(expanded[1][0] - expanded[0][0] >= 0.14);
+  assert.ok(expanded[2][1] - expanded[1][1] > 0.069);
+  assert.equal(expand([]).length, 0);
 });
 
 test("recognized scan results are grouped into compact rows with edition colours", () => {

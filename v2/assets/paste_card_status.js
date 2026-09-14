@@ -1,5 +1,5 @@
-import { loadInventoryProjection } from "./inventory_projection.js?v=build-7d84c2e91a6f";
-import { extractCodeOccurrences } from "./trade_state.js?v=build-7d84c2e91a6f";
+import { loadInventoryProjection } from "./inventory_projection.js?v=build-6c2d5c6c0035";
+import { extractCodeOccurrences } from "./trade_state.js?v=build-6c2d5c6c0035";
 import {
   classifyScannedCards,
   dominantScannedCardStatus,
@@ -8,7 +8,7 @@ import {
   scannedCardGroupDetail,
   scannedCardStatusSummaryText,
   summarizeScannedCardStatuses,
-} from "./scan_card_status.js?v=build-7d84c2e91a6f";
+} from "./scan_card_status.js?v=build-6c2d5c6c0035";
 
 export function mountPasteCardStatusPreview({
   textarea,

@@ -79,7 +79,6 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         label: document.querySelector("#photoScannerButton").textContent,
       })`);
       assert.deepEqual(reusablePicker, { connected: true, disabled: false, busy: false, value: "", label: "Choose photo" });
-
       await evaluate(cdp, `window.__simulateLostUploadAck = true`);
       const recoveryRect = await evaluate(cdp, `(() => {
         const rect = document.querySelector("#photoScannerButton").getBoundingClientRect();
@@ -117,6 +116,17 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       assert.equal(recoveredUpload.cancelHidden, true);
       assert.equal(recoveredUpload.ariaBusy, "false");
       assert.equal(recoveredUpload.label, "Choose photo");
+      await waitForExpression(cdp, `document.querySelector("#photoReviewUnplaced .photoReviewUnplacedCard")?.textContent.includes("ENG5")`);
+      const unplacedCard = await evaluate(cdp, `({
+        text: document.querySelector("#photoReviewUnplaced .photoReviewUnplacedCard").textContent,
+        reviewRequired: !document.querySelector("#photoReviewQueue").hidden,
+      })`);
+      assert.match(unplacedCard.text, /ENG5/);
+      assert.match(unplacedCard.text, /Ezri Konsa/);
+      assert.match(unplacedCard.text, /England/);
+      assert.equal(unplacedCard.reviewRequired, true);
+      await evaluate(cdp, `document.querySelector("#photoReviewUnplaced .photoReviewUnplacedCard").click()`);
+      await waitForExpression(cdp, `document.querySelector("#photoReviewInspector")?.textContent.includes("ENG5")`);
 
       await evaluate(cdp, `document.querySelector("#photoScannerCameraButton").click()`);
       await waitForExpression(cdp, `document.querySelector(".cameraCaptureDialog")`);
@@ -249,7 +259,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-7d84c2e91a6f", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-6c2d5c6c0035", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
