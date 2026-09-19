@@ -13,7 +13,7 @@ test("OCR backend status distinguishes connectivity from saved authentication", 
 });
 
 test("Reviews exposes the shared OCR backend token without embedding a secret", () => {
-  assert.match(reviews, /<summary>OCR backend<\/summary>/);
+  assert.match(reviews, /<summary>OCR connection<\/summary>/);
   assert.match(reviews, /Shared with Scan on this browser/);
   assert.match(reviews, /data-ocr-backend-url/);
   assert.match(reviews, /data-ocr-backend-token type="password"/);

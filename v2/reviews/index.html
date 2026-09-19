@@ -8,20 +8,42 @@
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
   <title>Review Scans</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-9d07c2f3a8b1">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-5d846227af90">
 </head>
 <body class="appShellBody" data-photo-review-mode="reviews">
   <main class="shell">
     <header class="heroHeader compactHero">
       <p class="eyebrow">Reviews</p>
       <h1>Review scan queue</h1>
-      <p id="photoScannerStatus">Loading saved photo reviews…</p>
+      <p id="photoScannerStatus">Looking for saved and encrypted cloud reviews…</p>
     </header>
+
+    <section class="tradeLookupCard" aria-labelledby="cloudReviewsTitle">
+      <h2 id="cloudReviewsTitle">Load reviews</h2>
+      <p class="hint">Review queues are encrypted with your cloud restore code. The OCR token below cannot identify or decrypt a queue.</p>
+      <section class="cloudSyncPanel" aria-label="Cloud reviews">
+        <div id="cloudSyncStatus" class="localTrustStatus" data-severity="muted" aria-live="polite">
+          <strong>Cloud reviews</strong>
+          <span>Checking saved cloud accounts…</span>
+        </div>
+        <label class="cloudSyncField" for="cloudAccountSelect" hidden>
+          <span>Saved account</span>
+          <select id="cloudAccountSelect" hidden></select>
+        </label>
+        <label class="cloudSyncField" for="cloudRestoreIdInput">
+          <span>Restore code</span>
+          <input id="cloudRestoreIdInput" type="password" inputmode="latin" autocomplete="off" spellcheck="false" placeholder="Paste restore code">
+        </label>
+        <div class="buttonRow">
+          <button id="restoreCloudIdButton" type="button">Load reviews</button>
+        </div>
+      </section>
+    </section>
 
     <section class="tradeLookupCard">
       <details class="ocrBackendSettings">
-        <summary>OCR backend</summary>
-        <p class="hint">Shared with Scan on this browser. The saved token is loaded here and stays masked.</p>
+        <summary>OCR connection</summary>
+        <p class="hint">Shared with Scan on this browser. This token authorizes OCR and submitting review decisions; it does not load a cloud queue.</p>
         <label>
           <span>Laptop Funnel URL</span>
           <input data-ocr-backend-url type="url" inputmode="url" autocomplete="off" placeholder="https://your-mac.tailnet.ts.net">
@@ -40,7 +62,7 @@
 
     <section id="photoReviewEmptyState" class="tradeLookupCard reviewEmptyState" hidden>
       <h2>No reviews waiting</h2>
-      <p>Scan one or several photos to create a review queue.</p>
+      <p>Enter or select a restore code above to load encrypted cloud reviews.</p>
       <a class="primaryLinkButton" href="/fifa-sticker-app/v2/scanner/">Scan photos</a>
     </section>
 
@@ -108,8 +130,8 @@
     <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-9d07c2f3a8b1" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-9d07c2f3a8b1" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-9d07c2f3a8b1" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-5d846227af90" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-5d846227af90" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-5d846227af90" type="module"></script>
 </body>
 </html>

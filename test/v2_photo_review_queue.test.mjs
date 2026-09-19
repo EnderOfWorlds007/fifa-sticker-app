@@ -9,8 +9,11 @@ import {
   reviewItemKey,
 } from "../v2/assets/photo_review_queue.js";
 import {
+  activateCloudPhotoReviewBatch,
   activePhotoReviewProfileId,
+  activeCloudPhotoReviewProfileId,
   batchRecord,
+  cloudPhotoReviewBatchId,
   loadLatestPhotoReviewBatch,
   migrateLegacyPhotoReviewProfile,
   photoRecord,
@@ -214,6 +217,52 @@ test("cloud review imports are immutable, idempotent, and reject conflicting rep
   );
 });
 
+test("cloud recovery keeps the previous queue active until the complete replay is promoted", async () => {
+  const indexedDB = fakeIndexedDB();
+  await savePhotoReviewBatch(reviewBatchFixture("previous-batch", "cloud-profile", 1), { indexedDB });
+  const batch = {
+    id: "recovered-source-batch",
+    createdAt: 10,
+    updatedAt: 20,
+    activePhotoId: "recovered-photo",
+    activeReviewKey: "recovered-photo:slot-1:insignia",
+    reviewItems: [{ key: "recovered-photo:slot-1:insignia", photoId: "recovered-photo", slotId: "slot-1", kind: "insignia" }],
+  };
+  const part = {
+    kind: CLOUD_REVIEW_PART_KIND,
+    importId: "recovery-import",
+    partId: "photo:recovered-photo",
+    digest: "",
+    batchId: batch.id,
+    imageDataUrl: "data:image/jpeg;base64,cmVjb3ZlcmVk",
+    photo: { id: "recovered-photo", index: 0, slots: [{ id: "slot-1", code: "CAN15" }] },
+  };
+  part.digest = await partDigest(part);
+  await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto, activate: false });
+  const commit = {
+    kind: CLOUD_REVIEW_COMMIT_KIND,
+    importId: "recovery-import",
+    digest: "",
+    batch,
+    photos: [{ partId: part.partId, photoId: part.photo.id, index: 0, digest: part.digest }],
+    expectedPhotoCount: 1,
+    expectedReviewItemCount: 1,
+  };
+  commit.digest = await commitDigest(commit);
+  assert.equal(await importCloudReviewPayload(commit, "cloud-profile", {
+    indexedDB,
+    cryptoImpl: webcrypto,
+    activate: false,
+  }), "committed");
+  assert.equal((await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB })).id, "previous-batch");
+
+  const recoveredBatchId = cloudPhotoReviewBatchId("cloud-profile", commit.importId, batch.id);
+  await activateCloudPhotoReviewBatch("cloud-profile", recoveredBatchId, { indexedDB });
+  const recovered = await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB });
+  assert.equal(recovered.id, recoveredBatchId);
+  assert.equal(recovered.photos[0].slots[0].code, "CAN15");
+});
+
 test("an incomplete cloud review commit never activates a partial queue", async () => {
   const indexedDB = fakeIndexedDB();
   const part = {
@@ -340,6 +389,31 @@ test("review storage prefers the active cloud account and falls back to the loca
   assert.equal(activePhotoReviewProfileId(storage), "local-profile");
   values.set("panini.cloudSync.activeProfileId.v1", "cloud-profile");
   assert.equal(activePhotoReviewProfileId(storage), "cloud-profile");
+  assert.equal(activeCloudPhotoReviewProfileId(storage), "cloud-profile");
+  values.delete("panini.cloudSync.activeProfileId.v1");
+  assert.equal(activeCloudPhotoReviewProfileId(storage), "");
+});
+
+test("Reviews distinguishes encrypted queue loading from OCR authorization", () => {
+  const reviewHtml = readFileSync("v2/reviews/index.html", "utf8");
+  const scanner = readFileSync("v2/assets/photo_scanner.js", "utf8");
+  const cloudSync = readFileSync("v2/assets/cloud_sync.js", "utf8");
+  assert.match(reviewHtml, /id="cloudRestoreIdInput" type="password"/);
+  assert.match(reviewHtml, /id="restoreCloudIdButton"[^>]*>Load reviews<\/button>/);
+  assert.match(reviewHtml, /id="cloudSyncStatus"[^>]*aria-live="polite"/);
+  assert.match(reviewHtml, /OCR token below cannot identify or decrypt a queue/);
+  assert.match(reviewHtml, /This token authorizes OCR and submitting review decisions; it does not load a cloud queue/);
+  assert.doesNotMatch(reviewHtml, /id="cloudRestoreIdInput"[^>]*\svalue=/);
+  assert.match(scanner, /activeCloudPhotoReviewProfileId/);
+  assert.match(scanner, /No saved reviews were found for this cloud account/);
+  assert.match(cloudSync, /controls\.setAccountBusy\(true\)/);
+  assert.match(cloudSync, /if \(loaded\) controls\.prefillRestoreCode\(""\)/);
+  assert.match(cloudSync, /fetchDeltas\(\{ context, startRevision: 0, limit: 50 \}\)/);
+  assert.match(cloudSync, /revision !== previousRevision \+ 1/);
+  assert.match(cloudSync, /reviewRecoveryMode: documentRef\?\.body\?\.dataset\?\.photoReviewMode === "reviews"/);
+  assert.match(cloudSync, /importCloudReviewPayload\(payload, context\.profileId, \{ activate: false \}\)/);
+  assert.match(cloudSync, /activateCloudPhotoReviewBatch\(context\.profileId, recovery\.recoveredBatchId\)/);
+  assert.match(cloudSync, /cachedProjection && !recoverReviews/);
 });
 
 test("Reviews is a first-class current tab and the PWA caches its route and modules", () => {
