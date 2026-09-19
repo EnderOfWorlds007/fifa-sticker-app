@@ -19,28 +19,28 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5d846227af90";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-5d846227af90";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-282e54b38b2e";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-282e54b38b2e";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-5d846227af90";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-5d846227af90";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-282e54b38b2e";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-282e54b38b2e";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-5d846227af90";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-282e54b38b2e";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-5d846227af90";
-import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-5d846227af90";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-5d846227af90";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-282e54b38b2e";
+import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-282e54b38b2e";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-282e54b38b2e";
 
 const STARTING_MISSING = {
   RSA: [10],

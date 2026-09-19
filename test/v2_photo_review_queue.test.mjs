@@ -409,7 +409,7 @@ test("Reviews distinguishes encrypted queue loading from OCR authorization", () 
   assert.match(cloudSync, /controls\.setAccountBusy\(true\)/);
   assert.match(cloudSync, /if \(loaded\) controls\.prefillRestoreCode\(""\)/);
   assert.match(cloudSync, /fetchDeltas\(\{ context, startRevision: 0, limit: 50 \}\)/);
-  assert.match(cloudSync, /revision !== previousRevision \+ 1/);
+  assert.match(cloudSync, /validateSparseCloudHistory\(history\)/);
   assert.match(cloudSync, /reviewRecoveryMode: documentRef\?\.body\?\.dataset\?\.photoReviewMode === "reviews"/);
   assert.match(cloudSync, /importCloudReviewPayload\(payload, context\.profileId, \{ activate: false \}\)/);
   assert.match(cloudSync, /activateCloudPhotoReviewBatch\(context\.profileId, recovery\.recoveredBatchId\)/);

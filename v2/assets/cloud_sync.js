@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-5d846227af90";
+} from "./backup_restore.js?v=build-282e54b38b2e";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,18 +15,23 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-5d846227af90";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-5d846227af90";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-5d846227af90";
-import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-5d846227af90";
-import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-5d846227af90";
-import { createCloudSyncGate, fetchAllDeltaPages, monotonicRevision } from "./cloud_delta.js?v=build-5d846227af90";
+} from "./public_share.js?v=build-282e54b38b2e";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-282e54b38b2e";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-282e54b38b2e";
+import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-282e54b38b2e";
+import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-282e54b38b2e";
+import {
+  createCloudSyncGate,
+  fetchAllDeltaPages,
+  monotonicRevision,
+  validateSparseCloudHistory,
+} from "./cloud_delta.js?v=build-282e54b38b2e";
 import {
   activateCloudPhotoReviewBatch,
   cloudPhotoReviewBatchId,
   migrateLegacyPhotoReviewProfile,
-} from "./photo_review_store_v2.js?v=build-5d846227af90";
-import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-5d846227af90";
+} from "./photo_review_store_v2.js?v=build-282e54b38b2e";
+import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-282e54b38b2e";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -140,16 +145,10 @@ export function mountCollectionCloudSync({
 
   const recoverCloudReviewHistory = async (context) => {
     const history = await client.fetchDeltas({ context, startRevision: 0, limit: 50 });
-    let previousRevision = 0;
+    const validatedHistory = validateSparseCloudHistory(history);
     const payloads = [];
     for (const transaction of history.transactions) {
-      const revision = Number(transaction?.revision || 0);
-      if (revision !== previousRevision + 1) throw new Error("Cloud review history is incomplete; existing reviews were left unchanged.");
-      previousRevision = revision;
       payloads.push(await client.decryptTransaction(transaction, context));
-    }
-    if (history.remoteRevision !== previousRevision) {
-      throw new Error("Cloud review history changed before recovery completed. Try Load reviews again.");
     }
     let hasReviewCommit = false;
     let recoveredBatchId = "";
@@ -164,7 +163,13 @@ export function mountCollectionCloudSync({
         reviewCount = Number(payload.expectedReviewItemCount || payload.batch?.reviewItems?.length || 0);
       }
     }
-    return { hasReviewCommit, latestCheckpoint, recoveredBatchId, reviewCount, revision: history.revision };
+    return {
+      hasReviewCommit,
+      latestCheckpoint,
+      recoveredBatchId,
+      reviewCount,
+      revision: validatedHistory.highWaterRevision,
+    };
   };
 
   const switchToAccount = async (restoreCode, { confirmMessage, emptyMessage, recoverReviews = false }) => {

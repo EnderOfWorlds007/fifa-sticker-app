@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createCloudSyncGate, fetchAllDeltaPages, monotonicRevision } from "../v2/assets/cloud_delta.js";
+import {
+  createCloudSyncGate,
+  fetchAllDeltaPages,
+  monotonicRevision,
+  validateSparseCloudHistory,
+} from "../v2/assets/cloud_delta.js";
 import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "../v2/assets/cloud_account_context.js";
 
 test("cloud delta loading consumes every page before exposing the applied revision", async () => {
@@ -17,6 +22,52 @@ test("cloud delta loading consumes every page before exposing the applied revisi
   assert.deepEqual(calls, ["0", "2"]);
   assert.deepEqual(result.transactions.map((item) => item.revision), [1, 2, 3]);
   assert.equal(result.revision, 3);
+});
+
+test("legacy sparse cloud revisions paginate completely and adopt the remote high-water mark", async () => {
+  const calls = [];
+  const pages = new Map([
+    ["0", { currentRevision: 7, transactions: [{ revision: 2 }, { revision: 4 }] }],
+    ["4", { currentRevision: 7, transactions: [{ revision: 6 }] }],
+    ["6", { currentRevision: 7, transactions: [] }],
+  ]);
+  const history = await fetchAllDeltaPages(async (after) => {
+    calls.push(String(after));
+    return pages.get(String(after));
+  }, { startRevision: 0, limit: 2 });
+  assert.deepEqual(calls, ["0", "4", "6"]);
+  assert.deepEqual(history.transactions.map((item) => item.revision), [2, 4, 6]);
+  assert.equal(history.revision, 6);
+  assert.deepEqual(validateSparseCloudHistory(history), {
+    highWaterRevision: 7,
+    lastTransactionRevision: 6,
+  });
+});
+
+test("sparse cloud history rejects unsafe ordering, invalid rows, and pagination truncation", async () => {
+  for (const transactions of [
+    [{ revision: 2 }, { revision: 2 }],
+    [{ revision: 3 }, { revision: 2 }],
+    [{ revision: 0 }],
+    [{ revision: 1.5 }],
+    [{ revision: Number.MAX_SAFE_INTEGER + 1 }],
+    [{ revision: 8 }],
+  ]) {
+    assert.throws(() => validateSparseCloudHistory({
+      transactions,
+      revision: Number(transactions.at(-1)?.revision || 0),
+      remoteRevision: 7,
+    }), /Cloud review history/);
+  }
+  assert.throws(() => validateSparseCloudHistory({
+    transactions: [{ revision: 2 }, { revision: 4 }],
+    revision: 2,
+    remoteRevision: 7,
+  }), /pagination is incomplete/);
+  await assert.rejects(fetchAllDeltaPages(async () => ({
+    currentRevision: 9,
+    transactions: [{ revision: 2 }],
+  }), { startRevision: 0, limit: 1, maxPages: 1 }), /pagination exceeded/);
 });
 
 test("duplicate acknowledgements cannot move the cloud cursor backward", () => {
@@ -79,4 +130,5 @@ test("explicit review loading replays from revision zero and permits a review-on
   assert.match(source, /recovery\.hasReviewCommit[\s\S]*Cloud reviews loaded/);
   assert.match(source, /client\.setLastRevision\(recovery\.revision\)/);
   assert.match(source, /cachedProjection && !recoverReviews/);
+  assert.match(source, /validateSparseCloudHistory\(history\)/);
 });
