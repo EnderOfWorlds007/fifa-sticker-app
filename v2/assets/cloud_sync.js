@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-fee49fa28675";
+} from "./backup_restore.js?v=build-b4e791c8a263";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,10 +15,14 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-fee49fa28675";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-fee49fa28675";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-fee49fa28675";
-import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-fee49fa28675";
+} from "./public_share.js?v=build-b4e791c8a263";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-b4e791c8a263";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-b4e791c8a263";
+import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-b4e791c8a263";
+import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-b4e791c8a263";
+import { fetchAllDeltaPages, monotonicRevision } from "./cloud_delta.js?v=build-b4e791c8a263";
+import { migrateLegacyPhotoReviewProfile } from "./photo_review_store_v2.js?v=build-b4e791c8a263";
+import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-b4e791c8a263";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -27,6 +31,7 @@ const DEVICE_ID_PATTERN = /^dev_[A-Za-z0-9_-]{12,80}$/;
 const LAST_REVISION_PREFIX = "panini.cloudSync.lastRevision.v1:";
 const ACCOUNT_STATE_PREFIX = "panini.cloudSync.accountState.v1:";
 const LAST_SYNC_STATUS_KEY = "panini.cloudSync.lastStatus.v1";
+const ACTIVE_CLOUD_PROFILE_ID_KEY = "panini.cloudSync.activeProfileId.v1";
 const ID_RANDOM_BYTES = 24;
 const SYNC_EVENT = "panini:cloud-sync-status";
 const APPLIED_EVENT = "panini:cloud-sync-applied";
@@ -54,28 +59,43 @@ export function mountCollectionCloudSync({
   let lastTriggerKind = "manual";
   let pendingInitializationSave = "";
   const refreshShareControls = () => controls.setShareSettings(loadPublicShareSettings(storage));
+  const applyTransactions = async (transactions, context) => {
+    let reviewsChanged = false;
+    let checkpointApplied = false;
+    for (const transaction of transactions) {
+      client.assertAccountContext(context);
+      const payload = await client.decryptTransaction(transaction, context);
+      client.assertAccountContext(context);
+      if (applyCloudCheckpoint(payload, storage)) {
+        checkpointApplied = true;
+        continue;
+      }
+      if (await importCloudReviewPayload(payload, context.profileId) === "committed") reviewsChanged = true;
+    }
+    return { reviewsChanged, checkpointApplied };
+  };
 
   const syncDeltas = async ({ apply = true } = {}) => {
     try {
       const previousSecretId = client.userSecretId;
       await client.ensureIdentity();
       if (client.userSecretId !== previousSecretId) controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
-      const result = await client.fetchDeltas();
+      const context = client.captureAccountContext();
+      const result = await client.fetchDeltas({ context });
+      client.assertAccountContext(context);
       if (apply && result.transactions.length) {
         applyingRemote = true;
         try {
-          for (const transaction of result.transactions) {
-            const payload = await client.decryptTransaction(transaction);
-            applyCloudCheckpoint(payload, storage);
-          }
-          saveAccountProjection(storage, client.profileId);
+          const applied = await applyTransactions(result.transactions, context);
+          client.assertAccountContext(context);
+          if (applied.checkpointApplied) saveAccountProjection(storage, context.profileId);
           client.setLastRevision(result.revision);
           refreshShareControls();
         } finally {
           applyingRemote = false;
         }
-        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision });
       }
+      if (apply) dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision, profileId: client.profileId });
       controls.setStatus(
         result.transactions.length
           ? `Cloud backup updated from ${result.transactions.length} change${result.transactions.length === 1 ? "" : "s"}.`
@@ -84,6 +104,7 @@ export function mountCollectionCloudSync({
       );
       return result;
     } catch (error) {
+      if (error instanceof StaleCloudAccountError) return { transactions: [], revision: client.lastRevision, stale: true };
       controls.setStatus(error?.message || "Cloud sync could not connect.", "warning");
       return { transactions: [], revision: client.lastRevision };
     }
@@ -124,22 +145,30 @@ export function mountCollectionCloudSync({
     const cachedProjection = loadAccountProjection(storage, targetProfileId);
     try {
       await client.useRestoreCode(normalized);
+      const context = client.captureAccountContext();
       controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
-      const result = await client.fetchDeltas();
+      const result = await client.fetchDeltas({ context });
+      client.assertAccountContext(context);
       if (result.transactions.length) {
         applyingRemote = true;
+        let applied;
         try {
-          for (const transaction of result.transactions) {
-            const payload = await client.decryptTransaction(transaction);
-            applyCloudCheckpoint(payload, storage);
-          }
-          saveAccountProjection(storage, client.profileId);
-          client.setLastRevision(result.revision);
-          refreshShareControls();
+          applied = await applyTransactions(result.transactions, context);
         } finally {
           applyingRemote = false;
         }
-        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision });
+        client.assertAccountContext(context);
+        if (!canActivateCloudAccount({ checkpointApplied: applied.checkpointApplied, hasCachedProjection: Boolean(cachedProjection) })) {
+          throw new Error("That account has review data but no collection backup yet.");
+        }
+        if (applied.checkpointApplied) {
+          saveAccountProjection(storage, context.profileId);
+        } else {
+          applyAccountProjection(storage, cachedProjection);
+        }
+        client.setLastRevision(result.revision);
+        refreshShareControls();
+        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision, profileId: context.profileId });
         controls.setStatus(`Cloud account switched. Revision ${result.revision}.`, "ok");
         return true;
       }
@@ -147,7 +176,7 @@ export function mountCollectionCloudSync({
         applyAccountProjection(storage, cachedProjection);
         refreshShareControls();
         controls.setStatus("Cloud account switched using this browser's saved copy.", "ok");
-        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
+        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
         return true;
       }
     } catch (error) {
@@ -155,7 +184,7 @@ export function mountCollectionCloudSync({
         applyAccountProjection(storage, cachedProjection);
         refreshShareControls();
         controls.setStatus("Cloud account switched using this browser's saved copy.", "warning");
-        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
+        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
         return true;
       }
       controls.setStatus(error?.message || "Cloud account switch failed.", "warning");
@@ -166,6 +195,7 @@ export function mountCollectionCloudSync({
       if (previousProjection) applyAccountProjection(storage, previousProjection);
       if (!wasKnown) removeUserAccount(storage, normalized);
       controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
+      dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
     }
     controls.setStatus(emptyMessage, "warning");
     return false;
@@ -173,10 +203,13 @@ export function mountCollectionCloudSync({
 
   const autosave = async (kind = "local") => {
     try {
-      await syncDeltas({ apply: true });
+      const synced = await syncDeltas({ apply: true });
+      if (synced.stale) return false;
+      const context = client.captureAccountContext();
       const checkpoint = createStorageCheckpoint({ storage, triggerKind: kind, deviceId: client.deviceId });
       const publicShare = await publicShareForCheckpoint(checkpoint, { fetchImpl, cryptoImpl });
-      const result = await client.appendTransaction(checkpoint, { publicShare });
+      client.assertAccountContext(context);
+      const result = await client.appendTransaction(checkpoint, { publicShare, context });
       const publishedSettings = normalizeCheckpointShareSettings(checkpoint.storage.publicShareSettings);
       const currentSettings = loadPublicShareSettings(storage);
       if (publishedSettings.enabled && currentSettings.token === publishedSettings.token) {
@@ -239,7 +272,7 @@ export function mountCollectionCloudSync({
     saveAccountProjection(storage, client.profileId);
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     await autosave("new-account");
-    dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision });
+    dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
   };
   controls.onCreateShare = async () => {
     const settings = savePublicShareSettings(storage, { enabled: true, token: generatePublicShareToken(cryptoImpl) });
@@ -312,6 +345,7 @@ export class CloudSyncClient {
     this.deviceId = "";
     this.profileId = "";
     this.lastRevision = 0;
+    this.accountGeneration = 0;
   }
 
   async ensureIdentity({ restoreCode = "" } = {}) {
@@ -322,9 +356,18 @@ export class CloudSyncClient {
   }
 
   async useRestoreCode(code) {
-    this.userSecretId = normalizeUserSecretId(code);
-    if (!this.userSecretId) throw new Error("Enter a valid restore code.");
-    this.profileId = await deriveProfileId(this.userSecretId, this.crypto);
+    const nextSecretId = normalizeUserSecretId(code);
+    if (!nextSecretId) throw new Error("Enter a valid restore code.");
+    const nextProfileId = await deriveProfileId(nextSecretId, this.crypto);
+    const previousCloudProfileId = String(this.storage.getItem(ACTIVE_CLOUD_PROFILE_ID_KEY) || "");
+    if (!previousCloudProfileId) {
+      const localProfileId = String(this.storage.getItem("panini.v2.activeProfileId") || "");
+      await migrateLegacyPhotoReviewProfile(localProfileId, nextProfileId);
+    }
+    if (nextSecretId !== this.userSecretId || nextProfileId !== this.profileId) this.accountGeneration += 1;
+    this.userSecretId = nextSecretId;
+    this.profileId = nextProfileId;
+    this.storage.setItem(ACTIVE_CLOUD_PROFILE_ID_KEY, this.profileId);
     this.deviceId = ensureDeviceId(this.storage, this.crypto);
     upsertUserAccount(this.storage, this.userSecretId);
     setActiveUserSecretId(this.storage, this.userSecretId);
@@ -332,54 +375,109 @@ export class CloudSyncClient {
     return this.userSecretId;
   }
 
-  async fetchDeltas({ limit = 500 } = {}) {
-    if (!this.profileId) await this.ensureIdentity();
-    const url = new URL(`${this.baseUrl}/v1/profiles/${this.profileId}/transactions`);
-    url.searchParams.set("after", String(this.lastRevision));
-    url.searchParams.set("limit", String(limit));
-    const response = await this.fetchImpl(url, { cache: "no-store" });
-    const payload = await readJsonResponse(response);
-    if (!response.ok) throw requestError(response, payload?.error || "Cloud backup could not be loaded.");
-    const transactions = Array.isArray(payload.transactions) ? payload.transactions : [];
-    const revision = Number(payload.currentRevision || this.lastRevision);
-    const remoteRevision = Math.max(revision, ...transactions.map((item) => Number(item.revision || 0)), this.lastRevision);
-    if (!transactions.length) this.setLastRevision(remoteRevision);
-    return { transactions, revision: remoteRevision };
+  captureAccountContext() {
+    return {
+      generation: this.accountGeneration,
+      profileId: this.profileId,
+      userSecretId: this.userSecretId,
+      startRevision: this.lastRevision,
+    };
   }
 
-  async appendTransaction(payload, { publicShare } = {}) {
+  assertAccountContext(context) {
+    if (!accountContextMatches({
+      generation: this.accountGeneration,
+      profileId: this.profileId,
+      userSecretId: this.userSecretId,
+    }, context)) {
+      throw new StaleCloudAccountError();
+    }
+  }
+
+  assertAccountRevision(context) {
+    if (!accountRevisionMatches(this.lastRevision, context)) throw new StaleCloudRevisionError();
+  }
+
+  async fetchDeltas({ limit = 10, context = null } = {}) {
     if (!this.profileId) await this.ensureIdentity();
-    const encryptedPayload = await encryptPayload(payload, this.userSecretId, this.crypto);
-    const response = await this.fetchImpl(`${this.baseUrl}/v1/profiles/${this.profileId}/transactions`, {
+    const accountContext = context || this.captureAccountContext();
+    this.assertAccountContext(accountContext);
+    return fetchAllDeltaPages(async (after, pageLimit) => {
+      const url = new URL(`${this.baseUrl}/v1/profiles/${accountContext.profileId}/transactions`);
+      url.searchParams.set("after", String(after));
+      url.searchParams.set("limit", String(pageLimit));
+      const response = await this.fetchImpl(url, { cache: "no-store" });
+      const payload = await readJsonResponse(response);
+      if (!response.ok) throw requestError(response, payload?.error || "Cloud backup could not be loaded.");
+      return payload;
+    }, { startRevision: accountContext.startRevision, limit });
+  }
+
+  async appendTransaction(payload, { publicShare, txId = "", context = null } = {}) {
+    if (!this.profileId) await this.ensureIdentity();
+    const accountContext = context || this.captureAccountContext();
+    this.assertAccountContext(accountContext);
+    this.assertAccountRevision(accountContext);
+    const encryptedPayload = await encryptPayload(payload, accountContext.userSecretId, this.crypto);
+    this.assertAccountContext(accountContext);
+    this.assertAccountRevision(accountContext);
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/profiles/${accountContext.profileId}/transactions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        txId: randomId("tx", this.crypto),
+        txId: txId || randomId("tx", this.crypto),
         deviceId: this.deviceId,
         clientCreatedAt: new Date().toISOString(),
-        baseRevision: this.lastRevision,
+        baseRevision: accountContext.startRevision,
         encryptedPayload,
         ...(publicShare ? { publicShare } : {}),
       }),
     });
     const result = await readJsonResponse(response);
+    this.assertAccountContext(accountContext);
     if (!response.ok) throw requestError(response, result?.error || "Cloud backup could not be saved.");
     this.setLastRevision(Number(result.revision || this.lastRevision));
     return { revision: this.lastRevision };
   }
 
-  async decryptTransaction(transaction) {
-    return decryptPayload(transaction.encryptedPayload, this.userSecretId, this.crypto);
+  async decryptTransaction(transaction, context = this.captureAccountContext()) {
+    this.assertAccountContext(context);
+    const result = await resolveAccountBound(
+      decryptPayload(transaction.encryptedPayload, context.userSecretId, this.crypto),
+      context,
+      () => ({
+        generation: this.accountGeneration,
+        profileId: this.profileId,
+        userSecretId: this.userSecretId,
+      }),
+    );
+    if (result.stale) throw new StaleCloudAccountError();
+    return result.value;
   }
 
   setLastRevision(revision) {
-    this.lastRevision = Math.max(0, Number(revision || 0));
+    this.lastRevision = monotonicRevision(this.lastRevision, revision);
     if (this.profileId) this.storage.setItem(LAST_REVISION_PREFIX + this.profileId, String(this.lastRevision));
     this.storage.setItem(LAST_SYNC_STATUS_KEY, JSON.stringify({
       profileId: this.profileId,
       revision: this.lastRevision,
       syncedAt: new Date().toISOString(),
     }));
+  }
+}
+
+class StaleCloudAccountError extends Error {
+  constructor() {
+    super("Cloud account changed while synchronization was in progress.");
+    this.name = "StaleCloudAccountError";
+  }
+}
+
+class StaleCloudRevisionError extends Error {
+  constructor() {
+    super("Cloud backup advanced while this save was being prepared.");
+    this.name = "StaleCloudRevisionError";
+    this.status = 409;
   }
 }
 

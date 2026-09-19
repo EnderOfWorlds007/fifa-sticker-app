@@ -10,47 +10,48 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b4e791c8a263";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-fee49fa28675";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-fee49fa28675";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b4e791c8a263";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b4e791c8a263";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-b4e791c8a263";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-fee49fa28675";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-fee49fa28675";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-fee49fa28675";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-b4e791c8a263";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-b4e791c8a263";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b4e791c8a263";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-b4e791c8a263";
 import {
   loadLatestPhotoReviewBatch,
+  activePhotoReviewProfileId,
   ReviewStateConflictError,
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-b4e791c8a263";
 import {
   buildPhotoReviewItems,
   nextPendingReviewItem,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-b4e791c8a263";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-b4e791c8a263";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-fee49fa28675";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-b4e791c8a263";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -144,12 +145,16 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !scanInFlight && photoReviewState.id) hydrateLatestReviewBatch();
 });
 reviewUpdates?.addEventListener("message", (event) => {
-  if (event.data?.profileId !== activeProfileId() || scanInFlight) return;
+  if (event.data?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
   const incomingBatchId = String(event.data?.batchId || "");
   const incomingRevision = Number(event.data?.revision || 0);
   const activeBatchChanged = reviewsPage && incomingBatchId && incomingBatchId !== photoReviewState.id;
   const activeBatchAdvanced = incomingBatchId === photoReviewState.id && incomingRevision > Number(photoReviewState.revision || 0);
   if (activeBatchChanged || activeBatchAdvanced) hydrateLatestReviewBatch();
+});
+window.addEventListener("panini:cloud-sync-applied", (event) => {
+  if (event.detail?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
+  hydrateLatestReviewBatch();
 });
 copyButton?.addEventListener("click", async () => {
   const text = copyTextForCodes(latestScanCodes);
@@ -196,7 +201,7 @@ async function hydrateLatestReviewBatch() {
   setReviewInteractionDisabled(true);
   try {
     await reviewWriteChain.catch(() => {});
-    const stored = await loadLatestPhotoReviewBatch(activeProfileId());
+    const stored = await loadLatestPhotoReviewBatch(activePhotoReviewProfileId() || activeProfileId());
     if (generation !== reviewHydrationGeneration) return;
     if (!stored) {
       showEmptyReviewQueue("No saved reviews yet. Scan one or several photos to create the queue.");
@@ -382,7 +387,7 @@ async function beginPhotoReviewBatch(files, requestedSide) {
   photoReviewState = {
     ...emptyPhotoReviewState(),
     id: batchId,
-    profileId: ensureActiveProfileId(),
+    profileId: activePhotoReviewProfileId() || ensureActiveProfileId(),
     requestedSide,
     createdAt: now,
     updatedAt: now,
