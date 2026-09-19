@@ -5,7 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   buildPhotoReviewItems,
+  hydratePhotoReviewSlots,
   nextPendingReviewItem,
+  reviewCodeCandidates,
   reviewItemKey,
 } from "../v2/assets/photo_review_queue.js";
 import {
@@ -61,6 +63,34 @@ test("queue navigation crosses photo boundaries and wraps unresolved work", () =
   assert.equal(nextPendingReviewItem(items, pending, items[1].key), items[2]);
   assert.equal(nextPendingReviewItem(items, [items[1]], items[2].key), items[1]);
   assert.equal(nextPendingReviewItem(items, [], items[2].key), null);
+});
+
+test("retained slots hydrate UI candidates without mutating imported evidence", () => {
+  const retained = {
+    id: "slot:01",
+    code: "hai20",
+    code_review_status: "not_needed",
+    insignia_review_status: "",
+    back_insignia_type: "no_clue",
+  };
+  const [hydrated] = hydratePhotoReviewSlots([retained], { photoId: "photo-001" });
+  assert.notEqual(hydrated, retained);
+  assert.deepEqual(hydrated.code_candidates, [{ code: "HAI20", score: 0 }]);
+  assert.equal(hydrated.code_review_status, "not_needed");
+  assert.equal(hydrated.back_insignia_type, "no_clue");
+  assert.equal(retained.code_candidates, undefined);
+
+  const malformedCandidates = { id: "slot:02", code: "CUW9", code_candidates: { code: "BAD" } };
+  const [safe] = hydratePhotoReviewSlots([malformedCandidates], { photoId: "photo-001" });
+  assert.deepEqual(safe.code_candidates, [{ code: "CUW9", score: 0 }]);
+  assert.deepEqual(safe.hydration_warnings, ["code_candidates is not an array"]);
+  assert.deepEqual(reviewCodeCandidates(null), { candidates: [], warnings: [] });
+
+  const retainedMalformed = hydratePhotoReviewSlots([null, "damaged"], { photoId: "photo-001" });
+  assert.equal(retainedMalformed[0].id, "malformed:photo-001:1");
+  assert.equal(retainedMalformed[0].retained_slot_value, null);
+  assert.equal(retainedMalformed[1].retained_slot_value, "damaged");
+  assert.equal(retainedMalformed[1].code_review_status, "pending");
 });
 
 test("review storage records keep blobs but never persist object URLs or active mirrors", () => {
@@ -299,13 +329,23 @@ test("the retained 35-photo and 117-item queue commits in source order", async (
   const sourceBatchId = "retained-19sep";
   const photos = [];
   const reviewItems = [];
+  let recognizedSlotIndex = 0;
   for (let index = 0; index < 35; index += 1) {
     const photoId = `photo-${index + 1}`;
-    const slotCount = index < 12 ? 4 : 3;
-    const slots = Array.from({ length: slotCount }, (_, slotIndex) => ({ id: `slot-${slotIndex + 1}`, code: `TST${slotIndex + 1}` }));
-    for (const slot of slots) reviewItems.push({
-      key: `${photoId}:${slot.id}:insignia`, photoId, slotId: slot.id, kind: "insignia",
+    const slotCount = index < 13 ? 33 : 32;
+    const slots = Array.from({ length: slotCount }, (_, slotIndex) => {
+      const needsReview = recognizedSlotIndex < 117;
+      recognizedSlotIndex += 1;
+      return {
+        id: `slot-${slotIndex + 1}`,
+        code: `TST${index + 1}-${slotIndex + 1}`,
+        code_review_status: "not_needed",
+        back_insignia_type: needsReview ? "no_clue" : "standard_fifa_licensed",
+      };
     });
+    for (const slot of slots.filter((slot) => slot.back_insignia_type === "no_clue")) {
+      reviewItems.push({ key: `${photoId}:${slot.id}:insignia`, photoId, slotId: slot.id, kind: "insignia" });
+    }
     const part = {
       kind: CLOUD_REVIEW_PART_KIND,
       importId,
@@ -332,6 +372,7 @@ test("the retained 35-photo and 117-item queue commits in source order", async (
   await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
   const restored = await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB });
   assert.equal(restored.photos.length, 35);
+  assert.equal(restored.photos.reduce((total, photo) => total + photo.slots.length, 0), 1133);
   assert.equal(restored.reviewItems.length, 117);
   assert.deepEqual(restored.photos.map((photo) => photo.index), Array.from({ length: 35 }, (_, index) => index));
 });
