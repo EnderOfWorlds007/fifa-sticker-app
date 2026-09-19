@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
   <title>Review Scans</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
-  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-b4e791c8a263">
+  <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-9d07c2f3a8b1">
 </head>
 <body class="appShellBody" data-photo-review-mode="reviews">
   <main class="shell">
@@ -17,6 +17,26 @@
       <h1>Review scan queue</h1>
       <p id="photoScannerStatus">Loading saved photo reviews…</p>
     </header>
+
+    <section class="tradeLookupCard">
+      <details class="ocrBackendSettings">
+        <summary>OCR backend</summary>
+        <p class="hint">Shared with Scan on this browser. The saved token is loaded here and stays masked.</p>
+        <label>
+          <span>Laptop Funnel URL</span>
+          <input data-ocr-backend-url type="url" inputmode="url" autocomplete="off" placeholder="https://your-mac.tailnet.ts.net">
+        </label>
+        <label>
+          <span>Laptop OCR token</span>
+          <input data-ocr-backend-token type="password" autocomplete="off" placeholder="Token from setup script">
+        </label>
+        <div class="buttonRow">
+          <button data-ocr-backend-save class="secondary" type="button">Save backend</button>
+          <button data-ocr-backend-test class="secondary" type="button">Test backend</button>
+        </div>
+        <p data-ocr-backend-status class="hint" role="status" aria-live="polite">Loading saved OCR backend settings…</p>
+      </details>
+    </section>
 
     <section id="photoReviewEmptyState" class="tradeLookupCard reviewEmptyState" hidden>
       <h2>No reviews waiting</h2>
@@ -88,8 +108,8 @@
     <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
-  <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-b4e791c8a263" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-b4e791c8a263" type="module"></script>
-  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-b4e791c8a263" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-9d07c2f3a8b1" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/photo_scanner.js?v=build-9d07c2f3a8b1" type="module"></script>
+  <script src="/fifa-sticker-app/v2/assets/pwa.js?v=build-9d07c2f3a8b1" type="module"></script>
 </body>
 </html>

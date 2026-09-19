@@ -85,13 +85,15 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       })`);
       assert.deepEqual(reusablePicker, { connected: true, disabled: false, busy: false, value: "", label: "Choose photo" });
 
+      await evaluate(cdp, `localStorage.setItem("panini.ocrToken.v1", "saved-review-token")`);
+
       const reviewsPage = await createPage("about:blank");
       const reviewsCdp = await connectCdp(reviewsPage.webSocketDebuggerUrl);
       try {
         await send(reviewsCdp, "Runtime.enable");
         await send(reviewsCdp, "Page.enable");
         await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-b4e791c8a263", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1")`,
         });
         await send(reviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(reviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5"`);
@@ -100,10 +102,14 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
           currentTab: document.querySelector('.phoneTabBar a[aria-current="page"]')?.textContent,
           imageSource: document.querySelector("#photoReviewImage")?.src,
           pendingText: document.querySelector("#photoReviewQueueText")?.textContent,
+          backendToken: document.querySelector("[data-ocr-backend-token]")?.value,
+          backendTokenType: document.querySelector("[data-ocr-backend-token]")?.type,
         })`);
         assert.equal(restoredReview.currentTab, "Reviews");
         assert.match(restoredReview.imageSource, /^blob:/);
         assert.match(restoredReview.pendingText, /Review 1 of 1 · TUR5 · choose back insignia/i);
+        assert.equal(restoredReview.backendToken, "saved-review-token");
+        assert.equal(restoredReview.backendTokenType, "password");
       } finally {
         reviewsCdp.close();
         await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${reviewsPage.id}`);
@@ -313,7 +319,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(batchReviewsCdp, "Runtime.enable");
         await send(batchReviewsCdp, "Page.enable");
         await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-b4e791c8a263", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1")`,
         });
         await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
@@ -324,7 +330,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(syncedReviewsCdp, "Runtime.enable");
         await send(syncedReviewsCdp, "Page.enable");
         await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-b4e791c8a263", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1")`,
         });
         await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
@@ -436,7 +442,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-b4e791c8a263", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
