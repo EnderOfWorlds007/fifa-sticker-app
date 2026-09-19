@@ -10,23 +10,23 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-2444092ca3e8";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-282e54b38b2e";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-282e54b38b2e";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-2444092ca3e8";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-2444092ca3e8";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-2444092ca3e8";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-282e54b38b2e";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-282e54b38b2e";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-282e54b38b2e";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-2444092ca3e8";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-2444092ca3e8";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-2444092ca3e8";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-2444092ca3e8";
 import {
   loadLatestPhotoReviewBatch,
   activeCloudPhotoReviewProfileId,
@@ -35,24 +35,26 @@ import {
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-2444092ca3e8";
 import {
   buildPhotoReviewItems,
+  hydratePhotoReviewSlots,
   nextPendingReviewItem,
+  reviewCodeCandidates,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-2444092ca3e8";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-2444092ca3e8";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-282e54b38b2e";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-2444092ca3e8";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -537,7 +539,7 @@ function installPhotoReviewBatch(stored) {
     photos: (stored.photos || []).map((photo) => ({
       ...photo,
       imageUrl: photo.blob ? URL.createObjectURL(photo.blob) : "",
-      slots: Array.isArray(photo.slots) ? photo.slots : [],
+      slots: hydratePhotoReviewSlots(photo.slots, { photoId: photo.id }),
       view: photo.view || { focused: false, zoomFactor: 1 },
     })),
     reviewItems: Array.isArray(stored.reviewItems) ? stored.reviewItems : [],
@@ -1190,7 +1192,7 @@ function renderInspector() {
   form.dataset.slotId = slot.id;
   const choices = document.createElement("div");
   choices.className = "photoReviewChoices";
-  for (const candidate of slot.code_candidates) {
+  for (const candidate of reviewCodeCandidates(slot).candidates) {
     const choice = document.createElement("button");
     choice.type = "button";
     choice.textContent = candidate.code;
@@ -1816,10 +1818,12 @@ function renderReviewQueue() {
   reviewNextButton.disabled = pending.length === 0;
   reviewNextButton.textContent = photoReviewView.focused ? "Next review" : insigniaCount && !codeCount ? "Review backs" : "Start review";
   const activeItem = reviewItemByKey(photoReviewState.activeReviewKey);
+  const activeItemMissing = activeItem && !reviewItemSlot(activeItem);
   const focused = photoReviewView.focused && selectedSlot();
   const total = photoReviewState.reviewItems.length;
   const completed = total - pending.length;
   if (focused && activeItem) reviewQueueText.textContent = `Review ${Math.min(total, completed + 1)} of ${total} · ${focused.code || "Unknown card"} · ${activeItem.kind === "code" ? "check code" : "choose back insignia"}`;
+  if (activeItemMissing) reviewQueueText.textContent = "This retained review item could not be linked to its card. It remains in the queue; choose Next review to continue.";
   if (reviewToolbar) reviewToolbar.hidden = !focused;
 }
 
@@ -1838,7 +1842,23 @@ function selectNextReviewSlot(options = {}) {
 
 function activateReviewItem(item, options = {}) {
   const located = reviewItemSlot(item);
-  if (!located) return;
+  if (!located) {
+    photoReviewState.activeReviewKey = String(item?.key || "");
+    photoReviewState.selectedSlotId = "";
+    photoReviewView = { focused: false, zoomFactor: 1 };
+    if (reviewInspector) {
+      reviewInspector.hidden = true;
+      reviewInspector.replaceChildren();
+    }
+    console.error("Stored review item could not be linked to a retained card slot.", {
+      batchId: photoReviewState.id,
+      reviewItem: item,
+    });
+    renderReviewQueue();
+    renderReviewSummary();
+    if (status) status.textContent = "One retained review item could not be linked to its card. It was kept in the queue; choose Next review to continue.";
+    return false;
+  }
   photoReviewState.activeReviewKey = item.key;
   activateReviewPhoto(item.photoId, { render: false });
   photoReviewState.selectedSlotId = located.slot.id;
@@ -1851,6 +1871,7 @@ function activateReviewItem(item, options = {}) {
   drawPhotoReview();
   if (options.persist !== false) persistReviewBatchMeta().catch(reportReviewStorageFailure);
   if (options.scroll !== false) (hasPhotoLocation ? reviewStage : reviewUnplaced)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  return true;
 }
 
 function showPreferredReviewItem(options = {}) {
@@ -1946,7 +1967,7 @@ function pendingReviewItems() {
 
 function reviewItemResolved(item) {
   const located = reviewItemSlot(item);
-  if (!located) return true;
+  if (!located) return false;
   if (item.kind === "code") {
     if (located.slot.code_review_status) return located.slot.code_review_status !== "pending";
     return Boolean(located.slot.saved_review && !located.slot.needs_user_help);
@@ -2026,26 +2047,7 @@ function formatConfidence(value) {
 }
 
 function normalizedCodeCandidates(slot) {
-  const rawCandidates = [
-    slot.code,
-    ...(slot.code_candidates || []),
-    ...(slot.candidates || []),
-    ...(slot.alternatives || []),
-    ...(slot.ocr_candidates || []),
-  ];
-  const seen = new Set();
-  return rawCandidates
-    .map((candidate) => typeof candidate === "string" ? { code: candidate } : candidate)
-    .map((candidate) => ({
-      code: String(candidate?.code || candidate?.label || candidate?.text || "").trim().toUpperCase(),
-      score: Number(candidate?.score ?? candidate?.confidence ?? 0),
-    }))
-    .filter((candidate) => {
-      if (!candidate.code || seen.has(candidate.code)) return false;
-      seen.add(candidate.code);
-      return true;
-    })
-    .slice(0, 6);
+  return reviewCodeCandidates(slot).candidates;
 }
 
 function showToast(message) {
