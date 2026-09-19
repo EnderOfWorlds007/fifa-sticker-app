@@ -49,7 +49,7 @@ test("insignia decisions update collection state and retained OCR feedback indep
 
 test("review summary and controls describe code and card-back work separately", () => {
   assert.match(functionBody("renderReviewSummary"), /codes matched/);
-  assert.match(functionBody("renderReviewSummary"), /reviewQueueSummary/);
+  assert.match(functionBody("renderReviewSummary"), /pendingReviewItems/);
   assert.match(functionBody("renderReviewQueue"), /Review backs/);
   assert.match(html, /Confirm shown codes/);
   assert.doesNotMatch(html, />All correct</);
@@ -201,8 +201,8 @@ test("estimated geometry stays magenta when only the insignia needs review", () 
 });
 
 test("catalogue projection loads before review slots are normalized", () => {
-  const render = functionBody("renderResults");
-  assert.ok(render.indexOf("await refreshScannerCollectionProjection()") < render.indexOf("renderPhotoReview(payloads[0] || null)"));
+  const scan = functionBody("scanPhotos");
+  assert.ok(scan.indexOf("await refreshScannerCollectionProjection()") < scan.indexOf("reviewSlotsForPayload(resultPayload)"));
   assert.match(functionBody("normalizeReviewSlots"), /reviewSlotCatalogName\(slot\.code\)/);
 });
 

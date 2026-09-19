@@ -98,6 +98,7 @@
 }
 
 .appTile.scanner { border-top: 4px solid #00c2a8; }
+.appTile.reviews { border-top: 4px solid #ffb000; }
 .appTile.gettingStarted { border-top: 4px solid #ffcf5a; }
 .appTile.albumReview { border-top: 4px solid #ff7d7d; }
 .appTile.inventory { border-top: 4px solid #6ea8fe; }
@@ -125,7 +126,7 @@
   left: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1px;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
@@ -140,7 +141,7 @@
   border-radius: 8px;
   color: var(--muted);
   text-decoration: none;
-  font-size: 12px;
+  font-size: clamp(9px, 2.7vw, 12px);
   font-weight: 800;
 }
 
@@ -1542,6 +1543,88 @@
   min-height: 34px;
   padding: 6px 10px;
   font-size: 12px;
+}
+
+.sectionHeadingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sectionHeadingRow h2 {
+  margin: 0;
+}
+
+.compactLinkButton,
+.primaryLinkButton {
+  min-height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 850;
+}
+
+.primaryLinkButton {
+  border-color: transparent;
+  background: var(--accent);
+  color: #06110f;
+}
+
+.photoReviewPhotoNav {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.photoReviewPhotoNav[hidden] {
+  display: none;
+}
+
+.photoReviewPhotoNav span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photoReviewPhotoNav button {
+  min-height: 44px;
+}
+
+.reviewEmptyState {
+  text-align: center;
+}
+
+.reviewEmptyState .primaryLinkButton {
+  margin-top: 8px;
+}
+
+@media (max-width: 420px) {
+  .phoneTabBar {
+    padding-inline: 4px;
+  }
+
+  .photoReviewPhotoNav {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .photoReviewPhotoNav span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
 }
 
 .photoReviewLegend {

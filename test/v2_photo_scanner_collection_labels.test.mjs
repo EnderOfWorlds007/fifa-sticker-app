@@ -146,24 +146,28 @@ test("adding a scan preserves its scan-time trading classification", () => {
 test("adding a scan preserves recognized blue and green back insignias", () => {
   assert.match(source, /scan_inventory\.js/);
   const receivedBody = functionBody("currentScanReceivedLines");
+  assert.match(receivedBody, /photoReviewState\.photos\.flatMap/);
   assert.match(receivedBody, /slot\.code && slotStatus\(slot\) === "matched"/);
   assert.match(receivedBody, /receivedLinesForScan\(\{ slots, fallbackCodes: latestScanCodes \}\)/);
   const addBody = functionBody("addScanToCollection");
   assert.match(addBody, /const received = currentScanReceivedLines\(\)/);
-  assert.match(addBody, /createTransaction\(loadLedger\(\), \{ kind: "received", received, given: \[\] \}\)/);
+  assert.match(addBody, /const nextLedger = createTransaction\(ledger, \{/);
+  assert.match(addBody, /kind: "received",[\s\S]*received,[\s\S]*given: \[\],[\s\S]*idFactory:/);
   assert.match(functionBody("currentScanSignature"), /scanReceiptSignature\(currentScanReceivedLines\(\)\)/);
 });
 
 test("scanner counts matched review slots including duplicates before collection summary", () => {
   const renderBody = functionBody("renderResults");
-  assert.match(renderBody, /const fallbackCodes = payloads\.flatMap/);
-  assert.match(renderBody, /const reviewCodes = renderPhotoReview\(payloads\[0\] \|\| null\)/);
-  assert.match(renderBody, /latestScanCodes = reviewCodes\.length \? reviewCodes : normalizeCodeList\(fallbackCodes\)/);
+  assert.match(renderBody, /latestScanCodes = aggregateReviewCodes\(\)/);
   assert.match(renderBody, /status\.textContent = latestScanCodes\.length/);
   assert.ok(
-    renderBody.indexOf("renderPhotoReview(payloads[0] || null)") < renderBody.indexOf("renderCollectionActions()"),
-    "review slot occurrences are selected before rendering collection counts",
+    renderBody.indexOf("aggregateReviewCodes()") < renderBody.indexOf("renderCollectionActions()"),
+    "all photo occurrences are aggregated before rendering collection counts",
   );
+
+  const aggregateBody = functionBody("aggregateReviewCodes");
+  assert.match(aggregateBody, /photoReviewState\.photos\.flatMap/);
+  assert.match(aggregateBody, /matchedReviewSlotCodes\(photo\.slots \|\| \[\]\)/);
 
   const matchedBody = functionBody("matchedReviewSlotCodes");
   assert.match(matchedBody, /slot\.code && slotStatus\(slot\) === "matched"/);
@@ -180,8 +184,11 @@ test("scanner add-to-collection is one-shot with undo", () => {
   const addBody = functionBody("addScanToCollection");
   assert.match(addBody, /if \(isCurrentScanApplied\(\)\) \{/);
   assert.match(addBody, /This scan was already added/);
-  assert.match(addBody, /const nextLedger = createTransaction\(loadLedger\(\), \{ kind: "received", received, given: \[\] \}\)/);
+  assert.match(addBody, /const transactionPrefix = currentBatchTransactionPrefix\(\)/);
+  assert.match(addBody, /const nextLedger = createTransaction\(ledger, \{/);
+  assert.match(addBody, /idFactory: \(\) => `\$\{transactionPrefix\}\$\{attempt\}`/);
   assert.match(addBody, /latestAppliedScan = \{ signature: currentScanSignature\(\), transactionId \}/);
+  assert.match(addBody, /await persistReviewBatchMeta\(\)/);
 
   const renderBody = functionBody("renderCollectionActions");
   assert.match(renderBody, /const applied = isCurrentScanApplied\(\)/);
