@@ -19,3 +19,23 @@ export async function fetchAllDeltaPages(fetchPage, { startRevision = 0, limit =
 export function monotonicRevision(currentRevision, incomingRevision) {
   return Math.max(0, Number(currentRevision || 0), Number(incomingRevision || 0));
 }
+
+export function createCloudSyncGate() {
+  let blocked = false;
+  let chain = Promise.resolve();
+  return {
+    run(task, blockedResult = () => undefined) {
+      if (blocked) return Promise.resolve(blockedResult());
+      const operation = chain.then(() => (blocked ? blockedResult() : task()));
+      chain = operation.catch(() => undefined);
+      return operation;
+    },
+    async block() {
+      blocked = true;
+      await chain;
+    },
+    unblock() {
+      blocked = false;
+    },
+  };
+}

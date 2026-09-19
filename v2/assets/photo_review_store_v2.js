@@ -148,7 +148,7 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
     if (retainedCommit) {
       if (retainedCommit.digest !== commitDigest) throw new Error("Cloud review commit conflicts with retained evidence.");
       await complete;
-      return { activated: false, batchId: retainedCommit.batchId };
+      return { activated: false, created: false, batchId: retainedCommit.batchId };
     }
     const parts = await requestResult(
       transaction.objectStore(IMPORT_PART_STORE).index("importKey").getAll(importKey),
@@ -177,7 +177,7 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
       throw new Error("Cloud review import does not account for every staged photo.");
     }
     validateCommittedReviewItems(commit.batch, orderedParts, Number(commit.expectedReviewItemCount));
-    const localBatchId = `cloud:${scopedProfileId}:${importId}:${String(commit.batch?.id || "batch")}`;
+    const localBatchId = cloudPhotoReviewBatchId(scopedProfileId, importId, commit.batch?.id);
     const batchStore = transaction.objectStore(BATCH_STORE);
     const photoStore = transaction.objectStore(PHOTO_STORE);
     batchStore.put(batchRecord({
@@ -189,10 +189,36 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
       revision: 1,
     }));
     for (const part of orderedParts) photoStore.put(photoRecord(localBatchId, { ...part.photo, revision: 1 }));
-    transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: localBatchId });
+    if (options.activate !== false) {
+      transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: localBatchId });
+    }
     importStore.put({ key: importKey, profileId: scopedProfileId, importId, digest: commitDigest, batchId: localBatchId });
     await complete;
-    return { activated: true, batchId: localBatchId };
+    return { activated: options.activate !== false, created: true, batchId: localBatchId };
+  } finally {
+    database.close();
+  }
+}
+
+export function cloudPhotoReviewBatchId(profileId, importId, sourceBatchId) {
+  return `cloud:${String(profileId || "")}:${String(importId || "")}:${String(sourceBatchId || "batch")}`;
+}
+
+export async function activateCloudPhotoReviewBatch(profileId, batchId, options = {}) {
+  const database = await openReviewDatabase(options.indexedDB);
+  try {
+    const scopedProfileId = String(profileId || "");
+    const scopedBatchId = String(batchId || "");
+    if (!scopedProfileId || !scopedBatchId) throw new Error("Cloud review queue identity is incomplete.");
+    const transaction = database.transaction([BATCH_STORE, ACTIVE_STORE], "readwrite");
+    const complete = transactionComplete(transaction);
+    const batch = await requestResult(transaction.objectStore(BATCH_STORE).get(scopedBatchId));
+    if (!batch || String(batch.profileId || "") !== scopedProfileId) {
+      throw new Error("Recovered cloud review queue is unavailable.");
+    }
+    transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: scopedBatchId });
+    await complete;
+    return true;
   } finally {
     database.close();
   }
@@ -205,6 +231,14 @@ export function activePhotoReviewProfileId(storage = globalThis.localStorage) {
       || storage?.getItem?.(ACTIVE_LOCAL_PROFILE_ID_KEY)
       || "",
     ).trim();
+  } catch {
+    return "";
+  }
+}
+
+export function activeCloudPhotoReviewProfileId(storage = globalThis.localStorage) {
+  try {
+    return String(storage?.getItem?.(ACTIVE_CLOUD_PROFILE_ID_KEY) || "").trim();
   } catch {
     return "";
   }

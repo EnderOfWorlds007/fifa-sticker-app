@@ -1,7 +1,7 @@
 import {
   commitCloudPhotoReviewImport,
   stageCloudPhotoReviewPart,
-} from "./photo_review_store_v2.js?v=build-9d07c2f3a8b1";
+} from "./photo_review_store_v2.js?v=build-5d846227af90";
 
 export const CLOUD_REVIEW_PART_KIND = "photo-review-import-part-v1";
 export const CLOUD_REVIEW_COMMIT_KIND = "photo-review-import-commit-v1";
@@ -18,7 +18,7 @@ export async function importCloudReviewPayload(payload, profileId, options = {})
     validateCommit(payload);
     await assertDigest(payload.digest, canonicalCommit(payload), options.cryptoImpl);
     const result = await commitCloudPhotoReviewImport(payload, profileId, options);
-    return result.activated ? "committed" : "unchanged";
+    return result.created ? "committed" : "unchanged";
   }
   return "ignored";
 }

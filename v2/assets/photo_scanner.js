@@ -10,48 +10,49 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-5d846227af90";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-9d07c2f3a8b1";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-9d07c2f3a8b1";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-5d846227af90";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-5d846227af90";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-5d846227af90";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-9d07c2f3a8b1";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-9d07c2f3a8b1";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-9d07c2f3a8b1";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-5d846227af90";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-5d846227af90";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-5d846227af90";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-5d846227af90";
 import {
   loadLatestPhotoReviewBatch,
+  activeCloudPhotoReviewProfileId,
   activePhotoReviewProfileId,
   ReviewStateConflictError,
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-5d846227af90";
 import {
   buildPhotoReviewItems,
   nextPendingReviewItem,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-5d846227af90";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-5d846227af90";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-9d07c2f3a8b1";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-5d846227af90";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -110,6 +111,7 @@ let scanInFlight = false;
 let activePhotoScanController = null;
 let latestCaptureSummary = "";
 let reviewHydrationGeneration = 0;
+let cloudReviewSyncCompleted = false;
 let reviewWriteChain = Promise.resolve();
 const reviewUpdates = typeof BroadcastChannel === "function" ? new BroadcastChannel("panini-photo-review-queue") : null;
 
@@ -154,6 +156,23 @@ reviewUpdates?.addEventListener("message", (event) => {
 });
 window.addEventListener("panini:cloud-sync-applied", (event) => {
   if (event.detail?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
+  cloudReviewSyncCompleted = true;
+  hydrateLatestReviewBatch();
+});
+window.addEventListener("panini:cloud-sync-status", (event) => {
+  if (!reviewsPage || scanInFlight || photoReviewState.id) return;
+  const message = String(event.detail?.message || "");
+  const severity = String(event.detail?.severity || "");
+  if (severity === "warning") showEmptyReviewQueue(message || "Cloud reviews could not be loaded. Try again.");
+  else if (severity === "muted" && message.startsWith("Loading encrypted")) showEmptyReviewQueue("Loading encrypted reviews…");
+  else if (severity === "ok") {
+    cloudReviewSyncCompleted = true;
+    hydrateLatestReviewBatch();
+  }
+});
+globalThis.PANINI_CLOUD_SYNC_READY?.finally?.(() => {
+  if (!reviewsPage || scanInFlight) return;
+  cloudReviewSyncCompleted = true;
   hydrateLatestReviewBatch();
 });
 copyButton?.addEventListener("click", async () => {
@@ -204,7 +223,7 @@ async function hydrateLatestReviewBatch() {
     const stored = await loadLatestPhotoReviewBatch(activePhotoReviewProfileId() || activeProfileId());
     if (generation !== reviewHydrationGeneration) return;
     if (!stored) {
-      showEmptyReviewQueue("No saved reviews yet. Scan one or several photos to create the queue.");
+      showEmptyReviewQueue(emptyReviewQueueMessage());
       return;
     }
     installPhotoReviewBatch(stored);
@@ -215,6 +234,14 @@ async function hydrateLatestReviewBatch() {
   } finally {
     if (generation === reviewHydrationGeneration) setReviewInteractionDisabled(false);
   }
+}
+
+function emptyReviewQueueMessage() {
+  if (!activeCloudPhotoReviewProfileId()) {
+    return "Enter or select a restore code under Load reviews to open the encrypted queue.";
+  }
+  if (!cloudReviewSyncCompleted) return "Loading encrypted reviews…";
+  return "No saved reviews were found for this cloud account.";
 }
 
 function setReviewInteractionDisabled(disabled) {

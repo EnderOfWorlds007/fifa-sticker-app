@@ -93,7 +93,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(reviewsCdp, "Runtime.enable");
         await send(reviewsCdp, "Page.enable");
         await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-5d846227af90", "1")`,
         });
         await send(reviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(reviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5"`);
@@ -110,6 +110,19 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         assert.match(restoredReview.pendingText, /Review 1 of 1 · TUR5 · choose back insignia/i);
         assert.equal(restoredReview.backendToken, "saved-review-token");
         assert.equal(restoredReview.backendTokenType, "password");
+
+        await waitForExpression(reviewsCdp, `document.querySelector("#restoreCloudIdButton")?.disabled === false`);
+        await evaluate(reviewsCdp, `(() => {
+          document.querySelector("#cloudRestoreIdInput").value = "not-a-restore-code";
+          document.querySelector("#restoreCloudIdButton").click();
+        })()`);
+        await waitForExpression(reviewsCdp, `document.querySelector("#cloudSyncStatus span")?.textContent.includes("valid restore code")`);
+        const queueAfterFailedLoad = await evaluate(reviewsCdp, `({
+          codes: document.querySelector("#photoScannerResult")?.value,
+          reviewVisible: document.querySelector("#photoReviewPanel")?.hidden === false,
+          restoreInputType: document.querySelector("#cloudRestoreIdInput")?.type,
+        })`);
+        assert.deepEqual(queueAfterFailedLoad, { codes: "TUR5", reviewVisible: true, restoreInputType: "password" });
       } finally {
         reviewsCdp.close();
         await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${reviewsPage.id}`);
@@ -319,7 +332,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(batchReviewsCdp, "Runtime.enable");
         await send(batchReviewsCdp, "Page.enable");
         await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-5d846227af90", "1")`,
         });
         await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
@@ -330,7 +343,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(syncedReviewsCdp, "Runtime.enable");
         await send(syncedReviewsCdp, "Page.enable");
         await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-5d846227af90", "1")`,
         });
         await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
@@ -442,7 +455,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-9d07c2f3a8b1", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-5d846227af90", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
