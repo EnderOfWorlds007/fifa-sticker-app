@@ -1,4 +1,4 @@
-const BUILD_ID = "build-fee49fa28675";
+const BUILD_ID = "build-b4e791c8a263";
 const CACHE_NAME = `fifa-card-apps-fifa-sticker-app-v2-${BUILD_ID}`;
 const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}$/, "");
 const APP_SHELL_PATHS = [
@@ -51,6 +51,9 @@ const APP_SHELL_PATHS = [
   "/fifa-sticker-app/v2/assets/photo_scanner.js",
   "/fifa-sticker-app/v2/assets/photo_review_store.js",
   "/fifa-sticker-app/v2/assets/photo_review_store_v2.js",
+  "/fifa-sticker-app/v2/assets/cloud_review_import.js",
+  "/fifa-sticker-app/v2/assets/cloud_delta.js",
+  "/fifa-sticker-app/v2/assets/cloud_account_context.js",
   "/fifa-sticker-app/v2/assets/photo_review_queue.js",
   "/fifa-sticker-app/v2/assets/scan_inventory.js",
   "/fifa-sticker-app/v2/assets/scan_card_status.js",

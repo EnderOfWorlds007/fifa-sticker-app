@@ -1,8 +1,12 @@
 const DATABASE_NAME = "panini-photo-review-queue";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const BATCH_STORE = "review_batches";
 const PHOTO_STORE = "review_photos";
 const ACTIVE_STORE = "active_review_batches";
+const IMPORT_STORE = "review_imports";
+const IMPORT_PART_STORE = "review_import_parts";
+const ACTIVE_CLOUD_PROFILE_ID_KEY = "panini.cloudSync.activeProfileId.v1";
+const ACTIVE_LOCAL_PROFILE_ID_KEY = "panini.v2.activeProfileId";
 
 export class ReviewStateConflictError extends Error {
   constructor(message = "This review changed in another tab. Reloading the latest version.") {
@@ -91,6 +95,156 @@ export async function savePhotoReviewPhoto(batchId, photo, options = {}) {
   }
 }
 
+export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
+  const database = await openReviewDatabase(options.indexedDB);
+  try {
+    const scopedProfileId = String(profileId || "");
+    if (!scopedProfileId) throw new Error("Cloud review profile is missing.");
+    const importId = String(part?.importId || "");
+    const partId = String(part?.partId || "");
+    const digest = String(part?.digest || "");
+    if (!importId || !partId || !digest) throw new Error("Cloud review part identity is incomplete.");
+    const key = `${scopedProfileId}:${importId}:${partId}`;
+    const transaction = database.transaction(IMPORT_PART_STORE, "readwrite");
+    const complete = transactionComplete(transaction);
+    const store = transaction.objectStore(IMPORT_PART_STORE);
+    const current = await requestResult(store.get(key));
+    if (current && current.digest !== digest) throw new Error("Cloud review part conflicts with retained evidence.");
+    if (!current) {
+      store.put({
+        key,
+        importKey: `${scopedProfileId}:${importId}`,
+        profileId: scopedProfileId,
+        importId,
+        partId,
+        digest,
+        batchId: String(part.batchId || ""),
+        photo: part.photo,
+      });
+    }
+    await complete;
+    return !current;
+  } finally {
+    database.close();
+  }
+}
+
+export async function commitCloudPhotoReviewImport(commit, profileId, options = {}) {
+  const database = await openReviewDatabase(options.indexedDB);
+  try {
+    const scopedProfileId = String(profileId || "");
+    if (!scopedProfileId) throw new Error("Cloud review profile is missing.");
+    const importId = String(commit?.importId || "");
+    const commitDigest = String(commit?.digest || "");
+    if (!importId || !commitDigest) throw new Error("Cloud review commit identity is incomplete.");
+    const importKey = `${scopedProfileId}:${importId}`;
+    const transaction = database.transaction(
+      [BATCH_STORE, PHOTO_STORE, ACTIVE_STORE, IMPORT_STORE, IMPORT_PART_STORE],
+      "readwrite",
+    );
+    const complete = transactionComplete(transaction);
+    const importStore = transaction.objectStore(IMPORT_STORE);
+    const retainedCommit = await requestResult(importStore.get(importKey));
+    if (retainedCommit) {
+      if (retainedCommit.digest !== commitDigest) throw new Error("Cloud review commit conflicts with retained evidence.");
+      await complete;
+      return { activated: false, batchId: retainedCommit.batchId };
+    }
+    const parts = await requestResult(
+      transaction.objectStore(IMPORT_PART_STORE).index("importKey").getAll(importKey),
+    );
+    const expectedPhotos = Array.isArray(commit.photos) ? commit.photos : [];
+    if (Number(commit.expectedPhotoCount) !== expectedPhotos.length || parts.length !== expectedPhotos.length) {
+      throw new Error("Cloud review import is incomplete; no queue was activated.");
+    }
+    assertUniqueValues(expectedPhotos.map((item) => String(item.partId || "")), "part ids");
+    assertUniqueValues(expectedPhotos.map((item) => String(item.photoId || "")), "photo ids");
+    assertUniqueValues(expectedPhotos.map((item) => String(Number(item.index))), "photo indexes");
+    const partsById = new Map(parts.map((part) => [part.partId, part]));
+    const orderedParts = expectedPhotos.map((expected) => {
+      const part = partsById.get(String(expected.partId || ""));
+      if (!part || part.digest !== String(expected.digest || "")) {
+        throw new Error("Cloud review import evidence does not match its commit.");
+      }
+      if (part.batchId !== String(commit.batch?.id || "")
+        || String(part.photo?.id || "") !== String(expected.photoId || "")
+        || Number(part.photo?.index) !== Number(expected.index)) {
+        throw new Error("Cloud review import manifest does not match its staged photo.");
+      }
+      return part;
+    });
+    if (new Set(orderedParts.map((part) => part.key)).size !== parts.length) {
+      throw new Error("Cloud review import does not account for every staged photo.");
+    }
+    validateCommittedReviewItems(commit.batch, orderedParts, Number(commit.expectedReviewItemCount));
+    const localBatchId = `cloud:${scopedProfileId}:${importId}:${String(commit.batch?.id || "batch")}`;
+    const batchStore = transaction.objectStore(BATCH_STORE);
+    const photoStore = transaction.objectStore(PHOTO_STORE);
+    batchStore.put(batchRecord({
+      ...commit.batch,
+      id: localBatchId,
+      sourceBatchId: String(commit.batch?.id || ""),
+      importId,
+      profileId: scopedProfileId,
+      revision: 1,
+    }));
+    for (const part of orderedParts) photoStore.put(photoRecord(localBatchId, { ...part.photo, revision: 1 }));
+    transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: localBatchId });
+    importStore.put({ key: importKey, profileId: scopedProfileId, importId, digest: commitDigest, batchId: localBatchId });
+    await complete;
+    return { activated: true, batchId: localBatchId };
+  } finally {
+    database.close();
+  }
+}
+
+export function activePhotoReviewProfileId(storage = globalThis.localStorage) {
+  try {
+    return String(
+      storage?.getItem?.(ACTIVE_CLOUD_PROFILE_ID_KEY)
+      || storage?.getItem?.(ACTIVE_LOCAL_PROFILE_ID_KEY)
+      || "",
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function migrateLegacyPhotoReviewProfile(localProfileId, cloudProfileId, options = {}) {
+  const indexedDBFactory = options.indexedDB || globalThis.indexedDB;
+  if (!indexedDBFactory?.open || !localProfileId || !cloudProfileId || localProfileId === cloudProfileId) return false;
+  const database = await openReviewDatabase(indexedDBFactory);
+  try {
+    const transaction = database.transaction([BATCH_STORE, PHOTO_STORE, ACTIVE_STORE], "readwrite");
+    const complete = transactionComplete(transaction);
+    const activeStore = transaction.objectStore(ACTIVE_STORE);
+    if (await requestResult(activeStore.get(String(cloudProfileId)))) {
+      await complete;
+      return false;
+    }
+    const legacyActive = await requestResult(activeStore.get(String(localProfileId)));
+    if (!legacyActive?.batchId) {
+      await complete;
+      return false;
+    }
+    const batchStore = transaction.objectStore(BATCH_STORE);
+    const legacyBatch = await requestResult(batchStore.get(legacyActive.batchId));
+    if (!legacyBatch || String(legacyBatch.profileId || "") !== String(localProfileId)) {
+      await complete;
+      return false;
+    }
+    batchStore.put({
+      ...legacyBatch,
+      profileId: String(cloudProfileId),
+    });
+    activeStore.put({ profileId: String(cloudProfileId), batchId: legacyBatch.id });
+    await complete;
+    return true;
+  } finally {
+    database.close();
+  }
+}
+
 export async function loadLatestPhotoReviewBatch(profileId, options = {}) {
   const database = await openReviewDatabase(options.indexedDB);
   try {
@@ -101,6 +255,7 @@ export async function loadLatestPhotoReviewBatch(profileId, options = {}) {
     let batch = active?.batchId
       ? await requestResult(metadataTransaction.objectStore(BATCH_STORE).get(active.batchId))
       : null;
+    if (batch && String(batch.profileId || "") !== profileKey) batch = null;
     if (!batch) {
       const batches = await requestResult(metadataTransaction.objectStore(BATCH_STORE).getAll());
       batch = (batches || [])
@@ -162,6 +317,11 @@ export function openReviewDatabase(indexedDBFactory = globalThis.indexedDB) {
       else photoStore = request.transaction.objectStore(PHOTO_STORE);
       if (!photoStore.indexNames.contains("batchId")) photoStore.createIndex("batchId", "batchId", { unique: false });
       if (!database.objectStoreNames.contains(ACTIVE_STORE)) database.createObjectStore(ACTIVE_STORE, { keyPath: "profileId" });
+      if (!database.objectStoreNames.contains(IMPORT_STORE)) database.createObjectStore(IMPORT_STORE, { keyPath: "key" });
+      let importPartStore;
+      if (!database.objectStoreNames.contains(IMPORT_PART_STORE)) importPartStore = database.createObjectStore(IMPORT_PART_STORE, { keyPath: "key" });
+      else importPartStore = request.transaction.objectStore(IMPORT_PART_STORE);
+      if (!importPartStore.indexNames.contains("importKey")) importPartStore.createIndex("importKey", "importKey", { unique: false });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("Review storage could not be opened."));
@@ -172,6 +332,23 @@ export function openReviewDatabase(indexedDBFactory = globalThis.indexedDB) {
 function assertRevision(current, incoming, label) {
   if (!current) throw new ReviewStateConflictError(`The saved ${label} no longer exists. Reloading reviews.`);
   if (Number(current.revision || 0) !== Number(incoming.revision || 0)) throw new ReviewStateConflictError();
+}
+
+function validateCommittedReviewItems(batch, parts, expectedCount) {
+  const items = Array.isArray(batch?.reviewItems) ? batch.reviewItems : [];
+  if (items.length !== expectedCount) throw new Error("Cloud review item count does not match its commit.");
+  assertUniqueValues(items.map((item) => String(item.key || "")), "review item keys");
+  assertUniqueValues(items.map((item) => `${item.photoId}:${item.slotId}:${item.kind}`), "review item identities");
+  const slots = new Set(parts.flatMap((part) => (part.photo?.slots || []).map((slot) => `${part.photo.id}:${slot.id}`)));
+  if (items.some((item) => !slots.has(`${item.photoId}:${item.slotId}`))) {
+    throw new Error("Cloud review commit references a missing photo or card.");
+  }
+}
+
+function assertUniqueValues(values, label) {
+  if (values.some((value) => !value) || new Set(values).size !== values.length) {
+    throw new Error(`Cloud review commit contains duplicate or missing ${label}.`);
+  }
 }
 
 function requestResult(request) {
