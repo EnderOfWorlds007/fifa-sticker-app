@@ -29,6 +29,11 @@
       "name": "Trades",
       "short_name": "Trades",
       "url": "/fifa-sticker-app/v2/trades/"
+    },
+    {
+      "name": "Reviews",
+      "short_name": "Reviews",
+      "url": "/fifa-sticker-app/v2/reviews/"
     }
   ]
 }

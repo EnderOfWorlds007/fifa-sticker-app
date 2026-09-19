@@ -6,61 +6,28 @@
   <meta name="theme-color" content="#00c2a8">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Sticker Hub">
-  <title>Scan Stickers</title>
+  <title>Review Scans</title>
   <link rel="manifest" href="/fifa-sticker-app/v2/manifest.webmanifest">
   <link rel="stylesheet" href="/fifa-sticker-app/v2/assets/styles.css?v=build-fee49fa28675">
 </head>
-<body class="appShellBody">
+<body class="appShellBody" data-photo-review-mode="reviews">
   <main class="shell">
     <header class="heroHeader compactHero">
-      <p class="eyebrow">Scan</p>
-      <h1>Scan stickers</h1>
-      <p id="photoScannerStatus">Upload a clear sticker photo. Recognition runs on the configured laptop OCR backend.</p>
+      <p class="eyebrow">Reviews</p>
+      <h1>Review scan queue</h1>
+      <p id="photoScannerStatus">Loading saved photo reviews…</p>
     </header>
 
-    <section class="tradeLookupCard">
-      <label for="photoScannerSide">Sticker side</label>
-      <select id="photoScannerSide">
-        <option value="back">Back</option>
-        <option value="front">Front</option>
-      </select>
-      <details class="ocrBackendSettings">
-        <summary>OCR backend</summary>
-        <label>
-          <span>Laptop Funnel URL</span>
-          <input data-ocr-backend-url type="url" inputmode="url" autocomplete="off" placeholder="https://your-mac.tailnet.ts.net">
-        </label>
-        <label>
-          <span>Laptop OCR token</span>
-          <input data-ocr-backend-token type="password" autocomplete="off" placeholder="Token from setup script">
-        </label>
-        <div class="buttonRow">
-          <button data-ocr-backend-save class="secondary" type="button">Save backend</button>
-          <button data-ocr-backend-test class="secondary" type="button">Test backend</button>
-        </div>
-        <p data-ocr-backend-status class="hint">Blank laptop URL uses the deployed backend.</p>
-      </details>
-      <div class="buttonRow">
-        <button id="photoScannerCameraButton" class="cameraCaptureButton" type="button">Use Camera</button>
-        <span class="photoPickerControl">
-          <button id="photoScannerButton" class="photoUploadButton" type="button" tabindex="-1" aria-hidden="true">Choose photo</button>
-          <input id="photoScannerInput" class="photoPickerNativeInput" type="file" accept="image/*" aria-label="Choose one photo" data-paste-photo-input="true">
-        </span>
-        <span class="photoPickerControl">
-          <button id="photoScannerBatchButton" class="secondary" type="button" tabindex="-1" aria-hidden="true">Select several</button>
-          <input id="photoScannerBatchInput" class="photoPickerNativeInput" type="file" accept="image/*" multiple aria-label="Select several photos">
-        </span>
-        <button id="photoScannerCancelButton" class="secondary" type="button" hidden>Cancel scan</button>
-        <button id="photoScannerCopyButton" class="secondary" type="button" disabled>Copy codes</button>
-      </div>
-      <p class="hint">Choose photo returns as soon as you select one. Select several opens the batch picker.</p>
-      <p id="photoCameraDiagnostics" class="hint" role="status" aria-live="polite">Camera build fee49fa28675 ready. Diagnostics will show the actual resolution and flash/torch status. <a href="/fifa-sticker-app/v2/cache-reset-build-fee49fa28675/">Refresh cached app</a>.</p>
+    <section id="photoReviewEmptyState" class="tradeLookupCard reviewEmptyState" hidden>
+      <h2>No reviews waiting</h2>
+      <p>Scan one or several photos to create a review queue.</p>
+      <a class="primaryLinkButton" href="/fifa-sticker-app/v2/scanner/">Scan photos</a>
     </section>
 
     <section class="tradeLookupCard">
       <div class="sectionHeadingRow">
-        <h2>Result</h2>
-        <a id="photoOpenReviews" class="secondaryButton compactLinkButton" href="/fifa-sticker-app/v2/reviews/" hidden>Open Reviews</a>
+        <h2>Batch result</h2>
+        <button id="photoScannerCopyButton" class="secondary" type="button" disabled>Copy codes</button>
       </div>
       <textarea id="photoScannerResult" rows="6" readonly placeholder="Recognized codes appear here."></textarea>
       <div id="photoCollectionActions" class="photoCollectionActions" hidden>
@@ -75,8 +42,8 @@
       <div class="photoReviewHeader">
         <h2>Photo review</h2>
         <div>
-          <span id="photoReviewSummary">No photo selected</span>
-          <button id="photoReviewAllCorrect" class="secondary" type="button" disabled>Confirm shown codes</button>
+          <span id="photoReviewSummary">Loading saved review…</span>
+          <button id="photoReviewAllCorrect" class="secondary" type="button" disabled>Confirm codes in this photo</button>
         </div>
       </div>
       <ul class="photoReviewLegend" aria-label="Card outline legend">
@@ -109,10 +76,6 @@
       </div>
       <div id="photoReviewInspector" class="photoReviewInspector" hidden></div>
     </section>
-    <section id="photoReviewEmptyState" class="tradeLookupCard reviewEmptyState" hidden>
-      <h2>No reviews waiting</h2>
-      <p>Scan one or several photos to create a review queue.</p>
-    </section>
   </main>
   <div id="photoScannerToast" class="photoScannerToast" hidden role="status" aria-live="polite"></div>
 
@@ -121,8 +84,8 @@
     <a href="/fifa-sticker-app/v2/collection/">Collection</a>
     <a href="/fifa-sticker-app/v2/compare/">Compare</a>
     <a href="/fifa-sticker-app/v2/trades/">Trades</a>
-    <a href="/fifa-sticker-app/v2/reviews/">Reviews</a>
-    <a href="/fifa-sticker-app/v2/scanner/" data-scan-link aria-current="page">Scan</a>
+    <a href="/fifa-sticker-app/v2/reviews/" aria-current="page">Reviews</a>
+    <a href="/fifa-sticker-app/v2/scanner/" data-scan-link>Scan</a>
   </nav>
   <script src="/fifa-sticker-app/v2/assets/site_config.js"></script>
   <script src="/fifa-sticker-app/v2/assets/apps.js?v=build-fee49fa28675" type="module"></script>

@@ -1,5 +1,5 @@
-import { applyOcrBackendFromQuery } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b6977a2e0f3c";
-import { redirectNewBrowserToGettingStarted } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b6977a2e0f3c";
+import { applyOcrBackendFromQuery } from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-fee49fa28675";
+import { redirectNewBrowserToGettingStarted } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-fee49fa28675";
 
 applyOcrBackendFromQuery();
 redirectNewBrowserToGettingStarted({ isHub: document.body.classList.contains("appsBody") });
@@ -7,6 +7,6 @@ redirectNewBrowserToGettingStarted({ isHub: document.body.classList.contains("ap
 // Scan links stay on the static v2 app. The configured recognition backend is
 // only used by OCR API calls from the scanner page.
 
-import("/fifa-sticker-app/v2/assets/cloud_sync.js?v=build-b6977a2e0f3c")
+import("/fifa-sticker-app/v2/assets/cloud_sync.js?v=build-fee49fa28675")
   .then(({ mountCollectionCloudSync }) => mountCollectionCloudSync())
   .catch(() => {});

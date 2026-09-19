@@ -13,11 +13,11 @@ test("uncertain review enters a visible focused-card mode with zoom and overview
   assert.match(html, /id="photoReviewOverview"[^>]*>Overview</);
 
   assert.match(js, /photoReviewView = \{ focused: false, zoomFactor: 1 \}/);
-  assert.match(js, /const hasPhotoLocation = reviewSlotPolygon\(next\)\.length >= 4/);
+  assert.match(js, /const hasPhotoLocation = reviewSlotPolygon\(located\.slot\)\.length >= 4/);
   assert.match(js, /photoReviewView = \{ focused: hasPhotoLocation, zoomFactor: 1 \}/);
   assert.match(js, /\(hasPhotoLocation \? reviewStage : reviewUnplaced\)\?\.scrollIntoView/);
   assert.match(js, /reviewNextButton\.textContent = photoReviewView\.focused \? "Next review" : insigniaCount && !codeCount \? "Review backs" : "Start review"/);
-  assert.match(js, /`Reviewing \$\{focusedIndex \+ 1\} of \$\{pending\.length\} · \$\{focused\.code/);
+  assert.match(js, /`Review \$\{Math\.min\(total, completed \+ 1\)\} of \$\{total\} · \$\{focused\.code/);
   assert.match(js, /reviewToolbar\.hidden = !focused/);
   assert.match(js, /function adjustReviewZoom\(multiplier\)/);
   assert.match(js, /function showReviewOverview\(\)/);

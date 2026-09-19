@@ -6,6 +6,7 @@ const APP_ROUTE_NAMES = new Set([
   "getting-started",
   "inventory",
   "review-album-pages",
+  "reviews",
   "scanner",
   "trade",
   "trades",

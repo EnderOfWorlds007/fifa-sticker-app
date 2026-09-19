@@ -16,7 +16,12 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
   const serverRoot = await mkdtemp(join(tmpdir(), "fifa-v2-camera-server-"));
   await symlink(process.cwd(), join(serverRoot, "fifa-sticker-app"));
   const photoPath = join(serverRoot, "sample.png");
+  const secondPhotoPath = join(serverRoot, "sample-2.png");
   await writeFile(photoPath, Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  ));
+  await writeFile(secondPhotoPath, Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
     "base64",
   ));
@@ -79,6 +84,31 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         label: document.querySelector("#photoScannerButton").textContent,
       })`);
       assert.deepEqual(reusablePicker, { connected: true, disabled: false, busy: false, value: "", label: "Choose photo" });
+
+      const reviewsPage = await createPage("about:blank");
+      const reviewsCdp = await connectCdp(reviewsPage.webSocketDebuggerUrl);
+      try {
+        await send(reviewsCdp, "Runtime.enable");
+        await send(reviewsCdp, "Page.enable");
+        await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-fee49fa28675", "1")`,
+        });
+        await send(reviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
+        await waitForExpression(reviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5"`);
+        await waitForExpression(reviewsCdp, `document.querySelector("#photoReviewPanel")?.hidden === false`);
+        const restoredReview = await evaluate(reviewsCdp, `({
+          currentTab: document.querySelector('.phoneTabBar a[aria-current="page"]')?.textContent,
+          imageSource: document.querySelector("#photoReviewImage")?.src,
+          pendingText: document.querySelector("#photoReviewQueueText")?.textContent,
+        })`);
+        assert.equal(restoredReview.currentTab, "Reviews");
+        assert.match(restoredReview.imageSource, /^blob:/);
+        assert.match(restoredReview.pendingText, /Review 1 of 1 · TUR5 · choose back insignia/i);
+      } finally {
+        reviewsCdp.close();
+        await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${reviewsPage.id}`);
+      }
+
       await evaluate(cdp, `window.__simulateLostUploadAck = true`);
       const recoveryRect = await evaluate(cdp, `(() => {
         const rect = document.querySelector("#photoScannerButton").getBoundingClientRect();
@@ -108,7 +138,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         `GET:${recoveredUpload.requestLog[0].slice(4)}`,
       ]);
       assert.equal(recoveredUpload.uploadCount, 3, "lost acknowledgement must not trigger a second upload");
-      assert.equal(recoveredUpload.status, "1 cards recognized.");
+      assert.equal(recoveredUpload.status, "1 card recognized in 1 photo.");
       assert.equal(recoveredUpload.busy, false);
       assert.equal(recoveredUpload.inputDisabled, false);
       assert.equal(recoveredUpload.scanButtonDisabled, false);
@@ -245,6 +275,153 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         "AUS161 new for album",
         "TUR5 ×22 duplicate trading cards",
       ]);
+
+      await send(cdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/scanner/` });
+      await waitForExpression(cdp, `document.querySelector("#photoScannerBatchInput")`);
+      await delay(500);
+      await evaluate(cdp, installOcrMockSource());
+      const batchRect = await evaluate(cdp, `(() => {
+        const rect = document.querySelector("#photoScannerBatchButton").getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      })()`);
+      const batchChooserPromise = withTimeout(cdp.waitFor("Page.fileChooserOpened"), 2000, "batch photo chooser did not open");
+      await clickCenter(cdp, batchRect);
+      const batchChooser = await batchChooserPromise;
+      assert.equal(batchChooser.mode, "selectMultiple");
+      await send(cdp, "DOM.setFileInputFiles", {
+        backendNodeId: batchChooser.backendNodeId,
+        files: [photoPath, secondPhotoPath],
+      });
+      await waitForExpression(cdp, `window.__cameraUploadCount === 2`);
+      await waitForExpression(cdp, `document.querySelector("#photoScannerResult").value === "TUR5\\nTUR5"`);
+      const batchState = await evaluate(cdp, `({
+        photoNavigationHidden: document.querySelector("#photoReviewPhotoNav").hidden,
+        photoLabel: document.querySelector("#photoReviewPhotoText").textContent,
+        openReviewsHidden: document.querySelector("#photoOpenReviews").hidden,
+      })`);
+      assert.deepEqual(batchState, {
+        photoNavigationHidden: false,
+        photoLabel: "Photo 1 of 2 · sample.png",
+        openReviewsHidden: false,
+      });
+
+      const batchReviewsPage = await createPage("about:blank");
+      const batchReviewsCdp = await connectCdp(batchReviewsPage.webSocketDebuggerUrl);
+      let syncedReviewsPage = null;
+      let syncedReviewsCdp = null;
+      try {
+        await send(batchReviewsCdp, "Runtime.enable");
+        await send(batchReviewsCdp, "Page.enable");
+        await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-fee49fa28675", "1")`,
+        });
+        await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewPhotoText")?.textContent.includes("Photo 1 of 2")`);
+
+        syncedReviewsPage = await createPage("about:blank");
+        syncedReviewsCdp = await connectCdp(syncedReviewsPage.webSocketDebuggerUrl);
+        await send(syncedReviewsCdp, "Runtime.enable");
+        await send(syncedReviewsCdp, "Page.enable");
+        await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-fee49fa28675", "1")`,
+        });
+        await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
+        await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
+        await evaluate(batchReviewsCdp, installReviewFeedbackMockSource(true));
+        await evaluate(syncedReviewsCdp, installReviewFeedbackMockSource(false));
+
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
+        await evaluate(batchReviewsCdp, `document.querySelector('[data-insignia-decision="blue"]').click()`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewPhotoText")?.textContent.includes("Photo 2 of 2")`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 2 of 2")`);
+        await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 2 of 2")`);
+        const revisionBeforeIdle = await activeReviewBatchRevision(batchReviewsCdp);
+        await delay(400);
+        const revisionAfterIdle = await activeReviewBatchRevision(batchReviewsCdp);
+        assert.deepEqual(revisionAfterIdle, revisionBeforeIdle, "cross-tab hydration must settle without writing another revision");
+
+        await evaluate(syncedReviewsCdp, `document.querySelector("#photoReviewPreviousPhoto").click()`);
+        await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewPhotoText")?.textContent.includes("Photo 1 of 2")`);
+        await evaluate(syncedReviewsCdp, `document.querySelector('[data-insignia-decision="green"]').click()`);
+        await delay(200);
+        const syncedFeedbackUrls = await evaluate(syncedReviewsCdp, `window.__reviewFeedbackUrls`);
+        assert.equal(syncedFeedbackUrls.length, 1);
+        assert.match(syncedFeedbackUrls[0], /\/api\/back-insignia-review\/labels$/);
+        await evaluate(batchReviewsCdp, `window.__releaseHeldReviewFeedback()`);
+        await delay(200);
+        const firstSlotAfterLateFeedback = await activeReviewSlotState(batchReviewsCdp, 0, 0);
+        assert.deepEqual(firstSlotAfterLateFeedback, {
+          decision: "green",
+          variant: "united_edition",
+          decisionRevision: 2,
+          feedbackStatus: "sent",
+        });
+        const staleFeedbackStatus = await evaluate(batchReviewsCdp, `document.querySelector("#photoScannerStatus").textContent`);
+        assert.doesNotMatch(staleFeedbackStatus, /saved as Blue/);
+
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewPanel")?.getAttribute("aria-busy") === "false"`);
+        await evaluate(batchReviewsCdp, `document.querySelector('[data-insignia-decision="skip"]').click()`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewQueue")?.hidden === true`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoCollectionSummary")?.textContent.includes("1 green · 1 colour unknown")`);
+
+        await evaluate(batchReviewsCdp, `document.querySelector("#photoReviewPreviousPhoto").click()`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewPhotoText")?.textContent.includes("Photo 1 of 2")`);
+        await evaluate(batchReviewsCdp, `document.querySelector("#photoReviewNextPhoto").click()`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoReviewPhotoText")?.textContent.includes("Photo 2 of 2")`);
+        const secondPhoto = await evaluate(batchReviewsCdp, `({
+          label: document.querySelector("#photoReviewPhotoText").textContent,
+          imageSource: document.querySelector("#photoReviewImage").src,
+        })`);
+        assert.equal(secondPhoto.label, "Photo 2 of 2 · sample-2.png");
+        assert.match(secondPhoto.imageSource, /^blob:/);
+
+        await evaluate(batchReviewsCdp, `document.querySelector("#photoAddCollectionButton").click()`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerStatus").textContent.includes("Added 2 scanned cards")`);
+        const addedTransaction = await evaluate(batchReviewsCdp, `(() => {
+          const ledger = JSON.parse(localStorage.getItem("panini.tradeTransactions.v1") || "{}");
+          const transaction = (ledger.transactions || []).at(-1);
+          return { id: transaction?.id || "", received: transaction?.received || [] };
+        })()`);
+        assert.match(addedTransaction.id, /^scan_review_[a-z0-9]+_[a-f0-9]+_add_1$/);
+        assert.deepEqual(addedTransaction.received, [
+          { code: "TUR5", quantity: 1, variant: "united_edition" },
+          { code: "TUR5", quantity: 1 },
+        ]);
+        await send(batchReviewsCdp, "Page.reload");
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoAddCollectionButton")?.disabled === true`);
+        const restoredAdd = await evaluate(batchReviewsCdp, `({
+          addLabel: document.querySelector("#photoAddCollectionButton").textContent,
+          undoHidden: document.querySelector("#photoUndoCollectionButton").hidden,
+        })`);
+        assert.deepEqual(restoredAdd, { addLabel: "Added to collection", undoHidden: false });
+        await evaluate(batchReviewsCdp, `document.querySelector("#photoUndoCollectionButton").click()`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerStatus").textContent.includes("Scan add undone")`);
+        await send(batchReviewsCdp, "Page.reload");
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
+        await waitForExpression(batchReviewsCdp, `document.querySelector("#photoAddCollectionButton")?.disabled === false`);
+        const restoredUndo = await evaluate(batchReviewsCdp, `({
+          addLabel: document.querySelector("#photoAddCollectionButton").textContent,
+          undoHidden: document.querySelector("#photoUndoCollectionButton").hidden,
+        })`);
+        assert.deepEqual(restoredUndo, { addLabel: "Add to collection", undoHidden: true });
+      } finally {
+        syncedReviewsCdp?.close();
+        if (syncedReviewsPage) {
+          await withTimeout(
+            fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${syncedReviewsPage.id}`),
+            2000,
+            "synced Reviews tab did not close",
+          ).catch(() => {});
+        }
+        batchReviewsCdp.close();
+        await withTimeout(
+          fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${batchReviewsPage.id}`),
+          2000,
+          "Reviews tab did not close",
+        ).catch(() => {});
+      }
     } finally {
       cdp.close();
     }
@@ -259,7 +436,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-b6977a2e0f3c", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-fee49fa28675", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
@@ -361,6 +538,7 @@ function installOcrMockSource() {
         }
         return Promise.resolve(new Response(JSON.stringify({
           job_id: window.__cameraJobId,
+          upload_id: window.__cameraJobId,
           status: "done",
           result: {
             codes: ["TUR5"],
@@ -382,6 +560,35 @@ function installOcrMockSource() {
       return originalFetch(url, init);
     };
     window.PANINI_CONFIG.recognitionBaseUrl = "https://ocr.test";
+  })()`;
+}
+
+function installReviewFeedbackMockSource(holdFirst) {
+  return `(() => {
+    const originalFetch = window.fetch.bind(window);
+    let requestCount = 0;
+    let releaseHeld = null;
+    window.__reviewFeedbackUrls = [];
+    window.__releaseHeldReviewFeedback = () => releaseHeld?.();
+    window.fetch = (url, init) => {
+      if (String(url).endsWith("/api/back-insignia-review/labels") && init?.method === "POST") {
+        window.__reviewFeedbackUrls.push(String(url));
+        requestCount += 1;
+        if (${holdFirst} && requestCount === 1) {
+          return new Promise((resolve) => {
+            releaseHeld = () => resolve(new Response(JSON.stringify({ saved: true }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            }));
+          });
+        }
+        return Promise.resolve(new Response(JSON.stringify({ saved: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }));
+      }
+      return originalFetch(url, init);
+    };
   })()`;
 }
 
@@ -444,6 +651,66 @@ async function evaluate(cdp, expression) {
   const result = await send(cdp, "Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
   return result.result.value;
+}
+
+async function activeReviewBatchRevision(cdp) {
+  return evaluate(cdp, `(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("panini-photo-review-queue", 2);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const active = await new Promise((resolve, reject) => {
+        const request = database.transaction("active_review_batches", "readonly")
+          .objectStore("active_review_batches").get(localStorage.getItem("panini.v2.activeProfileId") || "");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const batch = await new Promise((resolve, reject) => {
+        const request = database.transaction("review_batches", "readonly")
+          .objectStore("review_batches").get(active?.batchId || "");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return { id: batch?.id || "", revision: Number(batch?.revision || 0) };
+    } finally {
+      database.close();
+    }
+  })()`);
+}
+
+async function activeReviewSlotState(cdp, photoIndex, slotIndex) {
+  return evaluate(cdp, `(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("panini-photo-review-queue", 2);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const active = await new Promise((resolve, reject) => {
+        const request = database.transaction("active_review_batches", "readonly")
+          .objectStore("active_review_batches").get(localStorage.getItem("panini.v2.activeProfileId") || "");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const photos = await new Promise((resolve, reject) => {
+        const request = database.transaction("review_photos", "readonly")
+          .objectStore("review_photos").index("batchId").getAll(active?.batchId || "");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const slot = photos.sort((left, right) => left.index - right.index)[${photoIndex}]?.slots?.[${slotIndex}];
+      return {
+        decision: slot?.insignia_review_status || "",
+        variant: slot?.back_insignia_type || "",
+        decisionRevision: Number(slot?.insignia_decision_revision || 0),
+        feedbackStatus: slot?.insignia_feedback_status || "",
+      };
+    } finally {
+      database.close();
+    }
+  })()`);
 }
 
 async function waitForExpression(cdp, expression) {

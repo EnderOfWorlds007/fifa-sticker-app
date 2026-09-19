@@ -10,35 +10,47 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-b6977a2e0f3c";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-fee49fa28675";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b6977a2e0f3c";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-b6977a2e0f3c";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-b6977a2e0f3c";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-fee49fa28675";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-fee49fa28675";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-fee49fa28675";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-b6977a2e0f3c";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-b6977a2e0f3c";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-b6977a2e0f3c";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-b6977a2e0f3c";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-fee49fa28675";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-fee49fa28675";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-fee49fa28675";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-fee49fa28675";
+import {
+  loadLatestPhotoReviewBatch,
+  ReviewStateConflictError,
+  savePhotoReviewBatch,
+  savePhotoReviewBatchMeta,
+  savePhotoReviewState,
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-fee49fa28675";
+import {
+  buildPhotoReviewItems,
+  nextPendingReviewItem,
+  reviewItemKey,
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-fee49fa28675";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-b6977a2e0f3c";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-fee49fa28675";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-b6977a2e0f3c";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-fee49fa28675";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -73,13 +85,20 @@ const reviewToolbar = document.querySelector("#photoReviewToolbar");
 const reviewZoomOutButton = document.querySelector("#photoReviewZoomOut");
 const reviewZoomInButton = document.querySelector("#photoReviewZoomIn");
 const reviewOverviewButton = document.querySelector("#photoReviewOverview");
+const reviewPhotoNav = document.querySelector("#photoReviewPhotoNav");
+const reviewPhotoText = document.querySelector("#photoReviewPhotoText");
+const reviewPreviousPhotoButton = document.querySelector("#photoReviewPreviousPhoto");
+const reviewNextPhotoButton = document.querySelector("#photoReviewNextPhoto");
+const reviewEmptyState = document.querySelector("#photoReviewEmptyState");
+const openReviewsLink = document.querySelector("#photoOpenReviews");
 const toast = document.querySelector("#photoScannerToast");
 const backendUrlInput = document.querySelector("[data-ocr-backend-url]");
 const backendTokenInput = document.querySelector("[data-ocr-backend-token]");
 const backendSaveButton = document.querySelector("[data-ocr-backend-save]");
 const backendTestButton = document.querySelector("[data-ocr-backend-test]");
 const backendStatus = document.querySelector("[data-ocr-backend-status]");
-let photoReviewState = { imageUrl: "", slots: [], selectedSlotId: "" };
+const reviewsPage = document.body?.dataset.photoReviewMode === "reviews";
+let photoReviewState = emptyPhotoReviewState();
 let photoReviewView = { focused: false, zoomFactor: 1 };
 let latestScanCodes = [];
 let latestCollectionSplit = { newCodes: [], inventoryCodes: [] };
@@ -89,16 +108,14 @@ let latestAppliedScan = { signature: "", transactionId: "" };
 let scanInFlight = false;
 let activePhotoScanController = null;
 let latestCaptureSummary = "";
+let reviewHydrationGeneration = 0;
+let reviewWriteChain = Promise.resolve();
+const reviewUpdates = typeof BroadcastChannel === "function" ? new BroadcastChannel("panini-photo-review-queue") : null;
 
 applyOcrBackendFromQuery();
 initializeBackendSettings();
 initializeSideSelection();
-refreshScannerCollectionProjection().then(() => {
-  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
-  latestScanStatuses = classifyCurrentScan();
-  renderCollectionActions();
-  renderRecognizedCodeRows();
-});
+initializeReviewExperience();
 cameraButton?.addEventListener("click", captureCameraPhoto);
 cancelButton?.addEventListener("click", () => activePhotoScanController?.abort());
 for (const picker of [input, batchInput]) {
@@ -114,9 +131,26 @@ reviewAllCorrectButton?.addEventListener("click", saveAllReviewSlotsCorrect);
 reviewZoomOutButton?.addEventListener("click", () => adjustReviewZoom(1 / 1.35));
 reviewZoomInButton?.addEventListener("click", () => adjustReviewZoom(1.35));
 reviewOverviewButton?.addEventListener("click", showReviewOverview);
+reviewPreviousPhotoButton?.addEventListener("click", () => selectAdjacentPhoto(-1));
+reviewNextPhotoButton?.addEventListener("click", () => selectAdjacentPhoto(1));
 addCollectionButton?.addEventListener("click", addScanToCollection);
 undoCollectionButton?.addEventListener("click", undoLastScanAdd);
 window.addEventListener("resize", () => drawPhotoReview());
+window.addEventListener("pagehide", releasePhotoReviewUrls);
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) hydrateLatestReviewBatch();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !scanInFlight && photoReviewState.id) hydrateLatestReviewBatch();
+});
+reviewUpdates?.addEventListener("message", (event) => {
+  if (event.data?.profileId !== activeProfileId() || scanInFlight) return;
+  const incomingBatchId = String(event.data?.batchId || "");
+  const incomingRevision = Number(event.data?.revision || 0);
+  const activeBatchChanged = reviewsPage && incomingBatchId && incomingBatchId !== photoReviewState.id;
+  const activeBatchAdvanced = incomingBatchId === photoReviewState.id && incomingRevision > Number(photoReviewState.revision || 0);
+  if (activeBatchChanged || activeBatchAdvanced) hydrateLatestReviewBatch();
+});
 copyButton?.addEventListener("click", async () => {
   const text = copyTextForCodes(latestScanCodes);
   if (!text) return;
@@ -127,6 +161,76 @@ copyButton?.addEventListener("click", async () => {
   showToast("Codes copied.");
   window.setTimeout(() => { copyButton.textContent = originalText || "Copy codes"; }, 1600);
 });
+
+function emptyPhotoReviewState() {
+  return {
+    id: "",
+    profileId: "",
+    requestedSide: "back",
+    createdAt: 0,
+    updatedAt: 0,
+    revision: 0,
+    photos: [],
+    reviewItems: [],
+    activePhotoId: "",
+    activeReviewKey: "",
+    collectionSignature: "",
+    collectionTransactionId: "",
+    imageUrl: "",
+    slots: [],
+    selectedSlotId: "",
+  };
+}
+
+async function initializeReviewExperience() {
+  await refreshScannerCollectionProjection();
+  latestCollectionSplit = splitCollectionCodes(latestScanCodes);
+  latestScanStatuses = classifyCurrentScan();
+  renderCollectionActions();
+  renderRecognizedCodeRows();
+  if (reviewsPage) await hydrateLatestReviewBatch();
+}
+
+async function hydrateLatestReviewBatch() {
+  const generation = ++reviewHydrationGeneration;
+  setReviewInteractionDisabled(true);
+  try {
+    await reviewWriteChain.catch(() => {});
+    const stored = await loadLatestPhotoReviewBatch(activeProfileId());
+    if (generation !== reviewHydrationGeneration) return;
+    if (!stored) {
+      showEmptyReviewQueue("No saved reviews yet. Scan one or several photos to create the queue.");
+      return;
+    }
+    installPhotoReviewBatch(stored);
+    await updateResultFromReviewSlots();
+    showPreferredReviewItem({ persist: false, scroll: false });
+  } catch (error) {
+    showEmptyReviewQueue(error instanceof Error ? error.message : "Saved reviews could not be loaded.");
+  } finally {
+    if (generation === reviewHydrationGeneration) setReviewInteractionDisabled(false);
+  }
+}
+
+function setReviewInteractionDisabled(disabled) {
+  if (reviewPanel) {
+    reviewPanel.inert = disabled;
+    reviewPanel.setAttribute("aria-busy", String(disabled));
+  }
+  if (collectionActions) collectionActions.inert = disabled;
+}
+
+function showEmptyReviewQueue(message) {
+  releasePhotoReviewUrls();
+  photoReviewState = emptyPhotoReviewState();
+  if (reviewPanel) reviewPanel.hidden = true;
+  if (reviewEmptyState) {
+    reviewEmptyState.hidden = false;
+    const messageNode = reviewEmptyState.querySelector("p");
+    if (messageNode) messageNode.textContent = message;
+  }
+  if (status) status.textContent = message;
+}
 
 function openPhotoPicker(picker) {
   if (!picker || scanInFlight) return;
@@ -207,16 +311,20 @@ async function scanPhotos(files, signal) {
   scanButton.classList.add("scanning");
   scanButton.setAttribute("aria-busy", "true");
   const selected = [...files];
-  const imageUrl = selected[0] ? URL.createObjectURL(selected[0]) : "";
-  showPhotoReviewImage(imageUrl);
-  const recognizedPayloads = [];
+  const requestedSide = side?.value || photoOcrSide();
   let lastError = null;
   try {
-    for (let index = 0; index < selected.length; index += 1) {
+    await refreshScannerCollectionProjection();
+    await beginPhotoReviewBatch(selected, requestedSide);
+    for (let index = 0; index < photoReviewState.photos.length; index += 1) {
+      const photo = photoReviewState.photos[index];
       setScanProgress(`Scanning... ${index + 1}/${selected.length}`);
+      photo.status = "scanning";
+      photo.error = "";
+      await persistReviewPhoto(photo);
       try {
-        const job = await createPhotoCodeJob(selected[index], {
-          side: side.value || photoOcrSide(),
+        const job = await createPhotoCodeJob(photo.blob, {
+          side: requestedSide,
           onStatus: (message) => { setScanProgress(message); },
           signal,
         });
@@ -227,13 +335,30 @@ async function scanPhotos(files, signal) {
         const resultPayload = payload.result || payload;
         resultPayload.upload_id ||= payload.upload_id || job.upload_id || "";
         resultPayload.job_id ||= payload.job_id || job.job_id || "";
-        recognizedPayloads.push(resultPayload);
+        photo.payload = resultPayload;
+        photo.status = "succeeded";
+        photo.slots = reviewSlotsForPayload(resultPayload);
+        photo.selectedSlotId = photo.slots.find((slot) => slotNeedsReview(slot))?.id || photo.slots[0]?.id || "";
+        photoReviewState.reviewItems.push(...reviewItemsForPhoto(photo));
+        await persistReviewPhoto(photo);
       } catch (error) {
         lastError = error;
-        if (error?.kind === "cancelled") break;
+        photo.status = error?.kind === "cancelled" ? "cancelled" : "failed";
+        photo.error = error instanceof Error ? error.message : "Photo recognition failed.";
+        await persistReviewPhoto(photo);
+        if (error?.kind === "cancelled") {
+          for (const remaining of photoReviewState.photos.slice(index + 1)) {
+            remaining.status = "cancelled";
+            remaining.error = "Scan cancelled before this photo started.";
+            await persistReviewPhoto(remaining);
+          }
+          break;
+        }
       }
     }
-    await renderResults(recognizedPayloads, { requestedCount: selected.length, lastError });
+    photoReviewState.updatedAt = Date.now();
+    await persistReviewBatchMeta();
+    await renderResults(photoReviewState, { requestedCount: selected.length, lastError });
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : "Photo scan failed.";
     codesList.replaceChildren(emptyRow("No result."));
@@ -247,6 +372,47 @@ async function scanPhotos(files, signal) {
     scanButton.setAttribute("aria-busy", "false");
     scanButton.textContent = "Choose photo";
   }
+}
+
+async function beginPhotoReviewBatch(files, requestedSide) {
+  await reviewWriteChain.catch(() => {});
+  releasePhotoReviewUrls();
+  const now = Date.now();
+  const batchId = `review_${now.toString(36)}_${randomReviewId()}`;
+  photoReviewState = {
+    ...emptyPhotoReviewState(),
+    id: batchId,
+    profileId: ensureActiveProfileId(),
+    requestedSide,
+    createdAt: now,
+    updatedAt: now,
+    photos: files.map((file, index) => ({
+      id: `photo_${index + 1}_${randomReviewId()}`,
+      index,
+      revision: 0,
+      fileName: file.name || `Photo ${index + 1}`,
+      mimeType: file.type || "application/octet-stream",
+      lastModified: Number(file.lastModified || 0),
+      blob: file,
+      imageUrl: URL.createObjectURL(file),
+      status: "pending",
+      error: "",
+      payload: null,
+      slots: [],
+      selectedSlotId: "",
+      view: { focused: false, zoomFactor: 1 },
+    })),
+  };
+  await savePhotoReviewBatch(photoReviewState);
+  activateReviewPhoto(photoReviewState.photos[0]?.id || "", { render: true });
+  if (reviewPanel) reviewPanel.hidden = false;
+  if (reviewEmptyState) reviewEmptyState.hidden = true;
+  if (reviewSummary) reviewSummary.textContent = `Scanning photo 1 of ${files.length}...`;
+}
+
+function randomReviewId() {
+  return globalThis.crypto?.randomUUID?.().slice(0, 8)
+    || Math.random().toString(36).slice(2, 10);
 }
 
 function setPhotoPickersBusy(busy) {
@@ -263,32 +429,36 @@ function setScanProgress(message) {
   status.textContent = message;
 }
 
-async function renderResults(payloads, options = {}) {
-  const fallbackCodes = payloads.flatMap((payload) => Array.isArray(payload?.codes) ? payload.codes : []);
+async function renderResults(batch, options = {}) {
   await refreshScannerCollectionProjection();
-  const reviewCodes = renderPhotoReview(payloads[0] || null);
-  latestScanCodes = reviewCodes.length ? reviewCodes : normalizeCodeList(fallbackCodes);
+  const successfulPhotos = batch.photos.filter((photo) => photo.status === "succeeded");
+  latestScanCodes = aggregateReviewCodes();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   latestScanStatuses = classifyCurrentScan();
   const text = copyTextForCodes(latestScanCodes);
   result.value = text;
   copyButton.disabled = !text;
-  const failedCount = Math.max(0, Number(options.requestedCount || payloads.length) - payloads.length);
+  const failedCount = batch.photos.filter((photo) => photo.status === "failed").length;
+  const cancelledCount = batch.photos.filter((photo) => photo.status === "cancelled").length;
   const failureText = failedCount ? ` ${failedCount} photo${failedCount === 1 ? "" : "s"} could not be read.` : "";
+  const cancellationText = cancelledCount ? ` ${cancelledCount} photo${cancelledCount === 1 ? " was" : "s were"} cancelled.` : "";
   status.textContent = latestScanCodes.length
-    ? `${latestScanCodes.length} cards recognized.${failureText}`
+    ? `${latestScanCodes.length} card${latestScanCodes.length === 1 ? "" : "s"} recognized in ${successfulPhotos.length} photo${successfulPhotos.length === 1 ? "" : "s"}.${failureText}${cancellationText}`
     : options.lastError instanceof Error
       ? options.lastError.message
       : "No cards recognized in those photos.";
   if (latestCaptureSummary && cameraDiagnostics) cameraDiagnostics.textContent = latestCaptureSummary;
   renderCollectionActions();
   renderRecognizedCodeRows();
+  showPreferredReviewItem();
+  if (openReviewsLink) openReviewsLink.hidden = !batch.photos.length;
 }
 
 function showPhotoReviewImage(imageUrl) {
   if (!reviewPanel || !reviewImage) return;
-  if (photoReviewState.imageUrl) URL.revokeObjectURL(photoReviewState.imageUrl);
-  photoReviewState = { imageUrl, slots: [], selectedSlotId: "" };
+  photoReviewState.imageUrl = imageUrl;
+  photoReviewState.slots = [];
+  photoReviewState.selectedSlotId = "";
   photoReviewView = { focused: false, zoomFactor: 1 };
   reviewPanel.hidden = false;
   reviewImage.src = imageUrl;
@@ -298,11 +468,7 @@ function showPhotoReviewImage(imageUrl) {
 }
 
 function renderPhotoReview(payload) {
-  const overview = payload?.overview_map || payload?.overview?.map || payload?.scanner_overview || null;
-  const slots = appendUnplacedPayloadCodes(
-    normalizeReviewSlots(overview?.slots || payload?.slots || [], payload),
-    payload,
-  );
+  const slots = reviewSlotsForPayload(payload);
   photoReviewState.slots = slots;
   const firstReviewSlot = reviewSlots()[0];
   photoReviewState.selectedSlotId = firstReviewSlot?.id || slots[0]?.id || "";
@@ -313,16 +479,184 @@ function renderPhotoReview(payload) {
   return matchedReviewSlotCodes(slots);
 }
 
+function reviewSlotsForPayload(payload) {
+  const overview = payload?.overview_map || payload?.overview?.map || payload?.scanner_overview || null;
+  return appendUnplacedPayloadCodes(
+    normalizeReviewSlots(overview?.slots || payload?.slots || [], payload),
+    payload,
+  ).map((slot) => ({
+    ...slot,
+    code_review_status: slotNeedsCodeReview(slot) ? "pending" : "not_needed",
+  }));
+}
+
+function reviewItemsForPhoto(photo) {
+  return buildPhotoReviewItems(photo, {
+    needsCodeReview: slotNeedsCodeReview,
+    needsInsigniaReview: slotNeedsInsigniaReview,
+  });
+}
+
+function installPhotoReviewBatch(stored) {
+  releasePhotoReviewUrls();
+  photoReviewState = {
+    ...emptyPhotoReviewState(),
+    ...stored,
+    photos: (stored.photos || []).map((photo) => ({
+      ...photo,
+      imageUrl: photo.blob ? URL.createObjectURL(photo.blob) : "",
+      slots: Array.isArray(photo.slots) ? photo.slots : [],
+      view: photo.view || { focused: false, zoomFactor: 1 },
+    })),
+    reviewItems: Array.isArray(stored.reviewItems) ? stored.reviewItems : [],
+  };
+  const knownReviewKeys = new Set(photoReviewState.reviewItems.map((item) => item.key));
+  for (const item of photoReviewState.photos.flatMap(reviewItemsForPhoto)) {
+    if (!knownReviewKeys.has(item.key)) photoReviewState.reviewItems.push(item);
+  }
+  latestAppliedScan = {
+    signature: photoReviewState.collectionSignature || "",
+    transactionId: photoReviewState.collectionTransactionId || "",
+  };
+  reconcileAppliedScanFromLedger();
+  if (reviewEmptyState) reviewEmptyState.hidden = true;
+  if (reviewPanel) reviewPanel.hidden = false;
+}
+
+function releasePhotoReviewUrls() {
+  for (const photo of photoReviewState.photos || []) {
+    if (photo.imageUrl) URL.revokeObjectURL(photo.imageUrl);
+    photo.imageUrl = "";
+  }
+}
+
+function activeReviewPhoto() {
+  return photoReviewState.photos.find((photo) => photo.id === photoReviewState.activePhotoId) || null;
+}
+
+function syncActiveReviewPhoto() {
+  const photo = activeReviewPhoto();
+  if (!photo) return;
+  photo.selectedSlotId = photoReviewState.selectedSlotId;
+  photo.view = { ...photoReviewView };
+}
+
+function activateReviewPhoto(photoId, options = {}) {
+  syncActiveReviewPhoto();
+  const photo = photoReviewState.photos.find((candidate) => candidate.id === photoId);
+  if (!photo) return false;
+  photoReviewState.activePhotoId = photo.id;
+  photoReviewState.imageUrl = photo.imageUrl || "";
+  photoReviewState.slots = photo.slots || [];
+  photoReviewState.selectedSlotId = photo.selectedSlotId
+    || photo.slots.find((slot) => slotNeedsReview(slot))?.id
+    || photo.slots[0]?.id
+    || "";
+  photoReviewView = { ...(photo.view || { focused: false, zoomFactor: 1 }) };
+  if (reviewPanel) reviewPanel.hidden = false;
+  if (reviewImage) {
+    reviewImage.alt = photo.fileName ? `Review ${photo.fileName}` : "Sticker photo under review";
+    reviewImage.src = photo.imageUrl || "";
+  }
+  if (options.render !== false) renderActiveReviewPhoto();
+  return true;
+}
+
+function renderActiveReviewPhoto() {
+  const photo = activeReviewPhoto();
+  renderReviewSummary(photo?.payload || photo?.status === "succeeded");
+  renderReviewPhotoNavigation();
+  renderReviewQueue();
+  renderInspector();
+  drawPhotoReview();
+}
+
+function persistReviewPhoto(photo = activeReviewPhoto()) {
+  const batch = photoReviewState;
+  if (!batch.id || !photo) return Promise.resolve();
+  return queueReviewWrite(async () => {
+    if (photo.id === batch.activePhotoId) syncActiveReviewPhoto();
+    batch.updatedAt = Date.now();
+    batch.collectionSignature = latestAppliedScan.signature || "";
+    batch.collectionTransactionId = latestAppliedScan.transactionId || "";
+    await savePhotoReviewState(batch, photo);
+    announceReviewUpdate(batch);
+  });
+}
+
+function persistReviewBatchMeta() {
+  const batch = photoReviewState;
+  if (!batch.id) return Promise.resolve();
+  return queueReviewWrite(async () => {
+    syncActiveReviewPhoto();
+    batch.updatedAt = Date.now();
+    batch.collectionSignature = latestAppliedScan.signature || "";
+    batch.collectionTransactionId = latestAppliedScan.transactionId || "";
+    await savePhotoReviewBatchMeta(batch);
+    announceReviewUpdate(batch);
+  });
+}
+
+function queueReviewWrite(operation) {
+  const write = reviewWriteChain.then(operation);
+  reviewWriteChain = write.catch(() => {});
+  return write;
+}
+
+function announceReviewUpdate(batch) {
+  reviewUpdates?.postMessage({ profileId: batch.profileId, batchId: batch.id, revision: batch.revision });
+}
+
+function aggregateReviewCodes() {
+  const codes = photoReviewState.photos.flatMap((photo) => {
+    if (photo.status !== "succeeded") return [];
+    const matched = matchedReviewSlotCodes(photo.slots || []);
+    if (matched.length) return matched;
+    return Array.isArray(photo.payload?.codes) ? photo.payload.codes : [];
+  });
+  return normalizeCodeList(codes);
+}
+
 function renderReviewSummary(payload = true) {
   if (!reviewSummary) return;
+  const photo = activeReviewPhoto();
+  const photoIndex = photo ? photoReviewState.photos.indexOf(photo) : -1;
   const slots = photoReviewState.slots;
   const matched = slots.filter((slot) => slotStatus(slot) === "matched").length;
-  const codeReviewCount = slots.filter((slot) => slotNeedsCodeReview(slot)).length;
-  const insigniaReviewCount = slots.filter((slot) => slotNeedsInsigniaReview(slot)).length;
-  const pendingSummary = reviewQueueSummary(codeReviewCount, insigniaReviewCount);
+  const pending = pendingReviewItems();
+  const photoPrefix = photoReviewState.photos.length > 1 && photoIndex >= 0
+    ? `Photo ${photoIndex + 1} of ${photoReviewState.photos.length} · `
+    : "";
+  if (photo?.status === "failed" || photo?.status === "cancelled") {
+    reviewSummary.textContent = `${photoPrefix}${photo.error || "Photo unavailable"}`;
+    return;
+  }
   reviewSummary.textContent = slots.length
-    ? `${matched}/${slots.length} codes matched · ${pendingSummary}`
-    : payload ? "No overlay geometry returned by backend." : "No result";
+    ? `${photoPrefix}${matched}/${slots.length} codes matched · ${pending.length} review task${pending.length === 1 ? "" : "s"} remaining`
+    : payload ? `${photoPrefix}No overlay geometry returned by backend.` : `${photoPrefix}No result`;
+}
+
+function renderReviewPhotoNavigation() {
+  if (!reviewPhotoNav || !reviewPhotoText) return;
+  const photos = photoReviewState.photos;
+  const active = activeReviewPhoto();
+  const index = active ? photos.indexOf(active) : -1;
+  reviewPhotoNav.hidden = photos.length < 2;
+  reviewPhotoText.textContent = index >= 0
+    ? `Photo ${index + 1} of ${photos.length} · ${active.fileName || "Untitled photo"}`
+    : "No photo selected";
+  if (reviewPreviousPhotoButton) reviewPreviousPhotoButton.disabled = index <= 0;
+  if (reviewNextPhotoButton) reviewNextPhotoButton.disabled = index < 0 || index >= photos.length - 1;
+}
+
+function selectAdjacentPhoto(offset) {
+  const photos = photoReviewState.photos;
+  const currentIndex = photos.findIndex((photo) => photo.id === photoReviewState.activePhotoId);
+  const next = photos[currentIndex + offset];
+  if (!next) return;
+  photoReviewState.activeReviewKey = "";
+  activateReviewPhoto(next.id);
+  persistReviewBatchMeta().catch(reportReviewStorageFailure);
 }
 
 function normalizeReviewSlots(slots, payload = {}) {
@@ -792,6 +1126,7 @@ function selectReviewSlotAtEvent(event) {
       .map(([x, y]) => [imageRect.x + x * imageRect.width, imageRect.y + y * imageRect.height]);
     if (pointInPolygon(point, polygon)) {
       photoReviewState.selectedSlotId = slot.id;
+      photoReviewState.activeReviewKey = reviewKeyForSlot(slot, slotNeedsCodeReview(slot) ? "code" : "insignia");
       if (photoReviewView.focused) photoReviewView.zoomFactor = 1;
       renderInspector();
       renderReviewQueue();
@@ -839,9 +1174,11 @@ function renderInspector() {
   input.value = slot.code || "";
   input.autocapitalize = "characters";
   input.autocomplete = "off";
+  input.disabled = isCurrentScanApplied();
   const save = document.createElement("button");
   save.type = "submit";
   save.textContent = "Set";
+  save.disabled = isCurrentScanApplied();
   const meta = document.createElement("p");
   meta.textContent = `${slotStatus(slot)} · ${formatConfidence(slot.confidence).replace("confidence", "code OCR")} · ${geometryLabel(slot.geometry_status)}`;
   const inspectorLabel = reviewSlotLabel(slot);
@@ -882,6 +1219,7 @@ function renderUnplacedReviewSlots() {
     button.append(code, details);
     button.addEventListener("click", () => {
       photoReviewState.selectedSlotId = slot.id;
+      photoReviewState.activeReviewKey = reviewKeyForSlot(slot, slotNeedsCodeReview(slot) ? "code" : "insignia");
       photoReviewView = { focused: false, zoomFactor: 1 };
       renderInspector();
       renderReviewQueue();
@@ -925,27 +1263,65 @@ function insigniaDecisionSection(slot) {
 }
 
 async function chooseInsignia(slot, option) {
+  const photoId = photoForSlot(slot)?.id || "";
+  const slotId = slot.id;
   const previous = {
     back_insignia_type: slot.back_insignia_type,
     insignia_review_status: slot.insignia_review_status,
+    insignia_feedback_status: slot.insignia_feedback_status,
+    insignia_decision_revision: Number(slot.insignia_decision_revision || 0),
   };
+  const completedReviewKey = reviewKeyForSlot(slot, "insignia");
+  const decisionRevision = previous.insignia_decision_revision + 1;
   slot.back_insignia_type = option.variant;
   slot.insignia_review_status = option.decision;
+  slot.insignia_feedback_status = "pending";
+  slot.insignia_decision_revision = decisionRevision;
+  setReviewInteractionDisabled(true);
+  try {
+    await persistReviewPhoto();
+  } catch (error) {
+    Object.assign(slot, previous);
+    renderActiveReviewPhoto();
+    reportReviewStorageFailure(error);
+    return;
+  } finally {
+    setReviewInteractionDisabled(false);
+  }
+  await updateResultFromReviewSlots();
   renderInspector();
   renderReviewQueue();
   renderReviewSummary();
   renderCollectionActions();
   drawPhotoReview();
+  if (previous.back_insignia_type !== slot.back_insignia_type || previous.insignia_review_status !== slot.insignia_review_status) {
+    selectNextReviewSlot({ afterReviewKey: completedReviewKey });
+  }
+  let feedbackSaved = true;
   try {
     await persistInsigniaReviewLabel(slot, option.decision);
-    status.textContent = `${slot.code || "Card"} saved as ${option.label}.`;
-    showToast(`${option.label} back saved.`);
   } catch {
-    status.textContent = `${slot.code || "Card"} will be saved as ${option.label}; OCR feedback could not upload.`;
-    showToast("Saved for collection; feedback upload failed.");
+    feedbackSaved = false;
   }
-  if (previous.back_insignia_type !== slot.back_insignia_type || previous.insignia_review_status !== slot.insignia_review_status) {
-    selectNextReviewSlot({ afterSlotId: slot.id });
+  try {
+    const live = await persistLiveFeedbackStatus({
+      photoId,
+      slotId,
+      revisionField: "insignia_decision_revision",
+      revision: decisionRevision,
+      feedbackField: "insignia_feedback_status",
+      feedbackStatus: feedbackSaved ? "sent" : "failed",
+    });
+    if (!live) return;
+    if (feedbackSaved) {
+      status.textContent = `${live.slot.code || "Card"} saved as ${option.label}.`;
+      showToast(`${option.label} back saved.`);
+      return;
+    }
+    status.textContent = `${live.slot.code || "Card"} will be saved as ${option.label}; OCR feedback could not upload.`;
+    showToast("Saved for collection; feedback upload failed.");
+  } catch (error) {
+    reportReviewStorageFailure(error);
   }
 }
 
@@ -1009,27 +1385,81 @@ async function saveInspectorCode(event) {
   const input = event.target?.elements?.code;
   if (!slot || !input) return;
   const correctedCode = String(input.value || "").trim().toUpperCase();
+  const photoId = photoForSlot(slot)?.id || "";
+  const slotId = slot.id;
+  const completedReviewKey = reviewKeyForSlot(slot, "code");
+  const previous = {
+    code: slot.code,
+    name: slot.name,
+    review_status: slot.review_status,
+    needs_user_help: slot.needs_user_help,
+    saved_review: slot.saved_review,
+    code_review_status: slot.code_review_status,
+    code_feedback_status: slot.code_feedback_status,
+    code_decision_revision: Number(slot.code_decision_revision || 0),
+  };
+  const decisionRevision = previous.code_decision_revision + 1;
   const saveButton = event.target.querySelector("button[type='submit']");
   if (saveButton) {
     saveButton.disabled = true;
     saveButton.textContent = "Saving...";
   }
   try {
-    await persistReviewLabel(slot, correctedCode);
     slot.code = correctedCode;
     slot.name = reviewSlotCatalogName(correctedCode);
     slot.review_status = slot.code ? "matched" : "unreadable";
-    slot.needs_user_help = !slot.code;
+    slot.needs_user_help = false;
     slot.saved_review = true;
-    updateResultFromReviewSlots();
+    slot.code_review_status = slot.code
+      ? slot.code === slot.original_code ? "confirmed" : "corrected"
+      : "unreadable";
+    slot.code_feedback_status = "pending";
+    slot.code_decision_revision = decisionRevision;
+    setReviewInteractionDisabled(true);
+    try {
+      await persistReviewPhoto();
+    } catch (error) {
+      Object.assign(slot, previous);
+      renderActiveReviewPhoto();
+      reportReviewStorageFailure(error);
+      return;
+    } finally {
+      setReviewInteractionDisabled(false);
+    }
+    await updateResultFromReviewSlots();
     renderReviewQueue();
     renderReviewSummary();
     renderInspector();
     drawPhotoReview();
-    status.textContent = slot.code ? `Saved correction ${slot.code}.` : "Saved unreadable card review.";
-    showToast(slot.code ? `Saved ${slot.code}.` : "Saved unreadable card.");
+    selectNextReviewSlot({ afterReviewKey: completedReviewKey });
+    let feedbackSaved = true;
+    try {
+      await persistReviewLabel(slot, correctedCode);
+    } catch {
+      feedbackSaved = false;
+    }
+    try {
+      const live = await persistLiveFeedbackStatus({
+        photoId,
+        slotId,
+        revisionField: "code_decision_revision",
+        revision: decisionRevision,
+        feedbackField: "code_feedback_status",
+        feedbackStatus: feedbackSaved ? "sent" : "failed",
+      });
+      if (!live) return;
+      if (feedbackSaved) {
+        status.textContent = live.slot.code ? `Saved correction ${live.slot.code}.` : "Saved unreadable card review.";
+        showToast(live.slot.code ? `Saved ${live.slot.code}.` : "Saved unreadable card.");
+        return;
+      }
+      status.textContent = "Decision saved on this phone; OCR feedback could not upload.";
+      showToast("Saved locally; feedback upload failed.");
+    } catch (error) {
+      reportReviewStorageFailure(error);
+    }
   } catch (error) {
-    status.textContent = error instanceof Error ? error.message : "Review save failed.";
+    status.textContent = error instanceof Error ? error.message : "Review decision could not be saved on this phone.";
     showToast(status.textContent);
   } finally {
     if (saveButton) {
@@ -1059,7 +1489,20 @@ async function persistReviewLabel(slot, correctedCode) {
 }
 
 async function saveAllReviewSlotsCorrect() {
+  const reviewedPhoto = activeReviewPhoto();
+  const reviewedPhotoId = reviewedPhoto?.id || "";
   const slots = photoReviewState.slots.filter((slot) => slot.code && slotNeedsCodeReview(slot));
+  const previousStates = slots.map((slot) => ({
+    slot,
+    state: {
+      review_status: slot.review_status,
+      needs_user_help: slot.needs_user_help,
+      saved_review: slot.saved_review,
+      code_review_status: slot.code_review_status,
+      code_feedback_status: slot.code_feedback_status,
+      code_decision_revision: Number(slot.code_decision_revision || 0),
+    },
+  }));
   if (!slots.length) return;
   if (reviewAllCorrectButton) {
     reviewAllCorrectButton.disabled = true;
@@ -1067,17 +1510,48 @@ async function saveAllReviewSlotsCorrect() {
   }
   try {
     for (const slot of slots) {
-      if (slot.saved_review && slot.review_status === "matched") continue;
-      await persistReviewLabel(slot, slot.code);
       slot.review_status = "matched";
       slot.needs_user_help = false;
       slot.saved_review = true;
+      slot.code_review_status = "confirmed";
+      slot.code_feedback_status = "pending";
+      slot.code_decision_revision = Number(slot.code_decision_revision || 0) + 1;
     }
-    updateResultFromReviewSlots();
+    setReviewInteractionDisabled(true);
+    try {
+      await persistReviewPhoto(reviewedPhoto);
+    } catch (error) {
+      for (const previous of previousStates) Object.assign(previous.slot, previous.state);
+      renderActiveReviewPhoto();
+      reportReviewStorageFailure(error);
+      return;
+    } finally {
+      setReviewInteractionDisabled(false);
+    }
+    await updateResultFromReviewSlots();
     renderReviewQueue();
     renderReviewSummary();
     renderInspector();
     drawPhotoReview();
+    selectNextReviewSlot({ afterReviewKey: photoReviewState.activeReviewKey });
+    for (const slot of slots) {
+      const slotId = slot.id;
+      const decisionRevision = slot.code_decision_revision;
+      let feedbackStatus = "sent";
+      try {
+        await persistReviewLabel(slot, slot.code);
+      } catch {
+        feedbackStatus = "failed";
+      }
+      await persistLiveFeedbackStatus({
+        photoId: reviewedPhotoId,
+        slotId,
+        revisionField: "code_decision_revision",
+        revision: decisionRevision,
+        feedbackField: "code_feedback_status",
+        feedbackStatus,
+      });
+    }
     status.textContent = `Saved ${slots.length} correct card${slots.length === 1 ? "" : "s"}.`;
     showToast("All cards marked correct.");
   } catch (error) {
@@ -1092,8 +1566,7 @@ async function saveAllReviewSlotsCorrect() {
 }
 
 async function updateResultFromReviewSlots() {
-  const codes = photoReviewState.slots.filter((slot) => slot.code && slotStatus(slot) === "matched").map((slot) => slot.code);
-  latestScanCodes = normalizeCodeList(codes);
+  latestScanCodes = aggregateReviewCodes();
   await refreshScannerCollectionProjection();
   latestCollectionSplit = splitCollectionCodes(latestScanCodes);
   latestScanStatuses = classifyCurrentScan();
@@ -1187,7 +1660,7 @@ function renderRecognizedCodeRows() {
     : [emptyRow("No recognized codes.")]));
 }
 
-function addScanToCollection() {
+async function addScanToCollection() {
   const received = currentScanReceivedLines();
   const receivedCount = received.reduce((total, line) => total + line.quantity, 0);
   if (!receivedCount) return;
@@ -1197,11 +1670,25 @@ function addScanToCollection() {
     renderCollectionActions();
     return;
   }
-  const nextLedger = createTransaction(loadLedger(), { kind: "received", received, given: [] });
+  const ledger = loadLedger();
+  const transactionPrefix = currentBatchTransactionPrefix();
+  const attempt = ledger.transactions.filter((transaction) => transaction.id.startsWith(transactionPrefix)).length + 1;
+  const nextLedger = createTransaction(ledger, {
+    kind: "received",
+    received,
+    given: [],
+    idFactory: () => `${transactionPrefix}${attempt}`,
+  });
   const transactionId = nextLedger.transactions[nextLedger.transactions.length - 1]?.id || "";
   saveLedger(nextLedger);
   ensureActiveProfileId();
   latestAppliedScan = { signature: currentScanSignature(), transactionId };
+  renderCollectionActions();
+  try {
+    await persistReviewBatchMeta();
+  } catch (error) {
+    reportReviewStorageFailure(error);
+  }
   refreshScannerCollectionProjection().then(() => {
     latestCollectionSplit = splitCollectionCodes(latestScanCodes);
     renderCollectionActions();
@@ -1211,7 +1698,7 @@ function addScanToCollection() {
   showToast("Scan added to collection.");
 }
 
-function undoLastScanAdd() {
+async function undoLastScanAdd() {
   if (!isCurrentScanApplied()) {
     status.textContent = "There is no scan add to undo.";
     showToast("Nothing to undo.");
@@ -1222,12 +1709,23 @@ function undoLastScanAdd() {
     saveLedger(cancelTransaction(loadLedger(), latestAppliedScan.transactionId));
   } catch {
     latestAppliedScan = { signature: "", transactionId: "" };
+    try {
+      await persistReviewBatchMeta();
+    } catch (error) {
+      reportReviewStorageFailure(error);
+    }
     status.textContent = "That scan add was already undone elsewhere.";
     showToast("Already undone.");
     renderCollectionActions();
     return;
   }
   latestAppliedScan = { signature: "", transactionId: "" };
+  renderCollectionActions();
+  try {
+    await persistReviewBatchMeta();
+  } catch (error) {
+    reportReviewStorageFailure(error);
+  }
   refreshScannerCollectionProjection().then(() => {
     latestCollectionSplit = splitCollectionCodes(latestScanCodes);
     renderCollectionActions();
@@ -1238,7 +1736,25 @@ function undoLastScanAdd() {
 }
 
 function isCurrentScanApplied() {
+  reconcileAppliedScanFromLedger();
   return Boolean(latestAppliedScan.transactionId && latestAppliedScan.signature === currentScanSignature());
+}
+
+function reconcileAppliedScanFromLedger() {
+  if (!photoReviewState.id) return latestAppliedScan;
+  const signature = currentScanSignature();
+  const completed = loadLedger().transactions
+    .filter((transaction) => transaction.id.startsWith(currentBatchTransactionPrefix()) && transaction.status === "completed")
+    .reverse()
+    .find((transaction) => scanReceiptSignature(transaction.received || []) === signature);
+  latestAppliedScan = completed
+    ? { signature, transactionId: completed.id }
+    : { signature: "", transactionId: "" };
+  return latestAppliedScan;
+}
+
+function currentBatchTransactionPrefix() {
+  return `scan_${photoReviewState.id}_add_`;
 }
 
 function currentScanSignature() {
@@ -1246,45 +1762,90 @@ function currentScanSignature() {
 }
 
 function currentScanReceivedLines() {
-  const slots = photoReviewState.slots.filter((slot) => slot.code && slotStatus(slot) === "matched");
+  const slots = photoReviewState.photos.flatMap((photo) => photo.status === "succeeded"
+    ? (photo.slots || []).filter((slot) => slot.code && slotStatus(slot) === "matched")
+    : []);
   return receivedLinesForScan({ slots, fallbackCodes: latestScanCodes });
 }
 
 function renderReviewQueue() {
-  const pending = reviewSlots();
+  const pending = pendingReviewItems();
   if (!reviewQueue || !reviewQueueText || !reviewNextButton) return;
-  const codeCount = photoReviewState.slots.filter((slot) => slotNeedsCodeReview(slot)).length;
-  const insigniaCount = photoReviewState.slots.filter((slot) => slotNeedsInsigniaReview(slot)).length;
+  const codeCount = pending.filter((item) => item.kind === "code").length;
+  const insigniaCount = pending.filter((item) => item.kind === "insignia").length;
   if (reviewAllCorrectButton) {
-    reviewAllCorrectButton.hidden = codeCount === 0;
-    reviewAllCorrectButton.disabled = codeCount === 0;
+    const activePhotoCodeCount = photoReviewState.slots.filter((slot) => slot.code && slotNeedsCodeReview(slot)).length;
+    reviewAllCorrectButton.hidden = activePhotoCodeCount === 0;
+    reviewAllCorrectButton.disabled = activePhotoCodeCount === 0 || isCurrentScanApplied();
+    reviewAllCorrectButton.textContent = photoReviewState.photos.length > 1 ? "Confirm codes in this photo" : "Confirm shown codes";
   }
   reviewQueue.hidden = pending.length === 0;
   reviewQueueText.textContent = reviewQueueSummary(codeCount, insigniaCount);
   reviewNextButton.disabled = pending.length === 0;
   reviewNextButton.textContent = photoReviewView.focused ? "Next review" : insigniaCount && !codeCount ? "Review backs" : "Start review";
+  const activeItem = reviewItemByKey(photoReviewState.activeReviewKey);
   const focused = photoReviewView.focused && selectedSlot();
-  const focusedIndex = focused ? pending.findIndex((slot) => slot.id === focused.id) : -1;
-  if (focusedIndex >= 0) reviewQueueText.textContent = `Reviewing ${focusedIndex + 1} of ${pending.length} · ${focused.code || "Unknown card"} · ${slotReviewReason(focused)}`;
+  const total = photoReviewState.reviewItems.length;
+  const completed = total - pending.length;
+  if (focused && activeItem) reviewQueueText.textContent = `Review ${Math.min(total, completed + 1)} of ${total} · ${focused.code || "Unknown card"} · ${activeItem.kind === "code" ? "check code" : "choose back insignia"}`;
   if (reviewToolbar) reviewToolbar.hidden = !focused;
 }
 
 function selectNextReviewSlot(options = {}) {
-  const pending = reviewSlots();
+  const pending = pendingReviewItems();
   if (!pending.length) {
     showReviewOverview();
+    renderReviewQueue();
+    renderReviewSummary();
     return;
   }
-  const currentId = options.afterSlotId || photoReviewState.selectedSlotId;
-  const currentPosition = photoReviewState.slots.findIndex((slot) => slot.id === currentId);
-  const next = pending.find((slot) => photoReviewState.slots.indexOf(slot) > currentPosition) || pending[0];
-  photoReviewState.selectedSlotId = next.id;
-  const hasPhotoLocation = reviewSlotPolygon(next).length >= 4;
+  const currentKey = options.afterReviewKey || photoReviewState.activeReviewKey;
+  const next = nextPendingReviewItem(photoReviewState.reviewItems, pending, currentKey);
+  activateReviewItem(next);
+}
+
+function activateReviewItem(item, options = {}) {
+  const located = reviewItemSlot(item);
+  if (!located) return;
+  photoReviewState.activeReviewKey = item.key;
+  activateReviewPhoto(item.photoId, { render: false });
+  photoReviewState.selectedSlotId = located.slot.id;
+  const hasPhotoLocation = reviewSlotPolygon(located.slot).length >= 4;
   photoReviewView = { focused: hasPhotoLocation, zoomFactor: 1 };
   renderInspector();
   renderReviewQueue();
+  renderReviewSummary();
+  renderReviewPhotoNavigation();
   drawPhotoReview();
-  (hasPhotoLocation ? reviewStage : reviewUnplaced)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (options.persist !== false) persistReviewBatchMeta().catch(reportReviewStorageFailure);
+  if (options.scroll !== false) (hasPhotoLocation ? reviewStage : reviewUnplaced)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function showPreferredReviewItem(options = {}) {
+  if (!photoReviewState.photos.length) return;
+  if (!reviewsPage) {
+    const scannerPhoto = photoReviewState.photos.find((photo) => photo.status === "succeeded")
+      || photoReviewState.photos[0];
+    photoReviewState.activeReviewKey = "";
+    activateReviewPhoto(scannerPhoto.id, { render: false });
+    showReviewOverview();
+    renderActiveReviewPhoto();
+    return;
+  }
+  const activePending = pendingReviewItems().find((item) => item.key === photoReviewState.activeReviewKey);
+  if (activePending) {
+    activateReviewItem(activePending, options);
+    return;
+  }
+  const firstPending = pendingReviewItems()[0];
+  if (firstPending) {
+    activateReviewItem(firstPending, options);
+    return;
+  }
+  const preferred = photoReviewState.photos.find((photo) => photo.id === photoReviewState.activePhotoId)
+    || photoReviewState.photos.find((photo) => photo.status === "succeeded")
+    || photoReviewState.photos[0];
+  activateReviewPhoto(preferred.id);
 }
 
 function adjustReviewZoom(multiplier) {
@@ -1294,6 +1855,7 @@ function adjustReviewZoom(multiplier) {
 }
 
 function showReviewOverview() {
+  photoReviewState.activeReviewKey = "";
   photoReviewView = { focused: false, zoomFactor: 1 };
   renderReviewQueue();
   drawPhotoReview();
@@ -1301,7 +1863,7 @@ function showReviewOverview() {
 
 function finishReviewForNow() {
   showReviewOverview();
-  const remaining = reviewSlots().length;
+  const remaining = pendingReviewItems().length;
   status.textContent = remaining
     ? `Review paused with ${remaining} unresolved card${remaining === 1 ? "" : "s"}. Unresolved backs will be saved as colour unknown.`
     : "Review complete.";
@@ -1325,6 +1887,7 @@ function slotNeedsReview(slot) {
 }
 
 function slotNeedsCodeReview(slot) {
+  if (slot.code_review_status) return slot.code_review_status === "pending";
   const hasNoSourceLocation = !slot.normalized_polygon?.length
     && !slot.normalized_code_anchor_box?.length
     && !slot.normalized_back_insignia_box?.length;
@@ -1343,6 +1906,71 @@ function isBackScanSlot(slot) {
 
 function reviewSlots() {
   return photoReviewState.slots.filter((slot) => slotNeedsReview(slot));
+}
+
+function pendingReviewItems() {
+  return photoReviewState.reviewItems.filter((item) => !reviewItemResolved(item));
+}
+
+function reviewItemResolved(item) {
+  const located = reviewItemSlot(item);
+  if (!located) return true;
+  if (item.kind === "code") {
+    if (located.slot.code_review_status) return located.slot.code_review_status !== "pending";
+    return Boolean(located.slot.saved_review && !located.slot.needs_user_help);
+  }
+  return Boolean(located.slot.insignia_review_status);
+}
+
+function reviewItemSlot(item) {
+  const photo = photoReviewState.photos.find((candidate) => candidate.id === item?.photoId);
+  const slot = photo?.slots?.find((candidate) => candidate.id === item?.slotId);
+  return photo && slot ? { photo, slot } : null;
+}
+
+function reviewItemByKey(key) {
+  return photoReviewState.reviewItems.find((item) => item.key === key) || null;
+}
+
+function reviewKeyForSlot(slot, kind) {
+  const photo = photoForSlot(slot);
+  return photo ? reviewItemKey(photo.id, slot.id, kind) : "";
+}
+
+function photoForSlot(slot) {
+  return photoReviewState.photos.find((photo) => photo.slots?.includes(slot)) || null;
+}
+
+function liveDecisionSlot(photoId, slotId, revisionField, revision) {
+  const photo = photoReviewState.photos.find((candidate) => candidate.id === photoId);
+  const slot = photo?.slots?.find((candidate) => candidate.id === slotId);
+  if (!photo || !slot || Number(slot[revisionField] || 0) !== Number(revision || 0)) return null;
+  return { photo, slot };
+}
+
+async function persistLiveFeedbackStatus({
+  photoId,
+  slotId,
+  revisionField,
+  revision,
+  feedbackField,
+  feedbackStatus,
+}) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const live = liveDecisionSlot(photoId, slotId, revisionField, revision);
+    if (!live) return null;
+    const previousStatus = live.slot[feedbackField];
+    live.slot[feedbackField] = feedbackStatus;
+    try {
+      await persistReviewPhoto(live.photo);
+      return live;
+    } catch (error) {
+      live.slot[feedbackField] = previousStatus;
+      if (!(error instanceof ReviewStateConflictError) || attempt > 0) throw error;
+      await hydrateLatestReviewBatch();
+    }
+  }
+  return null;
 }
 
 function reviewQueueSummary(codeCount, insigniaCount) {
@@ -1394,6 +2022,13 @@ function showToast(message) {
   toast.hidden = false;
   window.clearTimeout(showToast.timeout);
   showToast.timeout = window.setTimeout(() => { toast.hidden = true; }, 2200);
+}
+
+function reportReviewStorageFailure(error) {
+  const message = error instanceof Error ? error.message : "Review progress could not be saved on this phone.";
+  if (status) status.textContent = message;
+  showToast(message);
+  if (error instanceof ReviewStateConflictError) hydrateLatestReviewBatch();
 }
 
 function inspectorTitle(text) {
