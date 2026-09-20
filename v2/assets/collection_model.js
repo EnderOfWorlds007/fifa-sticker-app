@@ -2,7 +2,7 @@ import {
   deriveCollectionCodes,
   deriveCollectionModel,
   sortCode,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-33e9771b57ec";
 
 export function deriveResolvedCollectionModel({
   catalog,

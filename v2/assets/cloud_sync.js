@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-8858ca7c61aa";
+} from "./backup_restore.js?v=build-33e9771b57ec";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,23 +15,24 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-8858ca7c61aa";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-8858ca7c61aa";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-8858ca7c61aa";
-import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-8858ca7c61aa";
-import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-8858ca7c61aa";
+} from "./public_share.js?v=build-33e9771b57ec";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-33e9771b57ec";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-33e9771b57ec";
+import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-33e9771b57ec";
+import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-33e9771b57ec";
 import {
   createCloudSyncGate,
   fetchAllDeltaPages,
   monotonicRevision,
+  requestJsonWithTimeout,
   validateSparseCloudHistory,
-} from "./cloud_delta.js?v=build-8858ca7c61aa";
+} from "./cloud_delta.js?v=build-33e9771b57ec";
 import {
   activateCloudPhotoReviewBatch,
   cloudPhotoReviewBatchId,
   migrateLegacyPhotoReviewProfile,
-} from "./photo_review_store_v2.js?v=build-8858ca7c61aa";
-import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-8858ca7c61aa";
+} from "./photo_review_store_v2.js?v=build-33e9771b57ec";
+import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-33e9771b57ec";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -42,6 +43,7 @@ const ACCOUNT_STATE_PREFIX = "panini.cloudSync.accountState.v1:";
 const LAST_SYNC_STATUS_KEY = "panini.cloudSync.lastStatus.v1";
 const ACTIVE_CLOUD_PROFILE_ID_KEY = "panini.cloudSync.activeProfileId.v1";
 const ID_RANDOM_BYTES = 24;
+const CLOUD_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_EVENT = "panini:cloud-sync-status";
 const APPLIED_EVENT = "panini:cloud-sync-applied";
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -69,6 +71,10 @@ export function mountCollectionCloudSync({
   let lastTriggerKind = "manual";
   let pendingInitializationSave = "";
   let pendingRecoverySave = "";
+  let activeBackgroundController = null;
+  let activeAutosaveController = null;
+  let activeRecoveryController = null;
+  let reviewRecoveryGeneration = 0;
   const refreshShareControls = () => controls.setShareSettings(loadPublicShareSettings(storage));
   const applyTransactions = async (transactions, context) => {
     let reviewsChanged = false;
@@ -86,31 +92,65 @@ export function mountCollectionCloudSync({
     return { reviewsChanged, checkpointApplied };
   };
 
-  const performSyncDeltas = async ({ apply = true, quiet = false } = {}) => {
+  const performSyncDeltas = async ({ apply = true, quiet = false, signal = null } = {}) => {
     try {
       const previousSecretId = client.userSecretId;
       await client.ensureIdentity();
       if (client.userSecretId !== previousSecretId) controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
       const context = client.captureAccountContext();
-      const result = await client.fetchDeltas({ context });
-      client.assertAccountContext(context);
-      if (apply && result.transactions.length) {
+      let result;
+      if (apply && controls.reviewRecoveryMode) {
         applyingRemote = true;
         try {
-          const applied = await applyTransactions(result.transactions, context);
+          const recovery = await streamCloudHistory(context, {
+            startRevision: context.startRevision,
+            signal,
+            onProgress: quiet ? null : ({ transactionCount, remoteRevision, revision, photoPackages }) => {
+              controls.setStatus(
+                `Loading encrypted reviews · checked ${transactionCount} record${transactionCount === 1 ? "" : "s"}`
+                  + ` through revision ${revision} of ${remoteRevision}`
+                  + ` · loaded ${photoPackages} photo package${photoPackages === 1 ? "" : "s"}.`,
+                "muted",
+              );
+            },
+          });
           client.assertAccountContext(context);
-          if (applied.checkpointApplied) saveAccountProjection(storage, context.profileId);
-          client.setLastRevision(result.revision);
+          if (applyCloudCheckpoint(recovery.latestCheckpoint, storage)) saveAccountProjection(storage, context.profileId);
+          if (recovery.recoveredBatchId) {
+            await activateCloudPhotoReviewBatch(context.profileId, recovery.recoveredBatchId, { signal });
+          }
+          client.setLastRevision(recovery.revision);
           refreshShareControls();
+          result = {
+            transactions: [],
+            transactionCount: recovery.transactionCount,
+            revision: recovery.revision,
+          };
         } finally {
           applyingRemote = false;
+        }
+      } else {
+        result = await client.fetchDeltas({ context, signal });
+        client.assertAccountContext(context);
+        if (apply && result.transactions.length) {
+          applyingRemote = true;
+          try {
+            const applied = await applyTransactions(result.transactions, context);
+            client.assertAccountContext(context);
+            if (applied.checkpointApplied) saveAccountProjection(storage, context.profileId);
+            client.setLastRevision(result.revision);
+            refreshShareControls();
+          } finally {
+            applyingRemote = false;
+          }
         }
       }
       if (apply) dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision, profileId: client.profileId });
       if (!quiet) {
+        const changeCount = Number(result.transactionCount ?? result.transactions.length);
         controls.setStatus(
-          result.transactions.length
-            ? `Cloud backup updated from ${result.transactions.length} change${result.transactions.length === 1 ? "" : "s"}.`
+          changeCount
+            ? `Cloud backup updated from ${changeCount} change${changeCount === 1 ? "" : "s"}.`
             : `Cloud backup ready. Revision ${result.revision}.`,
           "ok",
         );
@@ -118,6 +158,7 @@ export function mountCollectionCloudSync({
       return result;
     } catch (error) {
       if (error instanceof StaleCloudAccountError) return { transactions: [], revision: client.lastRevision, stale: true };
+      if (signal?.aborted) return { transactions: [], revision: client.lastRevision, aborted: true };
       if (!quiet) controls.setStatus(error?.message || "Cloud sync could not connect.", "warning");
       return { transactions: [], revision: client.lastRevision };
     }
@@ -127,6 +168,15 @@ export function mountCollectionCloudSync({
     () => performSyncDeltas(options),
     () => ({ transactions: [], revision: client.lastRevision, recovering: true }),
   );
+
+  const startBackgroundSync = (options = {}) => {
+    activeBackgroundController?.abort();
+    const controller = new AbortController();
+    activeBackgroundController = controller;
+    return syncDeltas({ ...options, signal: controller.signal }).finally(() => {
+      if (activeBackgroundController === controller) activeBackgroundController = null;
+    });
+  };
 
   const queueAutosave = (kind = "local") => {
     if (!initialized) {
@@ -143,36 +193,92 @@ export function mountCollectionCloudSync({
     }, 900);
   };
 
-  const recoverCloudReviewHistory = async (context) => {
-    const history = await client.fetchDeltas({ context, startRevision: 0, limit: 50 });
-    const validatedHistory = validateSparseCloudHistory(history);
-    const payloads = [];
-    for (const transaction of history.transactions) {
-      payloads.push(await client.decryptTransaction(transaction, context));
-    }
+  const streamCloudHistory = async (context, {
+    startRevision = 0,
+    signal = null,
+    onProgress = null,
+    assertCurrent = () => {},
+  } = {}) => {
     let hasReviewCommit = false;
     let recoveredBatchId = "";
     let reviewCount = 0;
     let latestCheckpoint = null;
-    for (const payload of payloads) {
-      if (payload?.kind === "storage-checkpoint" && payload.storage) latestCheckpoint = payload;
-      await importCloudReviewPayload(payload, context.profileId, { activate: false });
-      if (payload?.kind === "photo-review-import-commit-v1") {
-        hasReviewCommit = true;
-        recoveredBatchId = cloudPhotoReviewBatchId(context.profileId, payload.importId, payload.batch?.id);
-        reviewCount = Number(payload.expectedReviewItemCount || payload.batch?.reviewItems?.length || 0);
+    let photoPackages = 0;
+    let lastProgressAt = 0;
+    let recoveryStage = "requesting cloud history";
+    let history;
+    try {
+      history = await client.fetchDeltas({
+        context,
+        startRevision,
+        limit: 1,
+        retainTransactions: false,
+        signal,
+        visitTransaction: async (transaction, progress) => {
+          assertCurrent();
+          client.assertAccountContext(context);
+          recoveryStage = `decrypting cloud revision ${progress.revision}`;
+          const payload = await client.decryptTransaction(transaction, context);
+          assertCurrent();
+          client.assertAccountContext(context);
+          if (payload?.kind === "storage-checkpoint" && payload.storage) {
+            latestCheckpoint = payload;
+          } else {
+            recoveryStage = `saving cloud revision ${progress.revision}`;
+            const result = await importCloudReviewPayload(payload, context.profileId, { activate: false, signal });
+            assertCurrent();
+            client.assertAccountContext(context);
+            if (result === "staged") photoPackages += 1;
+            if (payload?.kind === "photo-review-import-commit-v1") {
+              hasReviewCommit = true;
+              recoveredBatchId = cloudPhotoReviewBatchId(context.profileId, payload.importId, payload.batch?.id);
+              reviewCount = Number(payload.expectedReviewItemCount || payload.batch?.reviewItems?.length || 0);
+            }
+          }
+          const now = Date.now();
+          if (onProgress && (photoPackages || progress.transactionCount === 1 || now - lastProgressAt >= 250)) {
+            onProgress({ ...progress, photoPackages });
+            lastProgressAt = now;
+          }
+          // Give mobile Safari a paint/GC opportunity after each large record.
+          if (photoPackages || progress.transactionCount % 10 === 0) await nextBrowserTurn();
+        },
+      });
+    } catch (error) {
+      if (!signal?.aborted) {
+        console.error("Encrypted review recovery failed.", {
+          stage: recoveryStage,
+          photoPackages,
+          name: String(error?.name || "Error"),
+          message: String(error?.message || error || "Unknown error"),
+        });
       }
+      throw error;
     }
+    const validatedHistory = validateSparseCloudHistory(history, { startRevision });
     return {
       hasReviewCommit,
       latestCheckpoint,
       recoveredBatchId,
       reviewCount,
+      photoPackages,
+      transactionCount: history.transactionCount,
       revision: validatedHistory.highWaterRevision,
     };
   };
 
-  const switchToAccount = async (restoreCode, { confirmMessage, emptyMessage, recoverReviews = false }) => {
+  const recoverCloudReviewHistory = (context, options = {}) => streamCloudHistory(context, {
+    ...options,
+    startRevision: 0,
+  });
+
+  const switchToAccount = async (restoreCode, {
+    confirmMessage,
+    emptyMessage,
+    recoverReviews = false,
+    signal = null,
+    assertCurrent = () => {},
+  }) => {
     const normalized = normalizeUserSecretId(restoreCode);
     if (!normalized) {
       controls.setStatus("Enter a valid restore code.", "warning");
@@ -203,7 +309,20 @@ export function mountCollectionCloudSync({
       const context = client.captureAccountContext();
       controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
       if (recoverReviews) {
-        const recovery = await recoverCloudReviewHistory(context);
+        const recovery = await recoverCloudReviewHistory(context, {
+          signal,
+          assertCurrent,
+          onProgress: ({ transactionCount, remoteRevision, revision, photoPackages }) => {
+            assertCurrent();
+            controls.setStatus(
+              `Loading encrypted reviews · checked ${transactionCount} record${transactionCount === 1 ? "" : "s"}`
+                + ` through revision ${revision} of ${remoteRevision}`
+                + ` · loaded ${photoPackages} photo package${photoPackages === 1 ? "" : "s"}.`,
+              "muted",
+            );
+          },
+        });
+        assertCurrent();
         const checkpointApplied = applyCloudCheckpoint(recovery.latestCheckpoint, storage);
         if (!checkpointApplied) {
           if (previousProjection) {
@@ -214,7 +333,8 @@ export function mountCollectionCloudSync({
           saveAccountProjection(storage, context.profileId);
         }
         if (recovery.recoveredBatchId) {
-          await activateCloudPhotoReviewBatch(context.profileId, recovery.recoveredBatchId);
+          assertCurrent();
+          await activateCloudPhotoReviewBatch(context.profileId, recovery.recoveredBatchId, { signal });
         }
         client.setLastRevision(recovery.revision);
         refreshShareControls();
@@ -278,6 +398,9 @@ export function mountCollectionCloudSync({
         return true;
       }
       failureMessage = error?.message || "Cloud account switch failed.";
+      if (recoverReviews && !/left unchanged/i.test(failureMessage)) {
+        failureMessage += " Existing reviews were left unchanged.";
+      }
     }
     if (previousCode) {
       await client.useRestoreCode(previousCode);
@@ -290,15 +413,16 @@ export function mountCollectionCloudSync({
     return false;
   };
 
-  const performAutosave = async (kind = "local") => {
+  const performAutosave = async (kind = "local", { signal = null } = {}) => {
     try {
-      const synced = await performSyncDeltas({ apply: true });
-      if (synced.stale) return false;
+      const synced = await performSyncDeltas({ apply: true, signal });
+      if (synced.stale || synced.aborted || signal?.aborted) return false;
       const context = client.captureAccountContext();
       const checkpoint = createStorageCheckpoint({ storage, triggerKind: kind, deviceId: client.deviceId });
-      const publicShare = await publicShareForCheckpoint(checkpoint, { fetchImpl, cryptoImpl });
+      const publicShare = await publicShareForCheckpoint(checkpoint, { fetchImpl, cryptoImpl, signal });
+      if (signal?.aborted) return false;
       client.assertAccountContext(context);
-      const result = await client.appendTransaction(checkpoint, { publicShare, context });
+      const result = await client.appendTransaction(checkpoint, { publicShare, context, signal });
       const publishedSettings = normalizeCheckpointShareSettings(checkpoint.storage.publicShareSettings);
       const currentSettings = loadPublicShareSettings(storage);
       if (publishedSettings.enabled && currentSettings.token === publishedSettings.token) {
@@ -315,9 +439,10 @@ export function mountCollectionCloudSync({
       );
       return true;
     } catch (error) {
+      if (signal?.aborted) return false;
       if (error?.status === 409 || error?.status === 412) {
         controls.setStatus("Cloud backup changed elsewhere. Loading newest changes first.", "warning");
-        await performSyncDeltas({ apply: true });
+        await performSyncDeltas({ apply: true, signal });
         queueAutosave(kind);
         return false;
       }
@@ -330,7 +455,13 @@ export function mountCollectionCloudSync({
   };
 
   const autosave = (kind = "local") => syncGate.run(
-    () => performAutosave(kind),
+    () => {
+      const controller = new AbortController();
+      activeAutosaveController = controller;
+      return performAutosave(kind, { signal: controller.signal }).finally(() => {
+        if (activeAutosaveController === controller) activeAutosaveController = null;
+      });
+    },
     () => {
       pendingRecoverySave = kind || "local";
       return false;
@@ -340,9 +471,15 @@ export function mountCollectionCloudSync({
   windowRef.addEventListener?.("panini:local-state-saved", (event) => {
     queueAutosave(event?.detail?.kind || "local");
   });
-  windowRef.addEventListener?.("focus", () => syncDeltas({ apply: true }));
+  windowRef.addEventListener?.("focus", () => startBackgroundSync({ apply: true }));
   globalThis.document?.addEventListener?.("visibilitychange", () => {
-    if (globalThis.document.visibilityState === "visible") syncDeltas({ apply: true });
+    if (globalThis.document.visibilityState === "visible") startBackgroundSync({ apply: true });
+  });
+  windowRef.addEventListener?.("pagehide", () => {
+    reviewRecoveryGeneration += 1;
+    activeRecoveryController?.abort();
+    activeBackgroundController?.abort();
+    activeAutosaveController?.abort();
   });
   controls.onCopyCode = () => copyText(client.userSecretId, controls);
   controls.onRestoreCode = async (restoreCode) => {
@@ -352,7 +489,21 @@ export function mountCollectionCloudSync({
     controls.setAccountBusy(true);
     controls.setStatus(recoverReviews ? "Loading encrypted cloud reviews…" : "Switching cloud account…", "muted");
     let loaded = false;
-    if (recoverReviews) await syncGate.block();
+    const recoveryGeneration = ++reviewRecoveryGeneration;
+    const recoveryController = new AbortController();
+    activeRecoveryController?.abort();
+    activeRecoveryController = recoveryController;
+    const assertCurrent = () => {
+      if (recoveryGeneration !== reviewRecoveryGeneration || recoveryController.signal.aborted) {
+        throw new StaleCloudAccountError();
+      }
+    };
+    if (recoverReviews) {
+      activeBackgroundController?.abort();
+      activeAutosaveController?.abort();
+      await syncGate.block();
+      controls.setStatus("Loading encrypted reviews · connecting to cloud…", "muted");
+    }
     try {
       loaded = await switchToAccount(selectedRestoreCode, {
         confirmMessage: recoverReviews
@@ -360,10 +511,13 @@ export function mountCollectionCloudSync({
           : "Add this cloud account and make it active? Current local collection and activity will be replaced by that account.",
         emptyMessage: "No cloud backup was found for that account, so this browser kept the current account active.",
         recoverReviews,
+        signal: recoveryController.signal,
+        assertCurrent,
       });
       if (loaded) controls.prefillRestoreCode("");
     } finally {
       if (recoverReviews) syncGate.unblock();
+      if (activeRecoveryController === recoveryController) activeRecoveryController = null;
       controls.setAccountBusy(false);
     }
     if (loaded && recoverReviews) await syncDeltas({ apply: true, quiet: true });
@@ -445,7 +599,7 @@ export function mountCollectionCloudSync({
     scrubRestoreFragment(location);
   }
 
-  const ready = syncDeltas({ apply: true }).finally(() => {
+  const ready = startBackgroundSync({ apply: true }).finally(() => {
     initialized = true;
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
     refreshShareControls();
@@ -528,7 +682,15 @@ export class CloudSyncClient {
     if (!accountRevisionMatches(this.lastRevision, context)) throw new StaleCloudRevisionError();
   }
 
-  async fetchDeltas({ limit = 10, context = null, startRevision = null } = {}) {
+  async fetchDeltas({
+    limit = 10,
+    context = null,
+    startRevision = null,
+    retainTransactions = true,
+    visitTransaction = null,
+    signal = null,
+    requestTimeoutMs = CLOUD_REQUEST_TIMEOUT_MS,
+  } = {}) {
     if (!this.profileId) await this.ensureIdentity();
     const accountContext = context || this.captureAccountContext();
     this.assertAccountContext(accountContext);
@@ -536,17 +698,24 @@ export class CloudSyncClient {
       const url = new URL(`${this.baseUrl}/v1/profiles/${accountContext.profileId}/transactions`);
       url.searchParams.set("after", String(after));
       url.searchParams.set("limit", String(pageLimit));
-      const response = await this.fetchImpl(url, { cache: "no-store" });
-      const payload = await readJsonResponse(response);
+      const { response, payload } = await requestJsonWithTimeout(this.fetchImpl, url, {
+        cache: "no-store",
+        signal,
+      }, {
+        timeoutMs: requestTimeoutMs,
+        timeoutMessage: "Cloud review download timed out. Check the connection and try Load reviews again.",
+      });
       if (!response.ok) throw requestError(response, payload?.error || "Cloud backup could not be loaded.");
       return payload;
     }, {
       startRevision: startRevision === null ? accountContext.startRevision : Math.max(0, Number(startRevision || 0)),
       limit,
+      retainTransactions,
+      visitTransaction,
     });
   }
 
-  async appendTransaction(payload, { publicShare, txId = "", context = null } = {}) {
+  async appendTransaction(payload, { publicShare, txId = "", context = null, signal = null } = {}) {
     if (!this.profileId) await this.ensureIdentity();
     const accountContext = context || this.captureAccountContext();
     this.assertAccountContext(accountContext);
@@ -554,19 +723,27 @@ export class CloudSyncClient {
     const encryptedPayload = await encryptPayload(payload, accountContext.userSecretId, this.crypto);
     this.assertAccountContext(accountContext);
     this.assertAccountRevision(accountContext);
-    const response = await this.fetchImpl(`${this.baseUrl}/v1/profiles/${accountContext.profileId}/transactions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        txId: txId || randomId("tx", this.crypto),
-        deviceId: this.deviceId,
-        clientCreatedAt: new Date().toISOString(),
-        baseRevision: accountContext.startRevision,
-        encryptedPayload,
-        ...(publicShare ? { publicShare } : {}),
-      }),
-    });
-    const result = await readJsonResponse(response);
+    const { response, payload: result } = await requestJsonWithTimeout(
+      this.fetchImpl,
+      `${this.baseUrl}/v1/profiles/${accountContext.profileId}/transactions`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal,
+        body: JSON.stringify({
+          txId: txId || randomId("tx", this.crypto),
+          deviceId: this.deviceId,
+          clientCreatedAt: new Date().toISOString(),
+          baseRevision: accountContext.startRevision,
+          encryptedPayload,
+          ...(publicShare ? { publicShare } : {}),
+        }),
+      },
+      {
+        timeoutMs: CLOUD_REQUEST_TIMEOUT_MS,
+        timeoutMessage: "Cloud backup save timed out. Check the connection and try again.",
+      },
+    );
     this.assertAccountContext(accountContext);
     if (!response.ok) throw requestError(response, result?.error || "Cloud backup could not be saved.");
     this.setLastRevision(Number(result.revision || this.lastRevision));
@@ -629,10 +806,25 @@ export function createStorageCheckpoint({ storage = globalThis.localStorage, tri
   };
 }
 
-export async function publicShareForCheckpoint(checkpoint, { fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto } = {}) {
+export async function publicShareForCheckpoint(checkpoint, {
+  fetchImpl = globalThis.fetch,
+  cryptoImpl = globalThis.crypto,
+  signal = null,
+} = {}) {
   const settings = normalizeCheckpointShareSettings(checkpoint?.storage?.publicShareSettings);
   if (!settings.enabled) return { enabled: false };
-  const catalog = await loadCollectionCatalog({ fetch: fetchImpl });
+  const controller = new AbortController();
+  const catalog = await settleWithin(
+    loadCollectionCatalog({
+      fetch: (input, init = {}) => fetchImpl(input, { ...init, signal: controller.signal }),
+    }),
+    {
+      signal,
+      timeoutMs: CLOUD_REQUEST_TIMEOUT_MS,
+      timeoutMessage: "Loading the sharing catalogue timed out.",
+      onInterrupt: () => controller.abort(),
+    },
+  );
   const inventoryProjection = buildInventoryProjection({
     catalog,
     collectionState: checkpoint.storage.collectionState,
@@ -995,11 +1187,43 @@ function normalizeCheckpointShareSettings(value) {
   return loadPublicShareSettings(storage);
 }
 
-async function readJsonResponse(response) {
+function nextBrowserTurn() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function settleWithin(promise, {
+  signal = null,
+  timeoutMs = CLOUD_REQUEST_TIMEOUT_MS,
+  timeoutMessage = "Cloud operation timed out.",
+  onInterrupt = () => {},
+} = {}) {
+  let timeoutId = null;
+  let removeAbortListener = () => {};
+  const interrupted = new Promise((_, reject) => {
+    const abort = () => {
+      onInterrupt();
+      const error = new Error("Cloud operation cancelled.");
+      error.name = "AbortError";
+      reject(error);
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener?.("abort", abort, { once: true });
+    removeAbortListener = () => signal?.removeEventListener?.("abort", abort);
+    timeoutId = setTimeout(() => {
+      onInterrupt();
+      const error = new Error(timeoutMessage);
+      error.name = "CloudRequestTimeoutError";
+      reject(error);
+    }, Math.max(1, Number(timeoutMs || CLOUD_REQUEST_TIMEOUT_MS)));
+  });
   try {
-    return await response.json();
-  } catch {
-    return null;
+    return await Promise.race([promise, interrupted]);
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    removeAbortListener();
   }
 }
 

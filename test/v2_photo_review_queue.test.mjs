@@ -228,6 +228,8 @@ test("cloud review parts stay invisible until a complete commit activates the ac
   part.digest = await partDigest(part);
   assert.equal(await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), "staged");
   assert.equal(await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB }), null);
+  assert.equal(indexedDB.records("review_photos").length, 1);
+  assert.equal(indexedDB.records("review_import_parts")[0].photo.blob, undefined);
   const commit = {
     kind: CLOUD_REVIEW_COMMIT_KIND,
     importId: "import-1",
@@ -249,6 +251,33 @@ test("cloud review parts stay invisible until a complete commit activates the ac
   assert.equal(restored.photos[0].slots[0].code, "CAN15");
   assert.equal(indexedDB.records("review_import_parts").length, 0);
   assert.equal(await loadLatestPhotoReviewBatch("different-cloud-profile", { indexedDB }), null);
+});
+
+test("one-photo cloud staging is atomic when the phone cannot store the image", async () => {
+  const control = {};
+  const indexedDB = fakeIndexedDB({ control });
+  const part = {
+    kind: CLOUD_REVIEW_PART_KIND,
+    importId: "import-storage-failure",
+    partId: "photo:photo-1",
+    digest: "",
+    batchId: "cloud-batch-storage-failure",
+    imageDataUrl: "data:image/jpeg;base64,cGhvdG8=",
+    photo: { id: "photo-1", index: 0, slots: [] },
+  };
+  part.digest = await partDigest(part);
+  control.failNextWrite = {
+    store: "review_photos",
+    name: "QuotaExceededError",
+    message: "phone storage full",
+  };
+  await assert.rejects(
+    importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }),
+    /Review storage is full on this phone/,
+  );
+  assert.equal(indexedDB.records("review_photos").length, 0);
+  assert.equal(indexedDB.records("review_import_parts").length, 0);
+  assert.equal(await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB }), null);
 });
 
 test("committed cloud imports do not rebuild duplicate staging blobs on replay", async () => {
@@ -399,6 +428,82 @@ test("cloud recovery keeps the previous queue active until the complete replay i
   assert.equal(recovered.photos[0].slots[0].code, "CAN15");
 });
 
+test("a complete cloud generation stays hidden until its active pointer is promoted", async () => {
+  const indexedDB = fakeIndexedDB();
+  const batch = {
+    id: "hidden-source-batch",
+    createdAt: 10,
+    updatedAt: 20,
+    activePhotoId: "hidden-photo",
+    reviewItems: [],
+  };
+  const part = {
+    kind: CLOUD_REVIEW_PART_KIND,
+    importId: "hidden-import",
+    partId: "photo:hidden-photo",
+    digest: "",
+    batchId: batch.id,
+    imageDataUrl: "data:image/jpeg;base64,aGlkZGVu",
+    photo: { id: "hidden-photo", index: 0, slots: [] },
+  };
+  part.digest = await partDigest(part);
+  await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto, activate: false });
+  const commit = {
+    kind: CLOUD_REVIEW_COMMIT_KIND,
+    importId: part.importId,
+    digest: "",
+    batch,
+    photos: [{ partId: part.partId, photoId: part.photo.id, index: 0, digest: part.digest }],
+    expectedPhotoCount: 1,
+    expectedReviewItemCount: 0,
+  };
+  commit.digest = await commitDigest(commit);
+  await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto, activate: false });
+  assert.equal(await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB }), null);
+
+  const batchId = cloudPhotoReviewBatchId("cloud-profile", commit.importId, batch.id);
+  await activateCloudPhotoReviewBatch("cloud-profile", batchId, { indexedDB });
+  assert.equal((await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB })).id, batchId);
+});
+
+test("a cancelled promotion cannot replace the active review pointer", async () => {
+  const indexedDB = fakeIndexedDB();
+  await savePhotoReviewBatch(reviewBatchFixture("previous-batch", "cloud-profile", 1), { indexedDB });
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(
+    activateCloudPhotoReviewBatch("cloud-profile", "cloud:cloud-profile:next-import:next-batch", {
+      indexedDB,
+      signal: controller.signal,
+    }),
+    (error) => error?.name === "AbortError",
+  );
+  assert.deepEqual(indexedDB.records("active_review_batches"), [{
+    profileId: "cloud-profile",
+    batchId: "previous-batch",
+  }]);
+});
+
+test("cancellation while review storage opens cannot replace the active pointer", async () => {
+  const control = {};
+  const indexedDB = fakeIndexedDB({ control });
+  await savePhotoReviewBatch(reviewBatchFixture("previous-batch", "cloud-profile", 1), { indexedDB });
+  let releaseOpen;
+  control.delayNextOpen = new Promise((resolve) => { releaseOpen = resolve; });
+  const controller = new AbortController();
+  const promotion = activateCloudPhotoReviewBatch("cloud-profile", "cloud:cloud-profile:next-import:next-batch", {
+    indexedDB,
+    signal: controller.signal,
+  });
+  controller.abort();
+  releaseOpen();
+  await assert.rejects(promotion, (error) => error?.name === "AbortError");
+  assert.deepEqual(indexedDB.records("active_review_batches"), [{
+    profileId: "cloud-profile",
+    batchId: "previous-batch",
+  }]);
+});
+
 test("an incomplete cloud review commit never activates a partial queue", async () => {
   const indexedDB = fakeIndexedDB();
   const part = {
@@ -475,7 +580,8 @@ test("a late cloud commit failure rolls back activation and preserves every stag
   assert.equal(indexedDB.records("review_import_parts").length, 1);
   assert.equal(indexedDB.records("review_imports").length, 0);
   assert.deepEqual(indexedDB.records("review_batches").map((record) => record.id), ["previous-batch"]);
-  assert.deepEqual(indexedDB.records("review_photos").map((record) => record.id), ["previous-batch-photo"]);
+  assert.deepEqual(indexedDB.records("review_photos").map((record) => record.id).sort(), ["new-photo", "previous-batch-photo"]);
+  assert.equal(indexedDB.records("review_import_parts")[0].photo.blob, undefined);
   assert.deepEqual(indexedDB.records("active_review_batches"), [{
     profileId: "cloud-profile",
     batchId: "previous-batch",
@@ -619,12 +725,17 @@ test("Reviews distinguishes encrypted queue loading from OCR authorization", () 
   assert.match(scanner, /activeCloudPhotoReviewProfileId/);
   assert.match(scanner, /No saved reviews were found for this cloud account/);
   assert.match(cloudSync, /controls\.setAccountBusy\(true\)/);
+  assert.match(cloudSync, /finally \{[\s\S]*controls\.setAccountBusy\(false\)/);
   assert.match(cloudSync, /if \(loaded\) controls\.prefillRestoreCode\(""\)/);
-  assert.match(cloudSync, /fetchDeltas\(\{ context, startRevision: 0, limit: 50 \}\)/);
-  assert.match(cloudSync, /validateSparseCloudHistory\(history\)/);
+  assert.match(cloudSync, /recoverCloudReviewHistory[\s\S]*startRevision: 0/);
+  assert.match(cloudSync, /limit: 1,[\s\S]*retainTransactions: false/);
+  assert.match(cloudSync, /validateSparseCloudHistory\(history, \{ startRevision \}\)/);
   assert.match(cloudSync, /reviewRecoveryMode: documentRef\?\.body\?\.dataset\?\.photoReviewMode === "reviews"/);
-  assert.match(cloudSync, /importCloudReviewPayload\(payload, context\.profileId, \{ activate: false \}\)/);
-  assert.match(cloudSync, /activateCloudPhotoReviewBatch\(context\.profileId, recovery\.recoveredBatchId\)/);
+  assert.match(cloudSync, /importCloudReviewPayload\(payload, context\.profileId, \{ activate: false, signal \}\)/);
+  assert.match(cloudSync, /Cloud review download timed out/);
+  assert.match(scanner, /showEmptyReviewQueue\(message\)/);
+  assert.match(scanner, /message\.startsWith\("Loading encrypted"\)[\s\S]*"Loading reviews"/);
+  assert.match(cloudSync, /activateCloudPhotoReviewBatch\(context\.profileId, recovery\.recoveredBatchId, \{ signal \}\)/);
   assert.match(cloudSync, /cachedProjection && !recoverReviews/);
 });
 
@@ -733,7 +844,7 @@ function fakeIndexedDB(options = {}) {
     },
     open() {
       const request = {};
-      queueMicrotask(() => {
+      const completeOpen = () => {
         if (!database) {
           database = createDatabase(stores, options);
           request.result = database;
@@ -743,7 +854,14 @@ function fakeIndexedDB(options = {}) {
           request.result = database;
         }
         request.onsuccess?.();
-      });
+      };
+      const delayedOpen = options.control?.delayNextOpen;
+      if (delayedOpen) {
+        options.control.delayNextOpen = null;
+        delayedOpen.then(() => queueMicrotask(completeOpen));
+      } else {
+        queueMicrotask(completeOpen);
+      }
       return request;
     },
   };
