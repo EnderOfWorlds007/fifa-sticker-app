@@ -80,3 +80,94 @@ test("scan colours survive the collection ledger and inventory projection", () =
     united_edition: 2,
   });
 });
+
+test("outgoing trades remove loose copies received by earlier transactions", () => {
+  let ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_old_scan",
+    now: () => "2026-09-11T10:00:00.000Z",
+    kind: "received",
+    received: [
+      { code: "ARG7", quantity: 3, variant: "standard_fifa_licensed" },
+      { code: "ARG7", quantity: 1, variant: "united_edition" },
+    ],
+    given: [],
+  });
+  ledger = createTransaction(ledger, {
+    idFactory: () => "txn_replace_snapshot",
+    now: () => "2026-09-20T10:00:00.000Z",
+    kind: "trade",
+    received: [{ code: "ARG7", quantity: 6, variant: "standard_fifa_licensed" }],
+    given: [
+      { code: "ARG7", quantity: 3, variant: "standard_fifa_licensed" },
+      { code: "ARG7", quantity: 1, variant: "united_edition" },
+    ],
+  });
+
+  const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger, {
+    legacyCollected: ["ARG7"],
+  });
+
+  assert.equal(inventory.cards.ARG7.count, 6);
+  assert.equal(inventory.cards.ARG7.back_insignia_type, "standard_fifa_licensed");
+  assert.deepEqual(inventory.cards.ARG7.back_insignia_counts, {
+    standard_fifa_licensed: 6,
+    united_edition: 0,
+  });
+});
+
+test("first receipts fill the album before reserved outgoing stock is projected", () => {
+  let ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_first_receipt",
+    now: () => "2026-09-11T10:00:00.000Z",
+    kind: "received",
+    received: [{ code: "ARG7", quantity: 3, variant: "standard_fifa_licensed" }],
+    given: [],
+  });
+  ledger = createTransaction(ledger, {
+    idFactory: () => "txn_reserved_outgoing",
+    now: () => "2026-09-12T10:00:00.000Z",
+    kind: "trade",
+    status: "reserved",
+    received: [],
+    given: [{ code: "ARG7", quantity: 1, variant: "standard_fifa_licensed" }],
+  });
+
+  const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger);
+
+  assert.equal(inventory.cards.ARG7.count, 1);
+  assert.deepEqual(inventory.cards.ARG7.back_insignia_counts, {
+    standard_fifa_licensed: 1,
+  });
+});
+
+test("inventory projection does not mutate the raw inventory payload", () => {
+  const rawInventory = {
+    cards: {
+      ARG7: {
+        code: "ARG7",
+        count: 1,
+        back_insignia_type: "standard_fifa_licensed",
+        back_insignia_counts: { standard_fifa_licensed: 1 },
+      },
+    },
+    captures: [],
+    stats: {},
+  };
+  const before = structuredClone(rawInventory);
+  const ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_new_green",
+    now: () => "2026-09-11T10:00:00.000Z",
+    kind: "received",
+    received: [{ code: "ARG7", quantity: 1, variant: "united_edition" }],
+    given: [],
+  });
+
+  const inventory = adjustedInventoryPayload(rawInventory, ledger, { legacyCollected: ["ARG7"] });
+
+  assert.deepEqual(rawInventory, before);
+  assert.equal(inventory.cards.ARG7.count, 2);
+  assert.deepEqual(inventory.cards.ARG7.back_insignia_counts, {
+    standard_fifa_licensed: 1,
+    united_edition: 1,
+  });
+});
