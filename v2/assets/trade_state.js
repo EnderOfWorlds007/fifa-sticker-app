@@ -781,8 +781,25 @@ export function adjustedInventoryPayload(inventory, ledger, options = {}) {
     .map(([code]) => code);
   const receivedLoose = completedLooseReceivedAdjustments(ledger, aliases, [...(options.legacyCollected || []), ...albumBaselineCodes]);
   const catalogueByCode = new Map(normalizeCatalogCards(options.catalog).map((card) => [card.code, card]));
+  const combinedCards = { ...sourceCards };
+  for (const [code, adjustment] of receivedLoose.entries()) {
+    const current = combinedCards[code] || {
+      ...(catalogueByCode.get(code) || {}),
+      code,
+      count: 0,
+      back_insignia_counts: {},
+    };
+    current.back_insignia_counts = { ...(current.back_insignia_counts || {}) };
+    current.count = Math.max(0, Number(current.count || 0)) + adjustment.total;
+    for (const [variant, quantity] of adjustment.variants.entries()) {
+      current.back_insignia_counts[variant] = Math.max(0, Number(current.back_insignia_counts[variant] || 0)) + quantity;
+    }
+    current.back_insignia_type = colourTypeFromCounts(current.back_insignia_counts, current.back_insignia_type);
+    if (!Object.keys(current.back_insignia_counts).length) delete current.back_insignia_counts;
+    combinedCards[code] = current;
+  }
   const cards = {};
-  for (const [code, card] of Object.entries(sourceCards)) {
+  for (const [code, card] of Object.entries(combinedCards)) {
     const adjustment = given.get(code) || { total: 0, variants: new Map() };
     const removed = adjustment.total;
     const originalCount = Math.max(0, Number(card?.count || 0));
@@ -796,21 +813,6 @@ export function adjustedInventoryPayload(inventory, ledger, options = {}) {
       cards[code].back_insignia_counts = adjustColourCounts(card.back_insignia_counts, adjustment);
       cards[code].back_insignia_type = colourTypeFromCounts(cards[code].back_insignia_counts, card.back_insignia_type);
     }
-  }
-  for (const [code, adjustment] of receivedLoose.entries()) {
-    const current = cards[code] || {
-      ...(catalogueByCode.get(code) || {}),
-      code,
-      count: 0,
-      back_insignia_counts: {},
-    };
-    current.count = Math.max(0, Number(current.count || 0)) + adjustment.total;
-    for (const [variant, quantity] of adjustment.variants.entries()) {
-      current.back_insignia_counts[variant] = Math.max(0, Number(current.back_insignia_counts[variant] || 0)) + quantity;
-    }
-    current.back_insignia_type = colourTypeFromCounts(current.back_insignia_counts, current.back_insignia_type);
-    if (!Object.keys(current.back_insignia_counts).length) delete current.back_insignia_counts;
-    cards[code] = current;
   }
   const captures = Array.isArray(inventory?.captures) ? inventory.captures : [];
   return {
