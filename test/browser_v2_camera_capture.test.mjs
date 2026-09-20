@@ -95,7 +95,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(reviewsCdp, "Page.enable");
         await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
           source: `
-            sessionStorage.setItem("fifa-v2-controller-reload-build-ec7b4a1d9032", "1");
+            sessionStorage.setItem("fifa-v2-controller-reload-build-7ab34d90e216", "1");
             window.__reviewErrors = [];
             window.__cloudFetchStarted = false;
             window.__cloudAutosaveStarted = false;
@@ -363,6 +363,43 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
       });
       await clearActiveReviewUploadIds(cdp);
 
+      const cleanScannerPage = await createPage("about:blank");
+      const cleanScannerCdp = await connectCdp(cleanScannerPage.webSocketDebuggerUrl);
+      try {
+        await send(cleanScannerCdp, "Runtime.enable");
+        await send(cleanScannerCdp, "Page.enable");
+        await send(cleanScannerCdp, "Page.addScriptToEvaluateOnNewDocument", {
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-7ab34d90e216", "1")`,
+        });
+        await send(cleanScannerCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/scanner/` });
+        await waitForExpression(cleanScannerCdp, `document.body.dataset.photoScannerReady === "true"`);
+        const profileId = await evaluate(cleanScannerCdp, `localStorage.getItem("panini.cloudSync.activeProfileId.v1")
+          || localStorage.getItem("panini.v2.activeProfileId")`);
+        await evaluate(cleanScannerCdp, `window.dispatchEvent(new CustomEvent("panini:cloud-sync-applied", {
+          detail: { profileId: ${JSON.stringify(profileId)} },
+        }))`);
+        const busyImmediately = await evaluate(cleanScannerCdp, `document.querySelector("#photoReviewPanel").getAttribute("aria-busy")`);
+        assert.notEqual(busyImmediately, "true");
+        await delay(500);
+        const cleanScannerState = await evaluate(cleanScannerCdp, `({
+          result: document.querySelector("#photoScannerResult").value,
+          reviewHidden: document.querySelector("#photoReviewPanel").hidden,
+          openReviewsHidden: document.querySelector("#photoOpenReviews").hidden,
+        })`);
+        assert.deepEqual(cleanScannerState, {
+          result: "",
+          reviewHidden: true,
+          openReviewsHidden: true,
+        });
+      } finally {
+        cleanScannerCdp.close();
+        await withTimeout(
+          fetch(`http://127.0.0.1:${DEBUG_PORT}/json/close/${cleanScannerPage.id}`),
+          1000,
+          "clean scanner tab did not close",
+        ).catch(() => {});
+      }
+
       const batchReviewsPage = await createPage("about:blank");
       const batchReviewsCdp = await connectCdp(batchReviewsPage.webSocketDebuggerUrl);
       let syncedReviewsPage = null;
@@ -371,7 +408,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(batchReviewsCdp, "Runtime.enable");
         await send(batchReviewsCdp, "Page.enable");
         await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-ec7b4a1d9032", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-7ab34d90e216", "1")`,
         });
         await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
@@ -382,7 +419,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(syncedReviewsCdp, "Runtime.enable");
         await send(syncedReviewsCdp, "Page.enable");
         await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-ec7b4a1d9032", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-7ab34d90e216", "1")`,
         });
         await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
@@ -496,7 +533,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-ec7b4a1d9032", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-7ab34d90e216", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
