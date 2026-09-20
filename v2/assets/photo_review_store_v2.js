@@ -1,7 +1,8 @@
 const DATABASE_NAME = "panini-photo-review-queue";
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 const BATCH_STORE = "review_batches";
 const PHOTO_STORE = "review_photos";
+const PHOTO_STATE_STORE = "review_photo_states";
 const ACTIVE_STORE = "active_review_batches";
 const IMPORT_STORE = "review_imports";
 const IMPORT_PART_STORE = "review_import_parts";
@@ -21,11 +22,12 @@ export async function savePhotoReviewBatch(batch, options = {}) {
   try {
     batch.revision = 1;
     for (const photo of batch.photos || []) photo.revision = 1;
-    const transaction = database.transaction([BATCH_STORE, PHOTO_STORE, ACTIVE_STORE], "readwrite");
+    const transaction = database.transaction([BATCH_STORE, PHOTO_STORE, PHOTO_STATE_STORE, ACTIVE_STORE], "readwrite");
     const complete = transactionComplete(transaction);
     trackedWrite(transaction, transaction.objectStore(BATCH_STORE).put(batchRecord(batch)), "saving the review batch");
     for (const photo of batch.photos || []) {
       trackedWrite(transaction, transaction.objectStore(PHOTO_STORE).put(photoRecord(batch.id, photo)), "saving a review photo");
+      trackedWrite(transaction, transaction.objectStore(PHOTO_STATE_STORE).put(photoStateRecord(batch.id, photo)), "saving initial review photo state");
     }
     trackedWrite(transaction, transaction.objectStore(ACTIVE_STORE).put({
       profileId: String(batch.profileId || ""),
@@ -59,22 +61,24 @@ export async function savePhotoReviewBatchMeta(batch, options = {}) {
 export async function savePhotoReviewState(batch, photo, options = {}) {
   const database = await openReviewDatabase(options.indexedDB);
   try {
-    const transaction = database.transaction([BATCH_STORE, PHOTO_STORE], "readwrite");
+    const transaction = database.transaction([BATCH_STORE, PHOTO_STORE, PHOTO_STATE_STORE], "readwrite");
     const complete = transactionComplete(transaction);
     const batchStore = transaction.objectStore(BATCH_STORE);
     const photoStore = transaction.objectStore(PHOTO_STORE);
+    const photoStateStore = transaction.objectStore(PHOTO_STATE_STORE);
     const currentBatch = await requestResult(batchStore.get(String(batch.id || "")));
-    const currentPhoto = await requestResult(photoStore.get(`${batch.id}:${photo.id}`));
+    const photoKey = `${batch.id}:${photo.id}`;
+    const currentPhotoState = await requestEffectivePhotoState(photoStateStore, photoStore, photoKey);
     assertRevision(currentBatch, batch, "batch");
-    assertRevision(currentPhoto, photo, "photo");
+    assertRevision(currentPhotoState, photo, "photo");
     const savedBatch = { ...batchRecord(batch), revision: Number(currentBatch.revision || 0) + 1 };
-    const savedPhoto = { ...photoRecord(batch.id, photo), revision: Number(currentPhoto.revision || 0) + 1 };
+    const savedPhotoState = photoStateRecord(batch.id, photo, Number(currentPhotoState.revision || 0) + 1);
     trackedWrite(transaction, batchStore.put(savedBatch), "saving review progress");
-    trackedWrite(transaction, photoStore.put(savedPhoto), "saving the reviewed photo");
+    trackedWrite(transaction, photoStateStore.put(savedPhotoState), "saving the reviewed photo state");
     await complete;
     batch.revision = savedBatch.revision;
-    photo.revision = savedPhoto.revision;
-    return { batch: savedBatch, photo: savedPhoto };
+    photo.revision = savedPhotoState.revision;
+    return { batch: savedBatch, photo: { ...photo, revision: savedPhotoState.revision } };
   } finally {
     database.close();
   }
@@ -83,16 +87,18 @@ export async function savePhotoReviewState(batch, photo, options = {}) {
 export async function savePhotoReviewPhoto(batchId, photo, options = {}) {
   const database = await openReviewDatabase(options.indexedDB);
   try {
-    const transaction = database.transaction(PHOTO_STORE, "readwrite");
+    const transaction = database.transaction([PHOTO_STORE, PHOTO_STATE_STORE], "readwrite");
     const complete = transactionComplete(transaction);
-    const store = transaction.objectStore(PHOTO_STORE);
-    const current = await requestResult(store.get(`${batchId}:${photo.id}`));
-    assertRevision(current, photo, "photo");
-    const saved = { ...photoRecord(batchId, photo), revision: Number(current.revision || 0) + 1 };
-    trackedWrite(transaction, store.put(saved), "saving the reviewed photo");
+    const photoKey = `${batchId}:${photo.id}`;
+    const photoStore = transaction.objectStore(PHOTO_STORE);
+    const photoStateStore = transaction.objectStore(PHOTO_STATE_STORE);
+    const currentPhotoState = await requestEffectivePhotoState(photoStateStore, photoStore, photoKey);
+    assertRevision(currentPhotoState, photo, "photo");
+    const savedState = photoStateRecord(batchId, photo, Number(currentPhotoState.revision || 0) + 1);
+    trackedWrite(transaction, photoStateStore.put(savedState), "saving the reviewed photo state");
     await complete;
-    photo.revision = saved.revision;
-    return saved;
+    photo.revision = savedState.revision;
+    return { ...photo, revision: savedState.revision };
   } finally {
     database.close();
   }
@@ -111,13 +117,16 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
     if (!importId || !partId || !digest) throw new Error("Cloud review part identity is incomplete.");
     const key = `${scopedProfileId}:${importId}:${partId}`;
     const localBatchId = cloudPhotoReviewBatchId(scopedProfileId, importId, part?.batchId);
-    const transaction = database.transaction([IMPORT_STORE, IMPORT_PART_STORE, PHOTO_STORE], "readwrite");
+    const transaction = database.transaction([IMPORT_STORE, IMPORT_PART_STORE, PHOTO_STORE, PHOTO_STATE_STORE], "readwrite");
     const complete = transactionComplete(transaction).finally(abortTransactionOnSignal(transaction, options.signal));
     const importStore = transaction.objectStore(IMPORT_STORE);
     const store = transaction.objectStore(IMPORT_PART_STORE);
-    const [retainedCommit, current] = await Promise.all([
+    const photoKey = `${localBatchId}:${String(part?.photo?.id || "")}`;
+    const photoStateStore = transaction.objectStore(PHOTO_STATE_STORE);
+    const [retainedCommit, current, currentState] = await Promise.all([
       requestResult(importStore.get(`${scopedProfileId}:${importId}`)),
       requestResult(store.get(key)),
+      requestResult(photoStateStore.get(photoKey)),
     ]);
     if (retainedCommit) {
       if (current) trackedWrite(transaction, store.delete(key), "discarding a committed staging photo");
@@ -128,12 +137,18 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
     const legacyStagedPhoto = current?.photo?.blob ? current.photo : null;
     if (!current || legacyStagedPhoto) {
       const photo = legacyStagedPhoto || part.photo;
-      const photoKey = `${localBatchId}:${String(photo?.id || "")}`;
       trackedWrite(
         transaction,
         transaction.objectStore(PHOTO_STORE).put(photoRecord(localBatchId, { ...photo, revision: 1 })),
         "saving one cloud review photo",
       );
+      if (!currentState) {
+        trackedWrite(
+          transaction,
+          photoStateStore.put(photoStateRecord(localBatchId, { ...photo, revision: 1 })),
+          "saving initial cloud review photo state",
+        );
+      }
       trackedWrite(transaction, store.put({
         key,
         importKey: `${scopedProfileId}:${importId}`,
@@ -336,7 +351,10 @@ export async function loadLatestPhotoReviewBatch(profileId, options = {}) {
     } catch (error) {
       console.warn("Committed review staging cleanup will be retried.", error);
     }
-    const metadataTransaction = database.transaction([ACTIVE_STORE, BATCH_STORE], "readonly");
+    const metadataTransaction = database.transaction(
+      [ACTIVE_STORE, BATCH_STORE, PHOTO_STORE, PHOTO_STATE_STORE],
+      "readonly",
+    );
     const metadataComplete = transactionComplete(metadataTransaction);
     const active = await requestResult(metadataTransaction.objectStore(ACTIVE_STORE).get(profileKey));
     let batch = active?.batchId
@@ -353,15 +371,21 @@ export async function loadLatestPhotoReviewBatch(profileId, options = {}) {
         ))
         .sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0))[0];
     }
+    if (!batch) {
+      await metadataComplete;
+      return null;
+    }
+    const [photos, photoStates] = await Promise.all([
+      requestResult(metadataTransaction.objectStore(PHOTO_STORE).index("batchId").getAll(batch.id)),
+      requestResult(metadataTransaction.objectStore(PHOTO_STATE_STORE).index("batchId").getAll(batch.id)),
+    ]);
     await metadataComplete;
-    if (!batch) return null;
-    const photoTransaction = database.transaction(PHOTO_STORE, "readonly");
-    const photoComplete = transactionComplete(photoTransaction);
-    const photos = await requestResult(photoTransaction.objectStore(PHOTO_STORE).index("batchId").getAll(batch.id));
-    await photoComplete;
+    const statesByKey = new Map((photoStates || []).map((state) => [String(state.key || ""), state]));
     return {
       ...batch,
-      photos: (photos || []).sort((left, right) => Number(left.index || 0) - Number(right.index || 0)),
+      photos: (photos || [])
+        .map((photo) => mergePhotoState(photo, statesByKey.get(String(photo.key || ""))))
+        .sort((left, right) => Number(left.index || 0) - Number(right.index || 0)),
     };
   } finally {
     database.close();
@@ -382,17 +406,48 @@ export function batchRecord(batch) {
 }
 
 export function photoRecord(batchId, photo) {
-  const { imageUrl: _imageUrl, ...record } = photo || {};
-  const photoId = String(record.id || "");
+  const photoId = String(photo?.id || "");
   return {
-    ...record,
     key: `${batchId}:${photoId}`,
     batchId: String(batchId || ""),
     id: photoId,
-    index: Number(record.index || 0),
-    revision: Number(record.revision || 0),
-    slots: Array.isArray(record.slots) ? record.slots : [],
-    view: record.view || { focused: false, zoomFactor: 1 },
+    index: Number(photo?.index || 0),
+    revision: Number(photo?.revision || 0),
+    fileName: String(photo?.fileName || ""),
+    mimeType: String(photo?.mimeType || photo?.blob?.type || "application/octet-stream"),
+    lastModified: Number(photo?.lastModified || 0),
+    sourceRevision: Number(photo?.sourceRevision || 0),
+    blob: photo?.blob,
+  };
+}
+
+export function photoStateRecord(batchId, photo, revision = photo?.revision) {
+  const photoId = String(photo?.id || "");
+  return {
+    key: `${batchId}:${photoId}`,
+    batchId: String(batchId || ""),
+    id: photoId,
+    revision: Number(revision || 0),
+    status: String(photo?.status || "pending"),
+    error: String(photo?.error || ""),
+    payload: photo?.payload ?? null,
+    slots: Array.isArray(photo?.slots) ? photo.slots : [],
+    selectedSlotId: String(photo?.selectedSlotId || ""),
+    view: photo?.view || { focused: false, zoomFactor: 1 },
+  };
+}
+
+function mergePhotoState(photo, state) {
+  if (!state) return photo;
+  return {
+    ...photo,
+    revision: Number(state.revision || 0),
+    status: String(state.status || "pending"),
+    error: String(state.error || ""),
+    payload: state.payload ?? null,
+    slots: Array.isArray(state.slots) ? state.slots : [],
+    selectedSlotId: String(state.selectedSlotId || ""),
+    view: state.view || { focused: false, zoomFactor: 1 },
   };
 }
 
@@ -412,6 +467,13 @@ export function openReviewDatabase(indexedDBFactory = globalThis.indexedDB) {
       if (!database.objectStoreNames.contains(PHOTO_STORE)) photoStore = database.createObjectStore(PHOTO_STORE, { keyPath: "key" });
       else photoStore = request.transaction.objectStore(PHOTO_STORE);
       if (!photoStore.indexNames.contains("batchId")) photoStore.createIndex("batchId", "batchId", { unique: false });
+      let photoStateStore;
+      if (!database.objectStoreNames.contains(PHOTO_STATE_STORE)) {
+        photoStateStore = database.createObjectStore(PHOTO_STATE_STORE, { keyPath: "key" });
+      } else {
+        photoStateStore = request.transaction.objectStore(PHOTO_STATE_STORE);
+      }
+      if (!photoStateStore.indexNames.contains("batchId")) photoStateStore.createIndex("batchId", "batchId", { unique: false });
       if (!database.objectStoreNames.contains(ACTIVE_STORE)) database.createObjectStore(ACTIVE_STORE, { keyPath: "profileId" });
       if (!database.objectStoreNames.contains(IMPORT_STORE)) database.createObjectStore(IMPORT_STORE, { keyPath: "key" });
       let importPartStore;
@@ -419,9 +481,12 @@ export function openReviewDatabase(indexedDBFactory = globalThis.indexedDB) {
       else importPartStore = request.transaction.objectStore(IMPORT_PART_STORE);
       if (!importPartStore.indexNames.contains("importKey")) importPartStore.createIndex("importKey", "importKey", { unique: false });
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error || new Error("Review storage could not be opened."));
-    request.onblocked = () => reject(new Error("Review storage upgrade is blocked by another open tab."));
+    request.onblocked = () => reject(new Error("Review storage upgrade is blocked by another open tab. Close other app tabs, then reload Reviews."));
   });
 }
 
@@ -451,6 +516,22 @@ function requestResult(request) {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("Review storage request failed."));
+  });
+}
+
+function requestEffectivePhotoState(stateStore, photoStore, key) {
+  return new Promise((resolve, reject) => {
+    const stateRequest = stateStore.get(key);
+    stateRequest.onerror = () => reject(stateRequest.error || new Error("Review photo state could not be read."));
+    stateRequest.onsuccess = () => {
+      if (stateRequest.result) {
+        resolve(stateRequest.result);
+        return;
+      }
+      const sourceRequest = photoStore.get(key);
+      sourceRequest.onsuccess = () => resolve(sourceRequest.result);
+      sourceRequest.onerror = () => reject(sourceRequest.error || new Error("Legacy review photo could not be read."));
+    };
   });
 }
 
@@ -504,6 +585,9 @@ function reviewStorageError(error, operation) {
   }
   if (name === "DataCloneError") {
     return new Error("Safari could not store part of this review (DataCloneError). Your choice was not saved.", { cause: error });
+  }
+  if (name === "UnknownError" && /(?:blob|file data|preparing)/i.test(detail)) {
+    return new Error("Safari could not store the photo data for this review. Your choice was not saved; reload Reviews and try again.", { cause: error });
   }
   const suffix = [name, detail].filter(Boolean).join(": ");
   const label = String(operation || "Review storage failed").replace(/[.\s]+$/, "");

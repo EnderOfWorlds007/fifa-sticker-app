@@ -71,7 +71,7 @@ test("photo code debug reviewer runs from v2 pages and reuses scanner OCR auth",
   assert.match(js, /normalized_code_text_box/);
   assert.doesNotMatch(js, /const OCR_TOKEN_KEY =/);
 
-  assert.match(sw, /const BUILD_ID = "build-33e9771b57ec"/);
+  assert.match(sw, /const BUILD_ID = "build-087bdbb24527"/);
   assert.match(sw, /fifa-card-apps-fifa-sticker-app-v2-\$\{BUILD_ID\}/);
   assert.match(sw, /\/fifa-sticker-app\/v2\/photo-code-debug-review\//);
   assert.match(sw, /\/fifa-sticker-app\/v2\/assets\/photo_code_debug_review\.js/);
