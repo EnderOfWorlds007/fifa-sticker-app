@@ -1,4 +1,4 @@
-import { normalizeInsigniaFilter } from "./trade_state.js?v=build-7ab34d90e216";
+import { normalizeInsigniaFilter } from "./trade_state.js?v=build-90cdc644aa5c";
 
 export function mountInsigniaFilter(target, options = {}) {
   const root = typeof target === "string" ? document.querySelector(target) : target;

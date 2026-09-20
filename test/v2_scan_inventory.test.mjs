@@ -115,6 +115,90 @@ test("outgoing trades remove loose copies received by earlier transactions", () 
   });
 });
 
+test("snapshot replacement preserves the received colour when the old copy was unclassified", () => {
+  const rawInventory = {
+    cards: {
+      CIV10: {
+        code: "CIV10",
+        count: 1,
+      },
+    },
+    captures: [],
+    stats: {},
+  };
+  const ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_replace_unclassified_civ10",
+    now: () => "2026-09-20T10:00:00.000Z",
+    kind: "trade",
+    received: [{ code: "CIV10", quantity: 1, variant: "standard_fifa_licensed" }],
+    given: [{ code: "CIV10", quantity: 1 }],
+  });
+
+  const inventory = adjustedInventoryPayload(rawInventory, ledger, {
+    legacyCollected: ["CIV10"],
+  });
+
+  assert.equal(inventory.cards.CIV10.count, 1);
+  assert.equal(inventory.cards.CIV10.back_insignia_type, "standard_fifa_licensed");
+  assert.deepEqual(inventory.cards.CIV10.back_insignia_counts, {
+    standard_fifa_licensed: 1,
+  });
+});
+
+test("plain outgoing stock consumes an implicit unknown copy before a known blue copy", () => {
+  const rawInventory = {
+    cards: {
+      CIV10: {
+        code: "CIV10",
+        count: 2,
+        back_insignia_type: "standard_fifa_licensed",
+        back_insignia_counts: { standard_fifa_licensed: 1 },
+      },
+    },
+    captures: [],
+    stats: {},
+  };
+  const ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_give_unclassified_civ10",
+    now: () => "2026-09-20T10:00:00.000Z",
+    kind: "given",
+    received: [],
+    given: [{ code: "CIV10", quantity: 1 }],
+  });
+
+  const inventory = adjustedInventoryPayload(rawInventory, ledger, {
+    legacyCollected: ["CIV10"],
+  });
+
+  assert.equal(inventory.cards.CIV10.count, 1);
+  assert.deepEqual(inventory.cards.CIV10.back_insignia_counts, {
+    standard_fifa_licensed: 1,
+  });
+});
+
+test("later outgoing trades still remove colours received by earlier transactions", () => {
+  let ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
+    idFactory: () => "txn_receive_civ10_blue",
+    now: () => "2026-09-20T10:00:00.000Z",
+    kind: "received",
+    received: [{ code: "CIV10", quantity: 1, variant: "standard_fifa_licensed" }],
+    given: [],
+  });
+  ledger = createTransaction(ledger, {
+    idFactory: () => "txn_give_civ10_blue",
+    now: () => "2026-09-20T11:00:00.000Z",
+    kind: "given",
+    received: [],
+    given: [{ code: "CIV10", quantity: 1, variant: "standard_fifa_licensed" }],
+  });
+
+  const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger, {
+    legacyCollected: ["CIV10"],
+  });
+
+  assert.equal(inventory.cards.CIV10, undefined);
+});
+
 test("first receipts fill the album before reserved outgoing stock is projected", () => {
   let ledger = createTransaction({ schemaVersion: 1, transactions: [] }, {
     idFactory: () => "txn_first_receipt",
