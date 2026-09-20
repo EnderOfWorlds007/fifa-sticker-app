@@ -3,11 +3,11 @@ import {
   insigniaQuantity,
   loadLedger,
   sortCode,
-} from "./trade_state.js?v=build-087bdbb24527";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-087bdbb24527";
-import { loadInventoryCacheMeta, loadInventoryPayload } from "./inventory_source.js?v=build-087bdbb24527";
-import { ensureImportedCollectionState, loadCollectionState } from "./collection_state.js?v=build-087bdbb24527";
-import { deriveResolvedCollectionModel } from "./collection_model.js?v=build-087bdbb24527";
+} from "./trade_state.js?v=build-71707c8bae72";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-71707c8bae72";
+import { loadInventoryCacheMeta, loadInventoryPayload } from "./inventory_source.js?v=build-71707c8bae72";
+import { ensureImportedCollectionState, loadCollectionState } from "./collection_state.js?v=build-71707c8bae72";
+import { deriveResolvedCollectionModel } from "./collection_model.js?v=build-71707c8bae72";
 
 export async function loadInventoryProjection(options = {}) {
   const catalog = options.catalog || await loadCatalogFallback();

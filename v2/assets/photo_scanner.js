@@ -10,23 +10,23 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-71707c8bae72";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-087bdbb24527";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-087bdbb24527";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-71707c8bae72";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-71707c8bae72";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-71707c8bae72";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-087bdbb24527";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-087bdbb24527";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-087bdbb24527";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-71707c8bae72";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-71707c8bae72";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-71707c8bae72";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-71707c8bae72";
 import {
   loadLatestPhotoReviewBatch,
   activeCloudPhotoReviewProfileId,
@@ -35,26 +35,26 @@ import {
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-71707c8bae72";
 import {
   buildPhotoReviewItems,
   hydratePhotoReviewSlots,
   nextPendingReviewItem,
   reviewCodeCandidates,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-71707c8bae72";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-71707c8bae72";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-087bdbb24527";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-71707c8bae72";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -1311,6 +1311,7 @@ async function chooseInsignia(slot, option) {
     back_insignia_type: slot.back_insignia_type,
     insignia_review_status: slot.insignia_review_status,
     insignia_feedback_status: slot.insignia_feedback_status,
+    insignia_feedback_error: slot.insignia_feedback_error,
     insignia_decision_revision: Number(slot.insignia_decision_revision || 0),
   };
   const completedReviewKey = reviewKeyForSlot(slot, "insignia");
@@ -1318,6 +1319,7 @@ async function chooseInsignia(slot, option) {
   slot.back_insignia_type = option.variant;
   slot.insignia_review_status = option.decision;
   slot.insignia_feedback_status = "pending";
+  slot.insignia_feedback_error = "";
   slot.insignia_decision_revision = decisionRevision;
   setReviewInteractionDisabled(true);
   try {
@@ -1340,10 +1342,20 @@ async function chooseInsignia(slot, option) {
     selectNextReviewSlot({ afterReviewKey: completedReviewKey });
   }
   let feedbackSaved = true;
+  let feedbackError = "";
   try {
-    await persistInsigniaReviewLabel(slot, option.decision);
-  } catch {
+    await persistInsigniaReviewLabel(slot, option.decision, { photoId });
+  } catch (error) {
     feedbackSaved = false;
+    feedbackError = error instanceof Error ? error.message : "Unknown feedback upload error.";
+    console.error("Card-back feedback upload failed", {
+      photoId,
+      slotId,
+      code: slot.code || "",
+      decision: option.decision,
+      decisionRevision,
+      error,
+    });
   }
   try {
     const live = await persistLiveFeedbackStatus({
@@ -1353,6 +1365,8 @@ async function chooseInsignia(slot, option) {
       revision: decisionRevision,
       feedbackField: "insignia_feedback_status",
       feedbackStatus: feedbackSaved ? "sent" : "failed",
+      errorField: "insignia_feedback_error",
+      feedbackError,
     });
     if (!live) return;
     if (feedbackSaved) {
@@ -1360,17 +1374,26 @@ async function chooseInsignia(slot, option) {
       showToast(`${option.label} back saved.`);
       return;
     }
-    status.textContent = `${live.slot.code || "Card"} will be saved as ${option.label}; OCR feedback could not upload.`;
-    showToast("Saved for collection; feedback upload failed.");
+    status.textContent = `${live.slot.code || "Card"} was saved as ${option.label}; OCR feedback failed: ${feedbackError}`;
+    showToast(`Saved for collection; feedback failed: ${feedbackError}`);
   } catch (error) {
     reportReviewStorageFailure(error);
   }
 }
 
-async function persistInsigniaReviewLabel(slot, decision) {
-  if (!slot.upload_id) throw new Error("This scan has no upload id.");
+async function persistInsigniaReviewLabel(slot, decision, context = {}) {
+  const photoId = context.photoId || photoForSlot(slot)?.id || "";
+  const uploadId = String(slot.upload_id || "").trim();
+  const sourceBatchId = String(photoReviewState.sourceBatchId || photoReviewState.id || "").trim();
+  const slotId = String(slot.id || "").trim();
+  const id = uploadId
+    ? `photo:${uploadId}:${slotId}`
+    : sourceBatchId && photoId && slotId
+      ? `photo:retained:${sourceBatchId}:${photoId}:${slotId}`
+      : "";
+  if (!id) throw new Error("This review has no stable batch, photo, and card identity.");
   await saveBackInsigniaReviewLabel({
-    id: `photo:${slot.upload_id}:${slot.id}`,
+    id,
     decision,
     code: slot.code || "",
     predicted_type: slot.original_back_insignia_type || "no_clue",
@@ -2020,17 +2043,22 @@ async function persistLiveFeedbackStatus({
   revision,
   feedbackField,
   feedbackStatus,
+  errorField = "",
+  feedbackError = "",
 }) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const live = liveDecisionSlot(photoId, slotId, revisionField, revision);
     if (!live) return null;
     const previousStatus = live.slot[feedbackField];
+    const previousError = errorField ? live.slot[errorField] : undefined;
     live.slot[feedbackField] = feedbackStatus;
+    if (errorField) live.slot[errorField] = feedbackError;
     try {
       await persistReviewPhoto(live.photo);
       return live;
     } catch (error) {
       live.slot[feedbackField] = previousStatus;
+      if (errorField) live.slot[errorField] = previousError;
       if (!(error instanceof ReviewStateConflictError) || attempt > 0) throw error;
       await hydrateLatestReviewBatch();
     }
