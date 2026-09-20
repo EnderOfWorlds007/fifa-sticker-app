@@ -774,46 +774,19 @@ export function adjustedInventoryPayload(inventory, ledger, options = {}) {
     aliases,
     options.catalog,
   );
-  const given = activeOutgoingAdjustments(ledger, { ...options, aliases });
   const inventoryAlbumCounts = canonicalInventoryAlbumCounts(sourceCards, aliases);
   const albumBaselineCodes = [...inventoryAlbumCounts.entries()]
     .filter(([, quantity]) => quantity > 0)
     .map(([code]) => code);
-  const receivedLoose = completedLooseReceivedAdjustments(ledger, aliases, [...(options.legacyCollected || []), ...albumBaselineCodes]);
   const catalogueByCode = new Map(normalizeCatalogCards(options.catalog).map((card) => [card.code, card]));
-  const combinedCards = { ...sourceCards };
-  for (const [code, adjustment] of receivedLoose.entries()) {
-    const current = combinedCards[code] || {
-      ...(catalogueByCode.get(code) || {}),
-      code,
-      count: 0,
-      back_insignia_counts: {},
-    };
-    current.back_insignia_counts = { ...(current.back_insignia_counts || {}) };
-    current.count = Math.max(0, Number(current.count || 0)) + adjustment.total;
-    for (const [variant, quantity] of adjustment.variants.entries()) {
-      current.back_insignia_counts[variant] = Math.max(0, Number(current.back_insignia_counts[variant] || 0)) + quantity;
-    }
-    current.back_insignia_type = colourTypeFromCounts(current.back_insignia_counts, current.back_insignia_type);
-    if (!Object.keys(current.back_insignia_counts).length) delete current.back_insignia_counts;
-    combinedCards[code] = current;
-  }
-  const cards = {};
-  for (const [code, card] of Object.entries(combinedCards)) {
-    const adjustment = given.get(code) || { total: 0, variants: new Map() };
-    const removed = adjustment.total;
-    const originalCount = Math.max(0, Number(card?.count || 0));
-    const nextCount = Math.max(0, originalCount - removed);
-    if (!nextCount) continue;
-    cards[code] = {
-      ...card,
-      count: nextCount,
-    };
-    if (card?.back_insignia_counts) {
-      cards[code].back_insignia_counts = adjustColourCounts(card.back_insignia_counts, adjustment);
-      cards[code].back_insignia_type = colourTypeFromCounts(cards[code].back_insignia_counts, card.back_insignia_type);
-    }
-  }
+  const cards = projectInventoryCardsInLedgerOrder({
+    sourceCards,
+    ledger,
+    aliases,
+    catalogueByCode,
+    albumBaselineCodes: [...(options.legacyCollected || []), ...albumBaselineCodes],
+    excludeTransactionId: options.excludeTransactionId,
+  });
   const captures = Array.isArray(inventory?.captures) ? inventory.captures : [];
   return {
     ...(inventory || {}),
@@ -827,6 +800,106 @@ export function adjustedInventoryPayload(inventory, ledger, options = {}) {
       adjusted: true,
     },
   };
+}
+
+function projectInventoryCardsInLedgerOrder({
+  sourceCards,
+  ledger,
+  aliases,
+  catalogueByCode,
+  albumBaselineCodes,
+  excludeTransactionId,
+}) {
+  const cards = Object.fromEntries(Object.entries(sourceCards).map(([code, card]) => [code, {
+    ...card,
+    ...(card?.back_insignia_counts
+      ? { back_insignia_counts: { ...card.back_insignia_counts } }
+      : {}),
+  }]));
+  const albumFilled = new Set((albumBaselineCodes || [])
+    .map((code) => canonicalCardCode(code, aliases))
+    .filter(Boolean));
+
+  for (const transaction of normalizeLedger(ledger).transactions) {
+    if (!["reserved", "completed"].includes(transaction.status)) continue;
+    if (transaction.id !== excludeTransactionId) {
+      for (const line of transaction.given || []) {
+        removeInventoryLine(cards, canonicalizeInventoryLine(line, aliases));
+      }
+    }
+    if (transaction.status !== "completed") continue;
+    for (const rawLine of transaction.received || []) {
+      const line = canonicalizeInventoryLine(rawLine, aliases);
+      let looseQuantity = line.quantity;
+      if (!albumFilled.has(line.code)) {
+        albumFilled.add(line.code);
+        looseQuantity -= 1;
+      }
+      if (looseQuantity > 0) {
+        addInventoryLine(cards, { ...line, quantity: looseQuantity }, catalogueByCode);
+      }
+    }
+  }
+  return Object.fromEntries(Object.entries(cards).filter(([, card]) => Number(card?.count || 0) > 0));
+}
+
+function removeInventoryLine(cards, line) {
+  const card = cards[line.code];
+  if (!card) return;
+  const originalCount = Math.max(0, Number(card.count || 0));
+  let remaining = Math.min(originalCount, Math.max(0, Number(line.quantity || 0)));
+  if (!remaining) return;
+
+  const counts = { ...(card.back_insignia_counts || {}) };
+  const knownTotal = Object.values(counts)
+    .reduce((sum, quantity) => sum + Math.max(0, Number(quantity || 0)), 0);
+  let implicitUnknown = Math.max(0, originalCount - knownTotal);
+  const takeVariant = (variant) => {
+    if (!variant || remaining <= 0) return;
+    const available = Math.max(0, Number(counts[variant] || 0));
+    const used = Math.min(available, remaining);
+    if (Object.prototype.hasOwnProperty.call(counts, variant)) counts[variant] = available - used;
+    remaining -= used;
+  };
+  const takeImplicitUnknown = () => {
+    const used = Math.min(implicitUnknown, remaining);
+    implicitUnknown -= used;
+    remaining -= used;
+  };
+
+  if (line.variant) takeVariant(line.variant);
+  takeImplicitUnknown();
+  for (const variant of ["standard_fifa_licensed", "united_edition", "no_clue"]) {
+    if (variant !== line.variant) takeVariant(variant);
+  }
+  for (const variant of Object.keys(counts).sort()) {
+    if (![line.variant, "standard_fifa_licensed", "united_edition", "no_clue"].includes(variant)) {
+      takeVariant(variant);
+    }
+  }
+
+  const removed = Math.min(originalCount, Math.max(0, Number(line.quantity || 0)));
+  const nextCount = originalCount - removed;
+  card.count = nextCount;
+  if (Object.keys(counts).length) card.back_insignia_counts = counts;
+  else delete card.back_insignia_counts;
+  card.back_insignia_type = colourTypeFromCounts(counts, card.back_insignia_type);
+}
+
+function addInventoryLine(cards, line, catalogueByCode) {
+  const current = cards[line.code] || {
+    ...(catalogueByCode.get(line.code) || {}),
+    code: line.code,
+    count: 0,
+  };
+  current.count = Math.max(0, Number(current.count || 0)) + line.quantity;
+  if (line.variant) {
+    current.back_insignia_counts = { ...(current.back_insignia_counts || {}) };
+    current.back_insignia_counts[line.variant] = Math.max(0, Number(current.back_insignia_counts[line.variant] || 0))
+      + line.quantity;
+  }
+  current.back_insignia_type = colourTypeFromCounts(current.back_insignia_counts, current.back_insignia_type);
+  cards[line.code] = current;
 }
 
 export function adjustedInventoryCsv(inventory) {
@@ -1743,23 +1816,6 @@ function normalizeQuantity(value) {
   return Number.isFinite(quantity) ? Math.max(1, Math.floor(quantity)) : 1;
 }
 
-function activeOutgoingAdjustments(ledger, options = {}) {
-  const totals = new Map();
-  const aliases = options.aliases || normalizeCatalogAliases(options.catalog);
-  for (const transaction of normalizeLedger(ledger).transactions) {
-    if (!["reserved", "completed"].includes(transaction.status)) continue;
-    if (options.excludeTransactionId && transaction.id === options.excludeTransactionId) continue;
-    for (const line of transaction.given || []) {
-      const code = canonicalCardCode(line.code, aliases);
-      const current = totals.get(code) || { total: 0, variants: new Map() };
-      current.total += line.quantity;
-      if (line.variant) current.variants.set(line.variant, (current.variants.get(line.variant) || 0) + line.quantity);
-      totals.set(code, current);
-    }
-  }
-  return totals;
-}
-
 function aggregateLineRequests(lines) {
   const requests = new Map();
   for (const line of lines) {
@@ -1778,27 +1834,6 @@ function aggregateLineRequests(lines) {
     requests.set(line.code, request);
   }
   return requests;
-}
-
-function adjustColourCounts(counts, adjustment) {
-  const removed = Number(adjustment?.total || 0);
-  if (!counts || typeof counts !== "object" || removed <= 0) return counts;
-  const adjusted = { ...counts };
-  let remaining = removed;
-  for (const [variant, quantity] of adjustment.variants || []) {
-    const value = Math.max(0, Number(adjusted[variant] || 0));
-    const take = Math.min(value, quantity);
-    adjusted[variant] = value - take;
-    remaining -= take;
-  }
-  for (const key of ["standard_fifa_licensed", "united_edition", "no_clue"]) {
-    if (remaining <= 0) break;
-    const value = Math.max(0, Number(adjusted[key] || 0));
-    const take = Math.min(value, remaining);
-    adjusted[key] = value - take;
-    remaining -= take;
-  }
-  return adjusted;
 }
 
 function colourTypeFromCounts(counts, fallback = "") {

@@ -262,7 +262,7 @@ test("public projections are versioned for colour quantities", () => {
   assert.match(projectionSource, /variants:\s*\{/);
   assert.match(projectionSource, /green: insigniaQuantity/);
   assert.match(projectionSource, /blue: insigniaQuantity/);
-  assert.match(shareSource, /PUBLIC_PROJECTION_MODEL_VERSION = 4/);
+  assert.match(shareSource, /PUBLIC_PROJECTION_MODEL_VERSION = 5/);
   assert.match(shareSource, /modelVersion: PUBLIC_PROJECTION_MODEL_VERSION/);
   const cloudSource = readFileSync(new URL("../v2/assets/cloud_sync.js", import.meta.url), "utf8");
   assert.match(cloudSource, /pendingInitializationSave = kind/);
