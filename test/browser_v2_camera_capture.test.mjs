@@ -95,7 +95,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(reviewsCdp, "Page.enable");
         await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
           source: `
-            sessionStorage.setItem("fifa-v2-controller-reload-build-90cdc644aa5c", "1");
+            sessionStorage.setItem("fifa-v2-controller-reload-build-3da9e0dd8cdb", "1");
             window.__reviewErrors = [];
             window.__cloudFetchStarted = false;
             window.__cloudAutosaveStarted = false;
@@ -333,6 +333,29 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         "TUR5 ×22 duplicate trading cards",
       ]);
 
+      await evaluate(cdp, `(() => {
+        const completeAlbumCodes = ["USA1", "CUW9", "CUW13", "CIV10", "NED13", "SWE5", "EGY5", "EGY3", "CPV13", "IRQ6", "IRQ9", "IRQ19", "AUT13", "PAN5"];
+        localStorage.setItem("panini.collectionTracker.v1", JSON.stringify({ collected: completeAlbumCodes }));
+        const input = document.querySelector("#compareText");
+        input.value = "Hello, I am looking for the last cards USA1, CUW9 and 13, CIV 10, NED13, SWE5, EGY5 et 3, CPV13, IRQ 6, 9 and 19, AUT 13, PAN 5. Lot of doubles to exchange";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`);
+      await waitForExpression(cdp, `document.querySelector(".pasteCardStatusPreview [data-paste-card-summary]")?.textContent.startsWith("0 new for album")`);
+      const conjunctionPreview = await evaluate(cdp, `({
+        summary: document.querySelector(".pasteCardStatusPreview [data-paste-card-summary]").textContent,
+        count: document.querySelector(".pasteCardStatusPreview [data-paste-card-count]").textContent,
+        codes: [...document.querySelectorAll(".pasteCardStatusList li strong")].map((row) => row.textContent),
+      })`);
+      assert.equal(conjunctionPreview.summary, "0 new for album · 14 new trading cards · 0 duplicate trading cards");
+      assert.equal(conjunctionPreview.count, "14 parsed");
+      assert.equal(conjunctionPreview.codes.includes("AND13"), false);
+      assert.equal(conjunctionPreview.codes.includes("AND19"), false);
+      assert.equal(conjunctionPreview.codes.includes("ET3"), false);
+      assert.deepEqual(conjunctionPreview.codes, [
+        "AUT13", "CIV10", "CPV13", "CUW9", "CUW13", "EGY3", "EGY5",
+        "IRQ6", "IRQ9", "IRQ19", "NED13", "PAN5", "SWE5", "USA1",
+      ]);
+
       await send(cdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/scanner/` });
       await waitForExpression(cdp, `document.querySelector("#photoScannerBatchInput")`);
       await delay(500);
@@ -369,7 +392,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(cleanScannerCdp, "Runtime.enable");
         await send(cleanScannerCdp, "Page.enable");
         await send(cleanScannerCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-90cdc644aa5c", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-3da9e0dd8cdb", "1")`,
         });
         await send(cleanScannerCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/scanner/` });
         await waitForExpression(cleanScannerCdp, `document.body?.dataset.photoScannerReady === "true"`);
@@ -408,7 +431,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(batchReviewsCdp, "Runtime.enable");
         await send(batchReviewsCdp, "Page.enable");
         await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-90cdc644aa5c", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-3da9e0dd8cdb", "1")`,
         });
         await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
@@ -419,7 +442,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(syncedReviewsCdp, "Runtime.enable");
         await send(syncedReviewsCdp, "Page.enable");
         await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-90cdc644aa5c", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-3da9e0dd8cdb", "1")`,
         });
         await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
@@ -533,7 +556,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-90cdc644aa5c", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-3da9e0dd8cdb", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },

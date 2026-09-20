@@ -7,22 +7,24 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-3da9e0dd8cdb";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
   applyTextInventoryCodesToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-90cdc644aa5c";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-90cdc644aa5c";
-import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-90cdc644aa5c";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-3da9e0dd8cdb";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-3da9e0dd8cdb";
+import { extractCodeOccurrences } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3da9e0dd8cdb";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-3da9e0dd8cdb";
+import { catalogHasCards, partitionCatalogCodes } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-3da9e0dd8cdb";
 import {
   classifyScannedCards,
+  expandCodeOccurrences,
   groupScannedCardStatuses,
   scannedCardStatusSummaryText,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-90cdc644aa5c";
-import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-3da9e0dd8cdb";
+import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-3da9e0dd8cdb";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");
@@ -39,6 +41,7 @@ const backendStatus = document.querySelector("[data-ocr-backend-status]");
 let albumScanRunning = false;
 let lastAlbumSelectionSignature = "";
 let parsedTextCodes = [];
+let parsedTextRejectedCodes = [];
 let parseTextTimer = null;
 let parseTextRequestId = 0;
 let backendTestRunning = false;
@@ -112,35 +115,52 @@ async function updateTextParsePreview() {
   const count = textParsePreview.querySelector("[data-text-inventory-count]");
   const statusNode = textParsePreview.querySelector("[data-text-inventory-status]");
   const applyButton = textParsePreview.querySelector("[data-apply-text-inventory]");
-  parsedTextCodes = parsedCodesFromText(value);
+  const candidateCodes = parsedCodesFromText(value);
+  parsedTextCodes = [];
+  parsedTextRejectedCodes = [];
   if (!value) {
     textParsePreview.hidden = true;
     if (applyButton) applyButton.disabled = true;
     return;
   }
   textParsePreview.hidden = false;
-  if (count) count.textContent = parsedTextCodes.length ? `${parsedTextCodes.length} parsed` : "None found";
-  if (!parsedTextCodes.length) {
+  if (count) count.textContent = candidateCodes.length ? `${candidateCodes.length} parsed` : "None found";
+  if (!candidateCodes.length) {
     list?.replaceChildren();
     if (statusNode) statusNode.textContent = "No card codes recognized yet.";
   } else {
     if (statusNode) statusNode.textContent = "Checking your collection…";
     try {
-      const model = (await loadInventoryProjection()).collectionModel;
+      const projection = await loadInventoryProjection();
+      if (!catalogHasCards(projection.catalog)) throw new Error("Collection catalogue unavailable.");
       if (requestId !== parseTextRequestId || pasteBox.textarea.value.trim() !== value) return;
+      const partition = partitionCatalogCodes(candidateCodes, projection.catalog);
+      parsedTextCodes = partition.accepted;
+      parsedTextRejectedCodes = partition.rejected;
+      if (count) {
+        count.textContent = parsedTextRejectedCodes.length
+          ? `${parsedTextCodes.length} recognized · ${parsedTextRejectedCodes.length} ignored`
+          : `${parsedTextCodes.length} recognized`;
+      }
+      const model = projection.collectionModel;
       const statuses = classifyScannedCards(parsedTextCodes, model);
       renderPastedCardStatusList(list, groupScannedCardStatuses(statuses));
       if (statusNode) {
-        statusNode.textContent = `${scannedCardStatusSummaryText(summarizeScannedCardStatuses(statuses))}. Review, then apply these cards.`;
+        const rejected = parsedTextRejectedCodes.length
+          ? ` Ignored because they are not in this catalogue: ${[...new Set(parsedTextRejectedCodes)].join(", ")}.`
+          : "";
+        statusNode.textContent = `${scannedCardStatusSummaryText(summarizeScannedCardStatuses(statuses))}.${rejected} Review, then apply these cards.`;
       }
     } catch {
       if (requestId !== parseTextRequestId || pasteBox.textarea.value.trim() !== value) return;
-      list?.replaceChildren(...[...new Set(parsedTextCodes)].slice(0, 120).map((code) => {
+      parsedTextCodes = [];
+      parsedTextRejectedCodes = candidateCodes;
+      list?.replaceChildren(...[...new Set(candidateCodes)].slice(0, 120).map((code) => {
         const item = document.createElement("li");
         item.textContent = code;
         return item;
       }));
-      if (statusNode) statusNode.textContent = "Cards parsed, but collection status is unavailable.";
+      if (statusNode) statusNode.textContent = "The catalogue is unavailable, so these codes cannot be applied safely.";
     }
   }
   if (applyButton) applyButton.disabled = parsedTextCodes.length === 0;
@@ -148,19 +168,17 @@ async function updateTextParsePreview() {
 
 function parsedCodesFromText(value) {
   if (!value) return [];
-  const normalized = normalizeCodeInput(value).text || "";
-  return normalized
-    .split(/\s+/)
-    .map((code) => code.trim())
-    .filter(Boolean);
+  return expandCodeOccurrences(extractCodeOccurrences(value));
 }
 
-function applyParsedTextInventory(event) {
+async function applyParsedTextInventory(event) {
   const button = event?.currentTarget;
   if (!parsedTextCodes.length) return;
   if (button) button.disabled = true;
   try {
-    const applied = applyTextInventoryCodesToInventory(parsedTextCodes);
+    const projection = await loadInventoryProjection();
+    if (!catalogHasCards(projection.catalog)) throw new Error("Collection catalogue unavailable.");
+    const applied = applyTextInventoryCodesToInventory(parsedTextCodes, { catalog: projection.catalog });
     const statusNode = textParsePreview?.querySelector("[data-text-inventory-status]");
     const message = `Saved ${applied.unique} card${applied.unique === 1 ? "" : "s"} from text`;
     if (statusNode) statusNode.textContent = `${message}.`;
@@ -329,11 +347,13 @@ function withBackendAuth(options = {}) {
   return { ...options, headers };
 }
 
-function applyAlbumResult(result, button, card) {
+async function applyAlbumResult(result, button, card) {
   if (!button) return;
   button.disabled = true;
   try {
-    const applied = applyAlbumPageResultToInventory(result);
+    const projection = await loadInventoryProjection();
+    if (!catalogHasCards(projection.catalog)) throw new Error("Collection catalogue unavailable.");
+    const applied = applyAlbumPageResultToInventory(result, { catalog: projection.catalog });
     const statusNode = card?.querySelector("[data-album-inventory-status]");
     const message = applied.applied
       ? `Saved ${applied.filled} in album · ${applied.empty} empty · ${applied.skipped} skipped`

@@ -158,6 +158,31 @@ test("v2 parser preserves every card and quantity in a shared multiline doubles 
   });
 });
 
+test("v2 parser treats conjunctions as separators and never invents conjunction countries", () => {
+  const message = "Hello, I am looking for the last cards USA1, CUW9 and 13, CIV 10, NED13, SWE5, EGY5 et 3, CPV13, IRQ 6, 9 and 19, AUT 13, PAN 5. Lot of doubles to exchange";
+
+  assert.deepEqual([...extractCodeOccurrences(message).entries()], [
+    ["AUT13", 1],
+    ["CIV10", 1],
+    ["CPV13", 1],
+    ["CUW9", 1],
+    ["CUW13", 1],
+    ["EGY3", 1],
+    ["EGY5", 1],
+    ["IRQ6", 1],
+    ["IRQ9", 1],
+    ["IRQ19", 1],
+    ["NED13", 1],
+    ["PAN5", 1],
+    ["SWE5", 1],
+    ["USA1", 1],
+  ]);
+  assert.equal(extractCodeOccurrences(message).has("AND13"), false);
+  assert.equal(extractCodeOccurrences(message).has("AND19"), false);
+  assert.equal(extractCodeOccurrences(message).has("ET3"), false);
+  assert.deepEqual([...extractCodeOccurrences("CHI10, AND13, ET3").entries()], [["CHI10", 1]]);
+});
+
 const HYPHEN_SEPARATED_DOUBLES_LIST = `Hi! Here are our doubles to exchange:
 
 COCA COLA:

@@ -28,6 +28,6 @@ test("successful received and traded-away collection actions clear their consume
 });
 
 test("invalid collection actions return before clearing the text", () => {
-  assert.match(collectionSource, /function markGotCards\(\) \{\s*const occurrences = parsedUpdateCodes\(\);\s*if \(!occurrences\) return;/);
-  assert.match(collectionSource, /async function markTradedAway\(\) \{\s*const occurrences = parsedUpdateCodes\(\);\s*if \(!occurrences\) return;/);
+  assert.match(collectionSource, /function markGotCards\(\) \{\s*if \(!requireVerifiedCatalogue\(\)\) return;\s*const occurrences = parsedUpdateCodes\(\);\s*if \(!occurrences\) return;/);
+  assert.match(collectionSource, /async function markTradedAway\(\) \{\s*if \(!requireVerifiedCatalogue\(\)\) return;\s*const occurrences = parsedUpdateCodes\(\);\s*if \(!occurrences\) return;/);
 });

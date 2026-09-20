@@ -4,6 +4,11 @@ import {
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
 } from "./trade_state.js";
+import {
+  REJECTED_CARD_EVIDENCE_KEY,
+  recordRejectedCardEvidence,
+  sanitizeBusinessProjection,
+} from "./catalog_membership.js";
 
 export {
   COLLECTION_KEY,
@@ -22,20 +27,35 @@ export function captureBackupStorageSnapshot({ storage, liveInventorySnapshot })
     ledger: storage.getItem(LEDGER_KEY),
     inventory: storage.getItem(INVENTORY_SNAPSHOT_KEY),
     inventoryMeta: storage.getItem(INVENTORY_CACHE_META_KEY),
+    rejectedEvidence: storage.getItem(REJECTED_CARD_EVIDENCE_KEY),
     inventorySnapshot: liveInventorySnapshot,
   };
 }
 
-export function applyBackupRestoreStorage({ storage, restorePlan, previous }) {
+export function applyBackupRestoreStorage({ storage, restorePlan, previous, catalog }) {
   const changedValues = [];
   try {
-    writeStorageValue(storage, COLLECTION_KEY, JSON.stringify(restorePlan.collectionState), changedValues, previous.collection);
-    writeStorageValue(storage, LEDGER_KEY, JSON.stringify(restorePlan.ledger), changedValues, previous.ledger);
-    applyInventoryRestoreStorage({ storage, restorePlan, changedValues, previous });
+    const { projection, rejected } = sanitizeBusinessProjection({
+      collectionState: restorePlan.collectionState,
+      ledger: restorePlan.ledger,
+      inventorySnapshot: restorePlan.inventorySnapshot || {},
+    }, catalog);
+    writeStorageValue(storage, COLLECTION_KEY, JSON.stringify(projection.collectionState), changedValues, previous.collection);
+    writeStorageValue(storage, LEDGER_KEY, JSON.stringify(projection.ledger), changedValues, previous.ledger);
+    applyInventoryRestoreStorage({
+      storage,
+      restorePlan: { ...restorePlan, inventorySnapshot: restorePlan.inventorySnapshot ? projection.inventorySnapshot : null },
+      changedValues,
+      previous,
+    });
+    const evidenceBefore = storage.getItem(REJECTED_CARD_EVIDENCE_KEY);
+    if (recordRejectedCardEvidence(storage, { source: "backup restore", rejected })) {
+      changedValues.push({ key: REJECTED_CARD_EVIDENCE_KEY, previousValue: evidenceBefore });
+    }
     return {
       status: "restored",
-      collectionState: restorePlan.collectionState,
-      inventorySnapshot: restorePlan.shouldPreserveInventory ? preservedInventorySnapshot(previous) : restorePlan.inventorySnapshot,
+      collectionState: projection.collectionState,
+      inventorySnapshot: restorePlan.shouldPreserveInventory ? preservedInventorySnapshot(previous) : projection.inventorySnapshot,
     };
   } catch (error) {
     return {

@@ -2,8 +2,9 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   loadCachedInventoryPayload,
-} from "./inventory_source.js?v=build-90cdc644aa5c";
-import { ensureActiveProfileId } from "./v2_profile.js?v=build-90cdc644aa5c";
+} from "./inventory_source.js?v=build-3da9e0dd8cdb";
+import { ensureActiveProfileId } from "./v2_profile.js?v=build-3da9e0dd8cdb";
+import { partitionCatalogCodes, partitionCatalogLines } from "./catalog_membership.js?v=build-3da9e0dd8cdb";
 
 const ALBUM_SCAN_SOURCE_LABEL = "album page scan";
 const TEXT_INVENTORY_SOURCE_LABEL = "pasted text inventory";
@@ -27,10 +28,19 @@ export function albumPageInventoryChanges(result) {
 export function applyAlbumPageResultToInventory(result, {
   storage = globalThis.localStorage,
   now = () => new Date().toISOString(),
+  catalog,
 } = {}) {
-  const changes = albumPageInventoryChanges(result);
+  const partition = partitionCatalogLines(albumPageInventoryChanges(result), catalog);
+  const changes = partition.accepted;
   if (!changes.length) {
-    return { applied: 0, filled: 0, empty: 0, skipped: skippedSlotCount(result), payload: loadCachedInventoryPayload(storage) };
+    return {
+      applied: 0,
+      filled: 0,
+      empty: 0,
+      skipped: skippedSlotCount(result),
+      rejected: partition.rejected.length,
+      payload: loadCachedInventoryPayload(storage),
+    };
   }
   const timestamp = now();
   const payload = normalizedInventoryPayload(loadCachedInventoryPayload(storage), timestamp);
@@ -82,16 +92,18 @@ export function applyAlbumPageResultToInventory(result, {
     sourceLabel: ALBUM_SCAN_SOURCE_LABEL,
   }));
   ensureActiveProfileId(storage);
-  return { applied: changes.length, filled, empty, skipped: skippedSlotCount(result), payload };
+  return { applied: changes.length, filled, empty, skipped: skippedSlotCount(result), rejected: partition.rejected.length, payload };
 }
 
 export function applyTextInventoryCodesToInventory(codes, {
   storage = globalThis.localStorage,
   now = () => new Date().toISOString(),
+  catalog,
 } = {}) {
-  const quantities = normalizedCodeQuantities(codes);
+  const partition = partitionCatalogCodes(codes, catalog);
+  const quantities = normalizedCodeQuantities(partition.accepted);
   if (!quantities.size) {
-    return { applied: 0, unique: 0, total: 0, payload: loadCachedInventoryPayload(storage) };
+    return { applied: 0, unique: 0, total: 0, rejected: partition.rejected.length, payload: loadCachedInventoryPayload(storage) };
   }
   const timestamp = now();
   const payload = normalizedInventoryPayload(loadCachedInventoryPayload(storage), timestamp);
@@ -124,7 +136,7 @@ export function applyTextInventoryCodesToInventory(codes, {
     sourceLabel: TEXT_INVENTORY_SOURCE_LABEL,
   }));
   ensureActiveProfileId(storage);
-  return { applied: total, unique: quantities.size, total, payload };
+  return { applied: total, unique: quantities.size, total, rejected: partition.rejected.length, payload };
 }
 
 function normalizedInventoryPayload(payload, timestamp) {

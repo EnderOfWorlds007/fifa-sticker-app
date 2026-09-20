@@ -10,23 +10,21 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-3da9e0dd8cdb";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-90cdc644aa5c";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-90cdc644aa5c";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3da9e0dd8cdb";
 import {
   normalizeCollectionCodeList,
-  splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-90cdc644aa5c";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-90cdc644aa5c";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-90cdc644aa5c";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-3da9e0dd8cdb";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-3da9e0dd8cdb";
+import { catalogHasCards, partitionCatalogLines } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-3da9e0dd8cdb";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-3da9e0dd8cdb";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-3da9e0dd8cdb";
 import {
   loadLatestPhotoReviewBatch,
   activeCloudPhotoReviewProfileId,
@@ -35,26 +33,26 @@ import {
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-3da9e0dd8cdb";
 import {
   buildPhotoReviewItems,
   hydratePhotoReviewSlots,
   nextPendingReviewItem,
   reviewCodeCandidates,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-3da9e0dd8cdb";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-3da9e0dd8cdb";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-3da9e0dd8cdb";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -1659,11 +1657,7 @@ function splitCollectionCodes(codes) {
   if (latestInventoryProjection?.collectionModel) {
     return splitCodesByResolvedCollectionModel(codes, latestInventoryProjection.collectionModel);
   }
-  return splitCodesByAlbumStatus(codes, {
-    collectionState: loadCollectionState(),
-    ledger: loadLedger(),
-    inventoryPayload: loadCachedInventoryPayload(),
-  });
+  return { newCodes: [], inventoryCodes: [] };
 }
 
 function classifyCurrentScan() {
@@ -1671,14 +1665,7 @@ function classifyCurrentScan() {
 }
 
 function fallbackCollectionModel() {
-  const newCodes = new Set(latestCollectionSplit.newCodes);
-  return {
-    byCode: Object.fromEntries([...new Set(latestScanCodes)].map((code) => [code, {
-      code,
-      missing: newCodes.has(code),
-      inventory: { availableToTradeQuantity: 0 },
-    }])),
-  };
+  return { byCode: {} };
 }
 
 async function refreshScannerCollectionProjection() {
@@ -1704,23 +1691,28 @@ function renderCollectionActions() {
     return;
   }
   const scanSummary = summarizeScannedCardStatuses(latestScanStatuses);
-  const insignias = summarizeScanInsignias(currentScanReceivedLines());
+  const received = currentScanReceivedLines();
+  const receivedCount = received.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+  const insignias = summarizeScanInsignias(received);
   const insigniaSummary = [
     insignias.blue ? `${insignias.blue} blue` : "",
     insignias.green ? `${insignias.green} green` : "",
     insignias.unknown ? `${insignias.unknown} colour unknown` : "",
   ].filter(Boolean).join(" · ");
   const applied = isCurrentScanApplied();
+  const catalogueReady = catalogHasCards(latestInventoryProjection?.catalog);
   collectionActions.hidden = false;
-  addCollectionButton.disabled = applied;
+  addCollectionButton.disabled = applied || !catalogueReady || receivedCount === 0;
   addCollectionButton.textContent = applied ? "Added to collection" : "Add to collection";
   if (undoCollectionButton) {
     undoCollectionButton.hidden = !applied;
     undoCollectionButton.disabled = !applied;
   }
-  collectionSummary.textContent = applied
+  collectionSummary.textContent = !catalogueReady
+    ? "Collection catalogue unavailable. Codes remain in review evidence, but cannot be added safely."
+    : applied
     ? `${total} scanned card${total === 1 ? "" : "s"} already added · ${insigniaSummary} · Undo to add again`
-    : `${scanSummary.newForAlbum} new for album · ${scanSummary.newTradingCards} new trading card${scanSummary.newTradingCards === 1 ? "" : "s"} · ${scanSummary.duplicateTradingCards} duplicate trading card${scanSummary.duplicateTradingCards === 1 ? "" : "s"} · ${insigniaSummary}`;
+    : `${scanSummary.newForAlbum} new for album · ${scanSummary.newTradingCards} new trading card${scanSummary.newTradingCards === 1 ? "" : "s"} · ${scanSummary.duplicateTradingCards} duplicate trading card${scanSummary.duplicateTradingCards === 1 ? "" : "s"}${scanSummary.unrecognizedCards ? ` · ${scanSummary.unrecognizedCards} unrecognized and not added` : ""} · ${insigniaSummary}`;
 }
 
 function renderRecognizedCodeRows() {
@@ -1836,7 +1828,9 @@ function currentScanReceivedLines() {
   const slots = photoReviewState.photos.flatMap((photo) => photo.status === "succeeded"
     ? (photo.slots || []).filter((slot) => slot.code && slotStatus(slot) === "matched")
     : []);
-  return receivedLinesForScan({ slots, fallbackCodes: latestScanCodes });
+  const lines = receivedLinesForScan({ slots, fallbackCodes: latestScanCodes });
+  if (!catalogHasCards(latestInventoryProjection?.catalog)) return [];
+  return partitionCatalogLines(lines, latestInventoryProjection.catalog).accepted;
 }
 
 function renderReviewQueue() {
