@@ -95,7 +95,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(reviewsCdp, "Page.enable");
         await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
           source: `
-            sessionStorage.setItem("fifa-v2-controller-reload-build-33e9771b57ec", "1");
+            sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1");
             window.__reviewErrors = [];
             window.__cloudFetchStarted = false;
             window.__cloudAutosaveStarted = false;
@@ -370,7 +370,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(batchReviewsCdp, "Runtime.enable");
         await send(batchReviewsCdp, "Page.enable");
         await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-33e9771b57ec", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1")`,
         });
         await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
@@ -381,7 +381,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(syncedReviewsCdp, "Runtime.enable");
         await send(syncedReviewsCdp, "Page.enable");
         await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-33e9771b57ec", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1")`,
         });
         await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
@@ -493,7 +493,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-33e9771b57ec", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
@@ -713,7 +713,7 @@ async function evaluate(cdp, expression) {
 async function activeReviewBatchRevision(cdp) {
   return evaluate(cdp, `(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("panini-photo-review-queue", 3);
+      const request = indexedDB.open("panini-photo-review-queue", 4);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -740,7 +740,7 @@ async function activeReviewBatchRevision(cdp) {
 async function activeReviewSlotState(cdp, photoIndex, slotIndex) {
   return evaluate(cdp, `(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("panini-photo-review-queue", 3);
+      const request = indexedDB.open("panini-photo-review-queue", 4);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -757,7 +757,14 @@ async function activeReviewSlotState(cdp, photoIndex, slotIndex) {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      const slot = photos.sort((left, right) => left.index - right.index)[${photoIndex}]?.slots?.[${slotIndex}];
+      const photo = photos.sort((left, right) => left.index - right.index)[${photoIndex}];
+      const state = await new Promise((resolve, reject) => {
+        const request = database.transaction("review_photo_states", "readonly")
+          .objectStore("review_photo_states").get(photo?.key || "");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const slot = (state?.slots || photo?.slots || [])[${slotIndex}];
       return {
         decision: slot?.insignia_review_status || "",
         variant: slot?.back_insignia_type || "",
@@ -773,7 +780,7 @@ async function activeReviewSlotState(cdp, photoIndex, slotIndex) {
 async function stripActiveReviewCodeCandidates(cdp) {
   return evaluate(cdp, `(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("panini-photo-review-queue", 3);
+      const request = indexedDB.open("panini-photo-review-queue", 4);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -785,9 +792,9 @@ async function stripActiveReviewCodeCandidates(cdp) {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
-      const readTransaction = database.transaction("review_photos", "readonly");
-      const photos = await new Promise((resolve, reject) => {
-        const request = readTransaction.objectStore("review_photos").index("batchId").getAll(active?.batchId || "");
+      const readTransaction = database.transaction("review_photo_states", "readonly");
+      const states = await new Promise((resolve, reject) => {
+        const request = readTransaction.objectStore("review_photo_states").index("batchId").getAll(active?.batchId || "");
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -796,10 +803,10 @@ async function stripActiveReviewCodeCandidates(cdp) {
         readTransaction.onerror = () => reject(readTransaction.error);
         readTransaction.onabort = () => reject(readTransaction.error);
       });
-      const writeTransaction = database.transaction("review_photos", "readwrite");
-      for (const photo of photos) {
-        for (const slot of photo.slots || []) delete slot.code_candidates;
-        writeTransaction.objectStore("review_photos").put(photo);
+      const writeTransaction = database.transaction("review_photo_states", "readwrite");
+      for (const state of states) {
+        for (const slot of state.slots || []) delete slot.code_candidates;
+        writeTransaction.objectStore("review_photo_states").put(state);
       }
       await new Promise((resolve, reject) => {
         writeTransaction.oncomplete = resolve;

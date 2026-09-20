@@ -19,10 +19,12 @@ import {
   loadLatestPhotoReviewBatch,
   migrateLegacyPhotoReviewProfile,
   photoRecord,
+  photoStateRecord,
   ReviewStateConflictError,
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewPhoto,
+  savePhotoReviewState,
 } from "../v2/assets/photo_review_store_v2.js";
 import {
   CLOUD_REVIEW_COMMIT_KIND,
@@ -115,7 +117,15 @@ test("review storage records keep blobs but never persist object URLs or active 
   assert.equal("selectedSlotId" in batch, false);
   assert.equal(photo.blob, blob);
   assert.equal("imageUrl" in photo, false);
+  assert.equal("slots" in photo, false);
   assert.equal(photo.key, "batch-1:photo-1");
+  const state = photoStateRecord("batch-1", {
+    id: "photo-1",
+    blob,
+    slots: [{ id: "slot-1" }],
+  });
+  assert.equal("blob" in state, false);
+  assert.deepEqual(state.slots, [{ id: "slot-1" }]);
 });
 
 test("review batches and per-photo decisions round-trip through IndexedDB", async () => {
@@ -150,6 +160,40 @@ test("review batches and per-photo decisions round-trip through IndexedDB", asyn
   assert.equal(restored.photos[0].slots[0].code_review_status, "corrected");
   assert.equal(restored.photos[0].slots[0].code, "CAN15");
   assert.equal(await loadLatestPhotoReviewBatch("another-profile", { indexedDB }), null);
+  assert.equal(indexedDB.records("review_photo_states").length, 1);
+  assert.equal("blob" in indexedDB.records("review_photo_states")[0], false);
+});
+
+test("legacy Blob records lazily create Blob-free review state without rewriting photo evidence", async () => {
+  const control = {};
+  const indexedDB = fakeIndexedDB({ control });
+  const batch = reviewBatchFixture("legacy-batch", "profile-1", 10);
+  await savePhotoReviewBatch(batch, { indexedDB });
+  indexedDB.delete("review_photo_states", "legacy-batch:legacy-batch-photo");
+  const sourceBefore = indexedDB.records("review_photos")[0];
+  const stale = structuredClone(batch.photos[0]);
+  control.rejectBlobWrites = true;
+  batch.photos[0].slots = [{ id: "slot-1", code: "CAN17", insignia_review_status: "blue" }];
+
+  await savePhotoReviewState(batch, batch.photos[0], { indexedDB });
+
+  const sourceAfter = indexedDB.records("review_photos")[0];
+  assert.equal(await sourceAfter.blob.text(), await sourceBefore.blob.text());
+  assert.equal(sourceAfter.blob.type, sourceBefore.blob.type);
+  assert.deepEqual(sourceAfter, sourceBefore);
+  const [state] = indexedDB.records("review_photo_states");
+  assert.equal("blob" in state, false);
+  assert.equal(state.slots[0].insignia_review_status, "blue");
+  assert.equal(state.revision, 2);
+  assert.equal(batch.revision, 2);
+  const restored = await loadLatestPhotoReviewBatch("profile-1", { indexedDB });
+  assert.equal(restored.photos[0].slots[0].code, "CAN17");
+  assert.equal(restored.photos[0].slots[0].insignia_review_status, "blue");
+  stale.slots = [{ id: "slot-1", code: "CAN5" }];
+  await assert.rejects(
+    savePhotoReviewPhoto(batch.id, stale, { indexedDB }),
+    ReviewStateConflictError,
+  );
 });
 
 test("the explicit active batch cannot be displaced by writes from an older tab", async () => {
@@ -185,17 +229,19 @@ test("a quota failure preserves the reviewed photo and reports the request-level
   const changed = structuredClone(batch.photos[0]);
   changed.slots = [{ id: "slot-1", code: "ARG11", insignia_review_status: "blue" }];
   control.failNextWrite = {
-    store: "review_photos",
+    store: "review_photo_states",
     name: "QuotaExceededError",
     message: "disk full",
   };
 
   await assert.rejects(
-    savePhotoReviewPhoto(batch.id, changed, { indexedDB }),
+    savePhotoReviewState(batch, changed, { indexedDB }),
     /Review storage is full on this phone/,
   );
   const restored = await loadLatestPhotoReviewBatch("profile-1", { indexedDB });
   assert.equal(restored.photos[0].slots[0].code, undefined);
+  assert.equal(restored.revision, 1);
+  assert.equal(indexedDB.records("review_photo_states")[0].revision, 1);
 });
 
 test("cloud review parts stay invisible until a complete commit activates the account-scoped batch", async () => {
@@ -229,6 +275,7 @@ test("cloud review parts stay invisible until a complete commit activates the ac
   assert.equal(await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), "staged");
   assert.equal(await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB }), null);
   assert.equal(indexedDB.records("review_photos").length, 1);
+  assert.equal(indexedDB.records("review_photo_states").length, 1);
   assert.equal(indexedDB.records("review_import_parts")[0].photo.blob, undefined);
   const commit = {
     kind: CLOUD_REVIEW_COMMIT_KIND,
@@ -276,6 +323,7 @@ test("one-photo cloud staging is atomic when the phone cannot store the image", 
     /Review storage is full on this phone/,
   );
   assert.equal(indexedDB.records("review_photos").length, 0);
+  assert.equal(indexedDB.records("review_photo_states").length, 0);
   assert.equal(indexedDB.records("review_import_parts").length, 0);
   assert.equal(await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB }), null);
 });
@@ -310,11 +358,16 @@ test("committed cloud imports do not rebuild duplicate staging blobs on replay",
   await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
 
   assert.equal(indexedDB.records("review_import_parts").length, 0);
+  const reviewed = await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB });
+  reviewed.photos[0].slots[0].back_insignia_type = "blue_circle";
+  reviewed.photos[0].slots[0].insignia_review_status = "blue";
+  await savePhotoReviewPhoto(reviewed.id, reviewed.photos[0], { indexedDB });
   assert.equal(await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), "staged");
   assert.equal(await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), "unchanged");
   assert.equal(indexedDB.records("review_import_parts").length, 0);
   const restored = await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB });
   assert.equal(await restored.photos[0].blob.text(), "photo");
+  assert.equal(restored.photos[0].slots[0].insignia_review_status, "blue");
 });
 
 test("loading a queue reaps staging blobs retained by an older app build", async () => {
@@ -581,6 +634,7 @@ test("a late cloud commit failure rolls back activation and preserves every stag
   assert.equal(indexedDB.records("review_imports").length, 0);
   assert.deepEqual(indexedDB.records("review_batches").map((record) => record.id), ["previous-batch"]);
   assert.deepEqual(indexedDB.records("review_photos").map((record) => record.id).sort(), ["new-photo", "previous-batch-photo"]);
+  assert.deepEqual(indexedDB.records("review_photo_states").map((record) => record.id).sort(), ["new-photo", "previous-batch-photo"]);
   assert.equal(indexedDB.records("review_import_parts")[0].photo.blob, undefined);
   assert.deepEqual(indexedDB.records("active_review_batches"), [{
     profileId: "cloud-profile",
@@ -707,6 +761,9 @@ test("review storage reports the request-level browser failure instead of a gene
   assert.match(store, /request\.error, operation/);
   assert.match(store, /QuotaExceededError/);
   assert.match(store, /DataCloneError/);
+  assert.match(store, /UnknownError/);
+  assert.match(store, /review_photo_states/);
+  assert.match(store, /const DATABASE_VERSION = 4/);
   assert.match(store, /if \(!TRANSACTION_FAILURES\.has\(transaction\)\)/);
   assert.match(scanner, /Review storage write failed/);
   assert.match(scanner, /navigator\?\.storage\?\.estimate/);
@@ -842,6 +899,11 @@ function fakeIndexedDB(options = {}) {
       if (!definition) throw new Error(`Unknown fake IndexedDB store: ${name}`);
       definition.values.set(value[definition.keyPath], structuredClone(value));
     },
+    delete(name, key) {
+      const definition = stores.get(name);
+      if (!definition) throw new Error(`Unknown fake IndexedDB store: ${name}`);
+      definition.values.delete(key);
+    },
     open() {
       const request = {};
       const completeOpen = () => {
@@ -877,6 +939,12 @@ function createDatabase(stores, options = {}) {
         return this;
       },
       put(value) {
+        if (options.control?.rejectBlobWrites && containsBlob(value)) {
+          return failedRequest(transaction, {
+            name: "UnknownError",
+            message: "Error preparing Blob/File data to be stored in object store",
+          });
+        }
         const failure = options.control?.failNextWrite;
         if (failure?.store === name) {
           options.control.failNextWrite = null;
@@ -944,6 +1012,14 @@ function createDatabase(stores, options = {}) {
     },
     close() {},
   };
+}
+
+function containsBlob(value, seen = new Set()) {
+  if (value instanceof Blob) return true;
+  if (!value || typeof value !== "object" || seen.has(value)) return false;
+  seen.add(value);
+  if (Array.isArray(value)) return value.some((item) => containsBlob(item, seen));
+  return Object.values(value).some((item) => containsBlob(item, seen));
 }
 
 function asyncRequest(result) {

@@ -16,13 +16,13 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-33e9771b57ec";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-087bdbb24527";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-33e9771b57ec";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-33e9771b57ec";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-33e9771b57ec";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-087bdbb24527";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-087bdbb24527";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-087bdbb24527";
 
 const STARTING_MISSING = {
   RSA: [10],
