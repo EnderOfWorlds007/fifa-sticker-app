@@ -99,8 +99,10 @@ export async function savePhotoReviewPhoto(batchId, photo, options = {}) {
 }
 
 export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
+  throwIfAborted(options.signal);
   const database = await openReviewDatabase(options.indexedDB);
   try {
+    throwIfAborted(options.signal);
     const scopedProfileId = String(profileId || "");
     if (!scopedProfileId) throw new Error("Cloud review profile is missing.");
     const importId = String(part?.importId || "");
@@ -108,8 +110,9 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
     const digest = String(part?.digest || "");
     if (!importId || !partId || !digest) throw new Error("Cloud review part identity is incomplete.");
     const key = `${scopedProfileId}:${importId}:${partId}`;
-    const transaction = database.transaction([IMPORT_STORE, IMPORT_PART_STORE], "readwrite");
-    const complete = transactionComplete(transaction);
+    const localBatchId = cloudPhotoReviewBatchId(scopedProfileId, importId, part?.batchId);
+    const transaction = database.transaction([IMPORT_STORE, IMPORT_PART_STORE, PHOTO_STORE], "readwrite");
+    const complete = transactionComplete(transaction).finally(abortTransactionOnSignal(transaction, options.signal));
     const importStore = transaction.objectStore(IMPORT_STORE);
     const store = transaction.objectStore(IMPORT_PART_STORE);
     const [retainedCommit, current] = await Promise.all([
@@ -122,7 +125,15 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
       return false;
     }
     if (current && current.digest !== digest) throw new Error("Cloud review part conflicts with retained evidence.");
-    if (!current) {
+    const legacyStagedPhoto = current?.photo?.blob ? current.photo : null;
+    if (!current || legacyStagedPhoto) {
+      const photo = legacyStagedPhoto || part.photo;
+      const photoKey = `${localBatchId}:${String(photo?.id || "")}`;
+      trackedWrite(
+        transaction,
+        transaction.objectStore(PHOTO_STORE).put(photoRecord(localBatchId, { ...photo, revision: 1 })),
+        "saving one cloud review photo",
+      );
       trackedWrite(transaction, store.put({
         key,
         importKey: `${scopedProfileId}:${importId}`,
@@ -131,7 +142,8 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
         partId,
         digest,
         batchId: String(part.batchId || ""),
-        photo: part.photo,
+        photoKey,
+        photo: photoWithoutBlob(photo),
       }), "staging a cloud review photo");
     }
     await complete;
@@ -142,19 +154,22 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
 }
 
 export async function commitCloudPhotoReviewImport(commit, profileId, options = {}) {
+  throwIfAborted(options.signal);
   const database = await openReviewDatabase(options.indexedDB);
   try {
+    throwIfAborted(options.signal);
     const scopedProfileId = String(profileId || "");
     if (!scopedProfileId) throw new Error("Cloud review profile is missing.");
     const importId = String(commit?.importId || "");
     const commitDigest = String(commit?.digest || "");
     if (!importId || !commitDigest) throw new Error("Cloud review commit identity is incomplete.");
     const importKey = `${scopedProfileId}:${importId}`;
+    const localBatchId = cloudPhotoReviewBatchId(scopedProfileId, importId, commit.batch?.id);
     const transaction = database.transaction(
-      [BATCH_STORE, PHOTO_STORE, ACTIVE_STORE, IMPORT_STORE, IMPORT_PART_STORE],
+      [BATCH_STORE, ACTIVE_STORE, IMPORT_STORE, IMPORT_PART_STORE],
       "readwrite",
     );
-    const complete = transactionComplete(transaction);
+    const complete = transactionComplete(transaction).finally(abortTransactionOnSignal(transaction, options.signal));
     const importStore = transaction.objectStore(IMPORT_STORE);
     const importPartStore = transaction.objectStore(IMPORT_PART_STORE);
     const retainedCommit = await requestResult(importStore.get(importKey));
@@ -185,7 +200,9 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
       }
       if (part.batchId !== String(commit.batch?.id || "")
         || String(part.photo?.id || "") !== String(expected.photoId || "")
-        || Number(part.photo?.index) !== Number(expected.index)) {
+        || Number(part.photo?.index) !== Number(expected.index)
+        || String(part.photoKey || "") !== `${localBatchId}:${String(expected.photoId || "")}`
+        || part.photo?.blob) {
         throw new Error("Cloud review import manifest does not match its staged photo.");
       }
       return part;
@@ -194,9 +211,7 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
       throw new Error("Cloud review import does not account for every staged photo.");
     }
     validateCommittedReviewItems(commit.batch, orderedParts, Number(commit.expectedReviewItemCount));
-    const localBatchId = cloudPhotoReviewBatchId(scopedProfileId, importId, commit.batch?.id);
     const batchStore = transaction.objectStore(BATCH_STORE);
-    const photoStore = transaction.objectStore(PHOTO_STORE);
     trackedWrite(transaction, batchStore.put(batchRecord({
       ...commit.batch,
       id: localBatchId,
@@ -206,7 +221,6 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
       revision: 1,
     })), "committing a cloud review batch");
     for (const part of orderedParts) {
-      trackedWrite(transaction, photoStore.put(photoRecord(localBatchId, { ...part.photo, revision: 1 })), "committing a cloud review photo");
       trackedWrite(transaction, importPartStore.delete(part.key), "discarding a committed staging photo");
     }
     if (options.activate !== false) {
@@ -233,13 +247,15 @@ export function cloudPhotoReviewBatchId(profileId, importId, sourceBatchId) {
 }
 
 export async function activateCloudPhotoReviewBatch(profileId, batchId, options = {}) {
+  throwIfAborted(options.signal);
   const database = await openReviewDatabase(options.indexedDB);
   try {
+    throwIfAborted(options.signal);
     const scopedProfileId = String(profileId || "");
     const scopedBatchId = String(batchId || "");
     if (!scopedProfileId || !scopedBatchId) throw new Error("Cloud review queue identity is incomplete.");
     const transaction = database.transaction([BATCH_STORE, ACTIVE_STORE], "readwrite");
-    const complete = transactionComplete(transaction);
+    const complete = transactionComplete(transaction).finally(abortTransactionOnSignal(transaction, options.signal));
     const batch = await requestResult(transaction.objectStore(BATCH_STORE).get(scopedBatchId));
     if (!batch || String(batch.profileId || "") !== scopedProfileId) {
       throw new Error("Recovered cloud review queue is unavailable.");
@@ -330,7 +346,11 @@ export async function loadLatestPhotoReviewBatch(profileId, options = {}) {
     if (!batch) {
       const batches = await requestResult(metadataTransaction.objectStore(BATCH_STORE).getAll());
       batch = (batches || [])
-        .filter((candidate) => String(candidate.profileId || "") === profileKey)
+        .filter((candidate) => (
+          String(candidate.profileId || "") === profileKey
+          && !String(candidate.importId || "")
+          && !String(candidate.id || "").startsWith("cloud:")
+        ))
         .sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0))[0];
     }
     await metadataComplete;
@@ -374,6 +394,11 @@ export function photoRecord(batchId, photo) {
     slots: Array.isArray(record.slots) ? record.slots : [],
     view: record.view || { focused: false, zoomFactor: 1 },
   };
+}
+
+function photoWithoutBlob(photo) {
+  const { blob: _blob, ...metadata } = photo || {};
+  return metadata;
 }
 
 export function openReviewDatabase(indexedDBFactory = globalThis.indexedDB) {
@@ -438,6 +463,22 @@ function transactionComplete(transaction) {
     transaction.onerror = () => reject(transactionFailure(transaction, "Review storage transaction failed."));
     transaction.onabort = () => reject(transactionFailure(transaction, "Review storage transaction was aborted."));
   });
+}
+
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  const error = new Error("Cloud review loading was cancelled.");
+  error.name = "AbortError";
+  throw error;
+}
+
+function abortTransactionOnSignal(transaction, signal) {
+  if (!signal?.addEventListener) return () => {};
+  const abort = () => {
+    try { transaction.abort(); } catch {}
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  return () => signal.removeEventListener("abort", abort);
 }
 
 function trackedWrite(transaction, request, operation) {

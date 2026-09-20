@@ -2,9 +2,9 @@ import {
   adjustedInventoryCsv,
   insigniaQuantity,
   inventoryFreshnessSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8858ca7c61aa";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8858ca7c61aa";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-33e9771b57ec";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-33e9771b57ec";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-33e9771b57ec";
 
 const totalCards = document.querySelector("#inventoryTotalCards");
 const uniqueCodes = document.querySelector("#inventoryUniqueCodes");

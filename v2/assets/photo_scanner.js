@@ -10,23 +10,23 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-33e9771b57ec";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-8858ca7c61aa";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-8858ca7c61aa";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-33e9771b57ec";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-33e9771b57ec";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-33e9771b57ec";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-8858ca7c61aa";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-8858ca7c61aa";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-8858ca7c61aa";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-33e9771b57ec";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-33e9771b57ec";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-33e9771b57ec";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-33e9771b57ec";
 import {
   loadLatestPhotoReviewBatch,
   activeCloudPhotoReviewProfileId,
@@ -35,26 +35,26 @@ import {
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-33e9771b57ec";
 import {
   buildPhotoReviewItems,
   hydratePhotoReviewSlots,
   nextPendingReviewItem,
   reviewCodeCandidates,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-33e9771b57ec";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-33e9771b57ec";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-8858ca7c61aa";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-33e9771b57ec";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -166,7 +166,7 @@ window.addEventListener("panini:cloud-sync-status", (event) => {
   const message = String(event.detail?.message || "");
   const severity = String(event.detail?.severity || "");
   if (severity === "warning") showEmptyReviewQueue(message || "Cloud reviews could not be loaded. Try again.");
-  else if (severity === "muted" && message.startsWith("Loading encrypted")) showEmptyReviewQueue("Loading encrypted reviews…");
+  else if (severity === "muted" && message.startsWith("Loading encrypted")) showEmptyReviewQueue(message);
   else if (severity === "ok") {
     cloudReviewSyncCompleted = true;
     hydrateLatestReviewBatch();
@@ -260,7 +260,15 @@ function showEmptyReviewQueue(message) {
   if (reviewPanel) reviewPanel.hidden = true;
   if (reviewEmptyState) {
     reviewEmptyState.hidden = false;
+    const heading = reviewEmptyState.querySelector("h2");
     const messageNode = reviewEmptyState.querySelector("p");
+    if (heading) {
+      heading.textContent = message.startsWith("Loading encrypted")
+        ? "Loading reviews"
+        : /failed|timed out|could not|unavailable/i.test(message)
+          ? "Reviews not loaded"
+          : "No reviews waiting";
+    }
     if (messageNode) messageNode.textContent = message;
   }
   if (status) status.textContent = message;
