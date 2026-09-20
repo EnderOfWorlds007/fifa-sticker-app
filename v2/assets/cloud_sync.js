@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-90cdc644aa5c";
+} from "./backup_restore.js?v=build-3da9e0dd8cdb";
 import {
   generatePublicShareToken,
   loadPublicShareSettings,
@@ -15,24 +15,25 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-90cdc644aa5c";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-90cdc644aa5c";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-90cdc644aa5c";
-import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-90cdc644aa5c";
-import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-90cdc644aa5c";
+} from "./public_share.js?v=build-3da9e0dd8cdb";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-3da9e0dd8cdb";
+import { recordRejectedCardEvidence, sanitizeBusinessProjection } from "./catalog_membership.js?v=build-3da9e0dd8cdb";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-3da9e0dd8cdb";
+import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-3da9e0dd8cdb";
+import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-3da9e0dd8cdb";
 import {
   createCloudSyncGate,
   fetchAllDeltaPages,
   monotonicRevision,
   requestJsonWithTimeout,
   validateSparseCloudHistory,
-} from "./cloud_delta.js?v=build-90cdc644aa5c";
+} from "./cloud_delta.js?v=build-3da9e0dd8cdb";
 import {
   activateCloudPhotoReviewBatch,
   cloudPhotoReviewBatchId,
   migrateLegacyPhotoReviewProfile,
-} from "./photo_review_store_v2.js?v=build-90cdc644aa5c";
-import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-90cdc644aa5c";
+} from "./photo_review_store_v2.js?v=build-3da9e0dd8cdb";
+import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-3da9e0dd8cdb";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -75,15 +76,26 @@ export function mountCollectionCloudSync({
   let activeAutosaveController = null;
   let activeRecoveryController = null;
   let reviewRecoveryGeneration = 0;
+  let verifiedCatalogPromise = null;
+  const verifiedCatalog = () => {
+    if (!verifiedCatalogPromise) {
+      verifiedCatalogPromise = loadCollectionCatalog({ fetch: fetchImpl }).catch((error) => {
+        verifiedCatalogPromise = null;
+        throw error;
+      });
+    }
+    return verifiedCatalogPromise;
+  };
   const refreshShareControls = () => controls.setShareSettings(loadPublicShareSettings(storage));
   const applyTransactions = async (transactions, context) => {
+    const catalog = await verifiedCatalog();
     let reviewsChanged = false;
     let checkpointApplied = false;
     for (const transaction of transactions) {
       client.assertAccountContext(context);
       const payload = await client.decryptTransaction(transaction, context);
       client.assertAccountContext(context);
-      if (applyCloudCheckpoint(payload, storage)) {
+      if (applyCloudCheckpoint(payload, storage, catalog)) {
         checkpointApplied = true;
         continue;
       }
@@ -115,7 +127,7 @@ export function mountCollectionCloudSync({
             },
           });
           client.assertAccountContext(context);
-          if (applyCloudCheckpoint(recovery.latestCheckpoint, storage)) saveAccountProjection(storage, context.profileId);
+          if (applyCloudCheckpoint(recovery.latestCheckpoint, storage, await verifiedCatalog())) saveAccountProjection(storage, context.profileId);
           if (recovery.recoveredBatchId) {
             await activateCloudPhotoReviewBatch(context.profileId, recovery.recoveredBatchId, { signal });
           }
@@ -294,6 +306,7 @@ export function mountCollectionCloudSync({
       );
       return false;
     }
+    const catalog = await verifiedCatalog();
     const wasKnown = loadUserAccounts(storage).accounts.some((account) => account.userSecretId === normalized);
     clearTimeout(pendingTimer);
     pendingTimer = null;
@@ -323,10 +336,10 @@ export function mountCollectionCloudSync({
           },
         });
         assertCurrent();
-        const checkpointApplied = applyCloudCheckpoint(recovery.latestCheckpoint, storage);
+        const checkpointApplied = applyCloudCheckpoint(recovery.latestCheckpoint, storage, catalog);
         if (!checkpointApplied) {
           if (previousProjection) {
-            applyAccountProjection(storage, previousProjection);
+            applyAccountProjection(storage, previousProjection, catalog);
             saveAccountProjection(storage, context.profileId);
           }
         } else {
@@ -366,7 +379,7 @@ export function mountCollectionCloudSync({
         if (checkpointApplied) {
           saveAccountProjection(storage, context.profileId);
         } else {
-          applyAccountProjection(storage, cachedProjection);
+          applyAccountProjection(storage, cachedProjection, catalog);
         }
         client.setLastRevision(result.revision);
         refreshShareControls();
@@ -383,7 +396,7 @@ export function mountCollectionCloudSync({
         return true;
       }
       if (cachedProjection && !recoverReviews) {
-        applyAccountProjection(storage, cachedProjection);
+        applyAccountProjection(storage, cachedProjection, catalog);
         refreshShareControls();
         controls.setStatus("Cloud account switched using this browser's saved copy.", "ok");
         dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
@@ -391,7 +404,7 @@ export function mountCollectionCloudSync({
       }
     } catch (error) {
       if (cachedProjection && !recoverReviews) {
-        applyAccountProjection(storage, cachedProjection);
+        applyAccountProjection(storage, cachedProjection, catalog);
         refreshShareControls();
         controls.setStatus("Cloud account switched using this browser's saved copy.", "warning");
         dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
@@ -404,7 +417,7 @@ export function mountCollectionCloudSync({
     }
     if (previousCode) {
       await client.useRestoreCode(previousCode);
-      if (previousProjection) applyAccountProjection(storage, previousProjection);
+      if (previousProjection) applyAccountProjection(storage, previousProjection, catalog);
       if (!wasKnown) removeUserAccount(storage, normalized);
       controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
       dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: client.lastRevision, profileId: client.profileId });
@@ -551,7 +564,7 @@ export function mountCollectionCloudSync({
     const importedCollectionSnapshotVersion = currentCollectionImportVersion(storage);
     if (client.profileId) saveAccountProjection(storage, client.profileId);
     await client.useRestoreCode(generateUserSecretId(cryptoImpl));
-    applyAccountProjection(storage, emptyAccountProjection({ importedCollectionSnapshotVersion }));
+    applyAccountProjection(storage, emptyAccountProjection({ importedCollectionSnapshotVersion }), await verifiedCatalog());
     refreshShareControls();
     saveAccountProjection(storage, client.profileId);
     controls.setAccounts(loadUserAccounts(storage), client.userSecretId);
@@ -865,9 +878,9 @@ export function emptyAccountProjection({ importedCollectionSnapshotVersion = 1 }
   };
 }
 
-export function applyCloudCheckpoint(payload, storage = globalThis.localStorage) {
+export function applyCloudCheckpoint(payload, storage = globalThis.localStorage, catalog) {
   if (payload?.kind !== "storage-checkpoint" || !payload.storage) return false;
-  return applyAccountProjection(storage, payload.storage);
+  return applyAccountProjection(storage, payload.storage, catalog);
 }
 
 export function generateUserSecretId(cryptoImpl = globalThis.crypto) {
@@ -1097,13 +1110,15 @@ function loadAccountProjection(storage, profileId) {
   return parseStoredJson(storage.getItem(ACCOUNT_STATE_PREFIX + profileId), null);
 }
 
-function applyAccountProjection(storage, projection) {
+function applyAccountProjection(storage, projection, catalog) {
   if (!projection || typeof projection !== "object") return false;
-  storage.setItem(COLLECTION_KEY, JSON.stringify(projection.collectionState || {}));
-  storage.setItem(LEDGER_KEY, JSON.stringify(projection.ledger || { schemaVersion: 1, transactions: [] }));
-  storage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(projection.inventorySnapshot || {}));
-  storage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify(projection.inventoryCacheMeta || {}));
-  storage.setItem(PUBLIC_SHARE_SETTINGS_KEY, JSON.stringify(projection.publicShareSettings || { schemaVersion: 1, enabled: false, token: "" }));
+  const { projection: sanitized, rejected } = sanitizeBusinessProjection(projection, catalog);
+  storage.setItem(COLLECTION_KEY, JSON.stringify(sanitized.collectionState || {}));
+  storage.setItem(LEDGER_KEY, JSON.stringify(sanitized.ledger || { schemaVersion: 1, transactions: [] }));
+  storage.setItem(INVENTORY_SNAPSHOT_KEY, JSON.stringify(sanitized.inventorySnapshot || {}));
+  storage.setItem(INVENTORY_CACHE_META_KEY, JSON.stringify(sanitized.inventoryCacheMeta || {}));
+  storage.setItem(PUBLIC_SHARE_SETTINGS_KEY, JSON.stringify(sanitized.publicShareSettings || { schemaVersion: 1, enabled: false, token: "" }));
+  recordRejectedCardEvidence(storage, { source: "cloud account projection", rejected });
   return true;
 }
 

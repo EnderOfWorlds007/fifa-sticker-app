@@ -89,6 +89,42 @@ test("scan status summary counts each physical card occurrence", () => {
   });
 });
 
+test("a code outside the resolved catalogue is never called new for album", () => {
+  const statuses = classifyScannedCards(
+    ["AND13", "ET3", "TUN27"],
+    collectionModel([{ code: "AUS16", missing: false }]),
+  );
+  assert.deepEqual(statuses, [
+    { code: "AND13", status: SCANNED_CARD_STATUS.UNRECOGNIZED_CARD, priorTradingQuantity: 0 },
+    { code: "ET3", status: SCANNED_CARD_STATUS.UNRECOGNIZED_CARD, priorTradingQuantity: 0 },
+    { code: "TUN27", status: SCANNED_CARD_STATUS.UNRECOGNIZED_CARD, priorTradingQuantity: 0 },
+  ]);
+  assert.deepEqual(summarizeScannedCardStatuses(statuses), {
+    newForAlbum: 0,
+    newTradingCards: 0,
+    duplicateTradingCards: 0,
+    unrecognizedCards: 3,
+  });
+  assert.equal(scannedCardStatusSummaryText(summarizeScannedCardStatuses(statuses)), "0 new for album · 0 new trading cards · 0 duplicate trading cards · 3 unrecognized cards");
+});
+
+test("a complete album never reports new cards for the corrected conjunction message", async () => {
+  const { extractCodeOccurrences } = await import("../v2/assets/trade_state.js");
+  const message = "Hello, I am looking for the last cards USA1, CUW9 and 13, CIV 10, NED13, SWE5, EGY5 et 3, CPV13, IRQ 6, 9 and 19, AUT 13, PAN 5. Lot of doubles to exchange";
+  const codes = [...extractCodeOccurrences(message).keys()];
+  const statuses = classifyScannedCards(
+    codes,
+    collectionModel(codes.map((code) => ({ code, missing: false, availableToTradeQuantity: 1 }))),
+  );
+
+  assert.equal(codes.length, 14);
+  assert.deepEqual(summarizeScannedCardStatuses(statuses), {
+    newForAlbum: 0,
+    newTradingCards: 0,
+    duplicateTradingCards: 14,
+  });
+});
+
 test("pasted quantities expand and aggregate without hiding mixed statuses", () => {
   const codes = expandCodeOccurrences(new Map([["AUS16", 3], ["COD2", 1]]));
   const statuses = classifyScannedCards(codes, collectionModel([

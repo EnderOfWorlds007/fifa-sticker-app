@@ -2,6 +2,7 @@ export const SCANNED_CARD_STATUS = Object.freeze({
   NEW_FOR_ALBUM: "new-for-album",
   NEW_TRADING_CARD: "new-trading-card",
   DUPLICATE_TRADING_CARD: "duplicate-trading-card",
+  UNRECOGNIZED_CARD: "unrecognized-card",
 });
 
 export function classifyScannedCards(codes, collectionModel) {
@@ -15,6 +16,9 @@ export function classifyScannedCards(codes, collectionModel) {
     .filter(Boolean)
     .map((code) => {
       const card = byCode[code];
+      if (!card) {
+        return scanStatus(code, SCANNED_CARD_STATUS.UNRECOGNIZED_CARD, 0);
+      }
       const albumOwned = card ? card.missing !== true : false;
       const availableBeforeScan = nonNegativeQuantity(
         card?.inventory?.availableToTradeQuantity ?? card?.availableToTrade,
@@ -46,6 +50,9 @@ export function summarizeScannedCardStatuses(statuses) {
     if (item?.status === SCANNED_CARD_STATUS.NEW_FOR_ALBUM) summary.newForAlbum += 1;
     if (item?.status === SCANNED_CARD_STATUS.NEW_TRADING_CARD) summary.newTradingCards += 1;
     if (item?.status === SCANNED_CARD_STATUS.DUPLICATE_TRADING_CARD) summary.duplicateTradingCards += 1;
+    if (item?.status === SCANNED_CARD_STATUS.UNRECOGNIZED_CARD) {
+      summary.unrecognizedCards = (summary.unrecognizedCards || 0) + 1;
+    }
   }
   return summary;
 }
@@ -77,6 +84,9 @@ export function groupScannedCardStatuses(statuses) {
     if (item.status === SCANNED_CARD_STATUS.NEW_FOR_ALBUM) group.newForAlbum += 1;
     if (item.status === SCANNED_CARD_STATUS.NEW_TRADING_CARD) group.newTradingCards += 1;
     if (item.status === SCANNED_CARD_STATUS.DUPLICATE_TRADING_CARD) group.duplicateTradingCards += 1;
+    if (item.status === SCANNED_CARD_STATUS.UNRECOGNIZED_CARD) {
+      group.unrecognizedCards = (group.unrecognizedCards || 0) + 1;
+    }
   }
   return [...groups.values()];
 }
@@ -86,7 +96,10 @@ export function scannedCardStatusSummaryText(summary) {
     quantityLabel(summary?.newForAlbum, "new for album", "new for album"),
     quantityLabel(summary?.newTradingCards, "new trading card", "new trading cards"),
     quantityLabel(summary?.duplicateTradingCards, "duplicate trading card", "duplicate trading cards"),
-  ].join(" · ");
+    summary?.unrecognizedCards
+      ? quantityLabel(summary.unrecognizedCards, "unrecognized card", "unrecognized cards")
+      : "",
+  ].filter(Boolean).join(" · ");
 }
 
 export function scannedCardGroupDetail(group) {
@@ -94,6 +107,7 @@ export function scannedCardGroupDetail(group) {
     group?.newForAlbum ? quantityLabel(group.newForAlbum, "new for album", "new for album") : "",
     group?.newTradingCards ? quantityLabel(group.newTradingCards, "new trading card", "new trading cards") : "",
     group?.duplicateTradingCards ? quantityLabel(group.duplicateTradingCards, "duplicate trading card", "duplicate trading cards") : "",
+    group?.unrecognizedCards ? quantityLabel(group.unrecognizedCards, "unrecognized card", "unrecognized cards") : "",
   ].filter(Boolean).join(" · ");
 }
 
@@ -111,6 +125,7 @@ export function compactScannedCardGroupDetail(group) {
     group?.newForAlbum ? `Album +${nonNegativeQuantity(group.newForAlbum)}` : "",
     group?.newTradingCards ? `First spare +${nonNegativeQuantity(group.newTradingCards)}` : "",
     group?.duplicateTradingCards ? `Duplicate +${nonNegativeQuantity(group.duplicateTradingCards)}` : "",
+    group?.unrecognizedCards ? `Unrecognized ${nonNegativeQuantity(group.unrecognizedCards)}` : "",
   ].filter(Boolean);
   const spareRange = scannedCardGroupSpareRange(group);
   if (spareRange) parts.push(`spares ${spareRange.before}→${spareRange.after}`);
@@ -118,6 +133,7 @@ export function compactScannedCardGroupDetail(group) {
 }
 
 export function dominantScannedCardStatus(group) {
+  if (group?.unrecognizedCards) return SCANNED_CARD_STATUS.UNRECOGNIZED_CARD;
   if (group?.newForAlbum) return SCANNED_CARD_STATUS.NEW_FOR_ALBUM;
   if (group?.newTradingCards) return SCANNED_CARD_STATUS.NEW_TRADING_CARD;
   return SCANNED_CARD_STATUS.DUPLICATE_TRADING_CARD;

@@ -19,28 +19,29 @@ import {
   transactionDetailLines,
   tradeLineQuantityTotal,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-90cdc644aa5c";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3da9e0dd8cdb";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-3da9e0dd8cdb";
 import {
   applyBackupRestoreStorage,
   captureBackupStorageSnapshot,
   DEFAULT_RESTORE_FAILURE_MESSAGE,
   RESTORE_PARTIAL_ROLLBACK_MESSAGE,
   RESTORE_RENDER_FAILURE_MESSAGE,
-} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-90cdc644aa5c";
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/backup_restore.js?v=build-3da9e0dd8cdb";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-3da9e0dd8cdb";
+import { catalogHasCards } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-3da9e0dd8cdb";
 import {
   COLLECTION_SNAPSHOT_IMPORT_VERSION,
   importCollectionSnapshotState,
   loadCollectionState,
   saveCollectionState,
-} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-3da9e0dd8cdb";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-90cdc644aa5c";
-import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-90cdc644aa5c";
-import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-3da9e0dd8cdb";
+import { clearTradePasteText, mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-3da9e0dd8cdb";
+import { ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-3da9e0dd8cdb";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -198,6 +199,7 @@ let inventorySnapshot = null;
 let inventoryProjection = null;
 let cards = startingMissingCards();
 let collectionCatalog = { cards, aliases: {} };
+let catalogueReady = false;
 let catalogSourceLabel = "hunt list";
 const insigniaFilter = mountInsigniaFilter("#collectionInsigniaFilter", {
   label: "Card back",
@@ -236,6 +238,8 @@ async function loadCatalogue() {
   try {
     const payload = await loadCollectionCatalog();
     collectionCatalog = payload;
+    catalogueReady = catalogHasCards(payload);
+    if (!catalogueReady) throw new Error("The physical catalogue is empty.");
     cards = payload.cards.map(decorateCatalogCard).sort((a, b) => sortCode(a.code, b.code));
     catalogSourceLabel = `physical catalogue (${cards.length})`;
     try {
@@ -246,8 +250,10 @@ async function loadCatalogue() {
     render();
     loadSharedInventoryProjection();
   } catch {
+    catalogueReady = false;
     catalogSourceLabel = "hunt list fallback";
-    status.textContent = "Full catalogue unavailable. Showing the local hunt list fallback.";
+    render();
+    status.textContent = "Full catalogue unavailable. Showing the local hunt list read-only; collection and trade changes are disabled.";
   }
 }
 
@@ -274,7 +280,13 @@ function collectedSet() {
 }
 
 function trackedCodeSet() {
-  return new Set(cards.map((card) => card.code));
+  return catalogueReady ? new Set(cards.map((card) => card.code)) : new Set();
+}
+
+function requireVerifiedCatalogue() {
+  if (catalogueReady && catalogHasCards(collectionCatalog)) return true;
+  status.textContent = "The physical sticker catalogue is unavailable, so changes are disabled to avoid saving unverified card codes.";
+  return false;
 }
 
 function extractCodeOccurrences(value) {
@@ -333,9 +345,10 @@ async function splitTradedAwayLines(lines) {
   };
 }
 
-function recordReceivedLines(lines, { allowAlreadyOwned = false } = {}) {
+function recordReceivedLines(lines) {
+  if (!requireVerifiedCatalogue()) return [];
   const tracked = trackedCodeSet();
-  const received = lines.filter((line) => tracked.has(line.code) || allowAlreadyOwned);
+  const received = lines.filter((line) => tracked.has(line.code));
   if (received.length) {
     saveLedger(createTransaction(loadLedger(), { kind: "received", received, given: [] }));
   }
@@ -343,13 +356,17 @@ function recordReceivedLines(lines, { allowAlreadyOwned = false } = {}) {
 }
 
 function recordTradedAwayLines(lines) {
-  if (!lines.length) return [];
-  saveLedger(createTransaction(loadLedger(), { kind: "given", received: [], given: lines }));
+  if (!requireVerifiedCatalogue()) return [];
+  const tracked = trackedCodeSet();
+  const given = lines.filter((line) => tracked.has(canonicalCollectionCode(line.code)));
+  if (!given.length) return [];
+  saveLedger(createTransaction(loadLedger(), { kind: "given", received: [], given }));
   localStorage.removeItem(TRADED_AWAY_KEY);
-  return lines;
+  return given;
 }
 
 function markGotCards() {
+  if (!requireVerifiedCatalogue()) return;
   const occurrences = parsedUpdateCodes();
   if (!occurrences) return;
   const split = splitReceivedLines(parsedLines(occurrences));
@@ -374,6 +391,7 @@ function markGotCards() {
 }
 
 async function markTradedAway() {
+  if (!requireVerifiedCatalogue()) return;
   const occurrences = parsedUpdateCodes();
   if (!occurrences) return;
   const split = await splitTradedAwayLines(parsedLines(occurrences));
@@ -425,8 +443,9 @@ function clearTradedAwayIgnoredNotice() {
 }
 
 function addIgnoredGotCards() {
+  if (!requireVerifiedCatalogue()) return;
   if (!pendingIgnoredGotLines.length) return;
-  const received = recordReceivedLines(pendingIgnoredGotLines, { allowAlreadyOwned: true });
+  const received = recordReceivedLines(pendingIgnoredGotLines);
   const count = tradeLineQuantityTotal(received);
   clearGotIgnoredNotice();
   clearTradePasteText(updateText);
@@ -435,6 +454,7 @@ function addIgnoredGotCards() {
 }
 
 function addIgnoredTradedAwayCards() {
+  if (!requireVerifiedCatalogue()) return;
   if (!pendingIgnoredTradedAwayLines.length) return;
   const given = recordTradedAwayLines(pendingIgnoredTradedAwayLines);
   const count = tradeLineQuantityTotal(given);
@@ -567,6 +587,16 @@ function render() {
   availableTradeCount.textContent = String(summary.availableToTradeCount);
   status.textContent = `${visible.length} cards shown from ${summary.catalogCount} cards in ${catalogSourceLabel}.`;
 
+  gotCardsButton.disabled = !catalogueReady;
+  tradedAwayButton.disabled = !catalogueReady;
+  addIgnoredGotButton.disabled = !catalogueReady;
+  addIgnoredTradedAwayButton.disabled = !catalogueReady;
+  saveAlbumReviewButton.disabled = !catalogueReady || pendingAlbumStatusChanges.size === 0;
+  importBackupButton.disabled = !catalogueReady;
+  restoreButton.disabled = !catalogueReady;
+  startLocalButton.disabled = !catalogueReady;
+  resetButton.disabled = !catalogueReady;
+
   filterButtons.forEach((button) => {
     const active = button.dataset.filter === state.filter;
     button.classList.toggle("active", active);
@@ -621,6 +651,7 @@ function cardButton(card) {
   button.classList.toggle("pendingMissing", pendingStatus === "missing");
   button.setAttribute("aria-pressed", String(isCollected));
   button.setAttribute("aria-label", `${card.label}, ${isCollected ? "present" : "missing"}${pendingStatus ? ", pending change" : ""}`);
+  button.disabled = !catalogueReady;
   button.innerHTML = `<strong>${card.number}</strong><span>${cardStatusLabel(displayedStatus, pendingStatus)}</span>`;
   button.addEventListener("click", () => stageAlbumStatusFlip(card.code));
   return button;
@@ -643,6 +674,7 @@ function baseAlbumStatus(code) {
 }
 
 function stageAlbumStatusFlip(code) {
+  if (!requireVerifiedCatalogue()) return;
   const card = currentCollectionModel().byCode?.[code];
   if (!card) return;
   const savedStatus = savedAlbumStatus(card);
@@ -699,6 +731,7 @@ function albumReviewItem(entry) {
 }
 
 function saveAlbumStatusChanges() {
+  if (!requireVerifiedCatalogue()) return;
   const entries = pendingAlbumStatusEntries();
   if (!entries.length) return;
   const overrides = { ...(state.albumStatusOverrides || {}) };
@@ -725,6 +758,7 @@ function albumInventoryUpdateCandidates() {
 }
 
 function maybePromptAlbumInventoryUpdates() {
+  if (!catalogueReady) return;
   if (albumInventoryCheckPrompted) return;
   const candidates = albumInventoryUpdateCandidates();
   if (!candidates.length) return;
@@ -745,6 +779,7 @@ function maybePromptAlbumInventoryUpdates() {
 }
 
 function applyAlbumInventoryUpdates(candidates) {
+  if (!requireVerifiedCatalogue()) return;
   const rawLines = candidates.map((card) => ({ code: card.code, quantity: 1 }));
   const outgoing = assignOutgoingVariants(rawLines, currentInventoryProjection().adjustedInventory);
   if (!outgoing.length) {
@@ -767,6 +802,7 @@ function applyAlbumInventoryUpdates(candidates) {
 }
 
 function undoTransaction(transaction) {
+  if (!requireVerifiedCatalogue()) return;
   saveLedger(cancelTransaction(loadLedger(), transaction.id));
   if (transaction.kind === "album-update") {
     const overrides = { ...(state.albumStatusOverrides || {}) };
@@ -940,13 +976,14 @@ function buildCurrentBackupPayload() {
 }
 
 function restoreBackup() {
+  if (!requireVerifiedCatalogue()) return;
   let failureMessage = DEFAULT_RESTORE_FAILURE_MESSAGE;
   try {
     const payload = parseBackupPayload(backupText.value);
     if (!window.confirm("Restore this backup on this phone? Current local collection and activity will be replaced.")) return;
     const previous = captureBackupStorageSnapshot({ storage: localStorage, liveInventorySnapshot: inventorySnapshot });
     const restorePlan = planBackupRestore(payload, { inventorySnapshot, catalog: collectionCatalog });
-    const restoreResult = applyBackupRestoreStorage({ storage: localStorage, restorePlan, previous });
+    const restoreResult = applyBackupRestoreStorage({ storage: localStorage, restorePlan, previous, catalog: collectionCatalog });
     if (restoreResult.status === "failed") {
       inventorySnapshot = restoreResult.inventorySnapshot;
       state = loadState();
@@ -1040,11 +1077,13 @@ function emptyLocalInventorySnapshot() {
 }
 
 function chooseBackupFile() {
+  if (!requireVerifiedCatalogue()) return;
   backupFileInput.value = "";
   backupFileInput.click();
 }
 
 async function importBackupFile() {
+  if (!requireVerifiedCatalogue()) return;
   const [file] = backupFileInput.files || [];
   if (!file) return;
   try {
@@ -1056,6 +1095,7 @@ async function importBackupFile() {
 }
 
 function startOwnTracker() {
+  if (!requireVerifiedCatalogue()) return;
   if (!window.confirm("Start a local-only tracker on this phone? Current local marks and trade activity will be cleared.")) return;
   state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], albumStatusOverrides: {}, hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
   pendingAlbumStatusChanges = new Map();
@@ -1143,6 +1183,7 @@ updateText.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") markGotCards();
 });
 resetButton.addEventListener("click", () => {
+  if (!requireVerifiedCatalogue()) return;
   if (!window.confirm("Reset all collection marks from this tracker? Traded-away activity stays recorded.")) return;
   state = { filter: "missing", sortOrder: state.sortOrder || "album", collected: [], albumStatusOverrides: {}, hasLocalState: true, importedCollectionSnapshotVersion: COLLECTION_SNAPSHOT_IMPORT_VERSION };
   pendingAlbumStatusChanges = new Map();

@@ -16,13 +16,14 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3da9e0dd8cdb";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-90cdc644aa5c";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-90cdc644aa5c";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-90cdc644aa5c";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-3da9e0dd8cdb";
+import { catalogHasCards, partitionCatalogLines, partitionCatalogOccurrences } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-3da9e0dd8cdb";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-3da9e0dd8cdb";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-3da9e0dd8cdb";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -339,12 +340,25 @@ function updateTradeControls() {
 }
 
 async function addTradeSide(side) {
-  const occurrences = extractCodeOccurrences(tradeOtherSideText.value);
-  if (!side || !occurrences.size) {
+  const parsedOccurrences = extractCodeOccurrences(tradeOtherSideText.value);
+  if (!side || !parsedOccurrences.size) {
     status.textContent = "Paste card codes before adding them to a trade side.";
     return;
   }
   await loadInventory();
+  if (!catalogHasCards(inventoryProjection?.catalog)) {
+    status.textContent = "The sticker catalogue is unavailable, so no cards were added.";
+    return;
+  }
+  const partition = partitionCatalogOccurrences(parsedOccurrences, inventoryProjection?.catalog);
+  const occurrences = partition.accepted;
+  const rejectedCount = [...partition.rejected.values()].reduce((sum, quantity) => sum + quantity, 0);
+  if (!occurrences.size) {
+    status.textContent = rejectedCount
+      ? "Those codes are not in this sticker catalogue, so they were not added."
+      : "No recognized card codes found.";
+    return;
+  }
   let additions = side === "given" ? parsedGivenLines(occurrences) : parsedReceivedLines(occurrences);
   if (side === "given") {
     const split = splitGivenLines(additions, currentTradeLines("given"));
@@ -379,6 +393,7 @@ async function addTradeSide(side) {
     : pendingIgnoredReceivedLines.length
       ? `${tradeLineQuantityTotal(additions)} cards added, ${tradeLineQuantityTotal(pendingIgnoredReceivedLines)} ignored because you have them already.`
       : "Added incoming cards. Review the balance, then keep adding or save.";
+  if (rejectedCount) status.textContent += ` ${rejectedCount} unrecognized code${rejectedCount === 1 ? " was" : "s were"} ignored.`;
 }
 
 function parsedGivenLines(occurrences) {
@@ -518,6 +533,7 @@ async function saveDraft() {
     updateTradeControls();
     return false;
   }
+  if (!validateTradeCatalogueLines(given, received)) return false;
   const issues = await validateOutgoingBasket();
   if (activeTradeId) {
     if (activeTradeStatus === "reserved" && issues.length) {
@@ -558,6 +574,7 @@ async function transitionActiveTrade(nextStatus) {
     if (!activeTradeId) return;
   }
   if (["completed", "cancelled"].includes(nextStatus) && !confirmTradeTransition(nextStatus)) return;
+  if (nextStatus !== "cancelled" && !validateTradeCatalogueLines(currentTradeLines("given"), currentTradeLines("received"))) return;
   if (nextStatus === "reserved" || nextStatus === "completed") {
     const issues = await validateOutgoingBasket();
     if (issues.length) {
@@ -567,7 +584,7 @@ async function transitionActiveTrade(nextStatus) {
   }
   try {
     let ledger = loadLedger();
-    if (isActiveTradeEditable()) {
+    if (nextStatus !== "cancelled" && isActiveTradeEditable()) {
       ledger = updateTradeLines(ledger, activeTradeId, {
         given: currentTradeLines("given"),
         received: currentTradeLines("received"),
@@ -589,6 +606,18 @@ async function transitionActiveTrade(nextStatus) {
   reserveTradeButton.disabled = nextStatus !== "draft";
   completeTradeButton.disabled = nextStatus === "completed" || nextStatus === "cancelled";
   cancelTradeButton.disabled = nextStatus === "cancelled";
+}
+
+function validateTradeCatalogueLines(given, received) {
+  const invalid = [
+    ...partitionCatalogLines(given, inventoryProjection?.catalog).rejected,
+    ...partitionCatalogLines(received, inventoryProjection?.catalog).rejected,
+  ];
+  if (catalogHasCards(inventoryProjection?.catalog) && !invalid.length) return true;
+  status.textContent = invalid.length
+    ? `Remove codes that are not in this sticker catalogue: ${[...new Set(invalid.map((line) => line.code))].join(", ")}.`
+    : "The sticker catalogue is unavailable, so this trade cannot be saved safely.";
+  return false;
 }
 
 async function validateOutgoingBasket() {

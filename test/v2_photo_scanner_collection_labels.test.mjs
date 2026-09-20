@@ -82,17 +82,17 @@ test("adding scan to collection refreshes per-card album labels", () => {
   );
 });
 
-test("scanner album labels include cached inventory album ownership", () => {
-  assert.match(source, /import \{ loadCachedInventoryPayload \} from "\/fifa-sticker-app\/v2\/assets\/inventory_source\.js/);
+test("scanner album labels use the resolved projection and fail closed without its catalogue", () => {
   assert.match(source, /import \{ loadInventoryProjection \} from "\/fifa-sticker-app\/v2\/assets\/inventory_projection\.js/);
   assert.match(source, /splitCodesByResolvedCollectionModel/);
   const splitBody = functionBody("splitCollectionCodes");
   assert.match(splitBody, /latestInventoryProjection\?\.collectionModel/);
   assert.match(splitBody, /splitCodesByResolvedCollectionModel\(codes,\s*latestInventoryProjection\.collectionModel\)/);
-  assert.match(splitBody, /splitCodesByAlbumStatus\(codes,\s*\{/);
-  assert.match(splitBody, /collectionState:\s*loadCollectionState\(\)/);
-  assert.match(splitBody, /ledger:\s*loadLedger\(\)/);
-  assert.match(splitBody, /inventoryPayload:\s*loadCachedInventoryPayload\(\)/);
+  assert.match(splitBody, /return \{ newCodes: \[\], inventoryCodes: \[\] \}/);
+  assert.match(functionBody("fallbackCollectionModel"), /return \{ byCode: \{\} \}/);
+  assert.match(functionBody("currentScanReceivedLines"), /catalogHasCards\(latestInventoryProjection\?\.catalog\)/);
+  assert.match(functionBody("currentScanReceivedLines"), /partitionCatalogLines\(lines, latestInventoryProjection\.catalog\)\.accepted/);
+  assert.match(functionBody("renderCollectionActions"), /addCollectionButton\.disabled = applied \|\| !catalogueReady \|\| receivedCount === 0/);
 });
 
 test("scanner normalizes recognized code formatting before row classification", () => {

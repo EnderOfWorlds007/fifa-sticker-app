@@ -154,6 +154,7 @@ const VOICE_TEAM_ALIASES = aliasMap({
   uzb: "UZB", uzbekistan: "UZB", ousbekistan: "UZB",
 });
 const VOICE_TEAM_CODES = new Set(VOICE_TEAM_ALIASES.values());
+const PARSER_CONJUNCTION_CODES = new Set(["AND", "ET", "UND", "SI"]);
 const VOICE_NUMBER_WORDS = new Map(Object.entries({
   ZERO: 0, CERO: 0, ZEROES: 0, "ZÉRO": 0, NULL: 0, OH: 0, O: 0,
   ONE: 1, WON: 1, UN: 1, UNE: 1, UNO: 1, UNA: 1, UM: 1, UMA: 1, EIN: 1, EINS: 1, EINE: 1, EINEN: 1,
@@ -194,6 +195,7 @@ export function extractCodeOccurrences(value) {
   const add = (team, number = "", suffix = "", quantity = 1) => {
     const normalizedTeam = String(team || "").toUpperCase();
     const correctedTeam = PASTED_TEAM_CODE_CORRECTIONS.get(normalizedTeam) || normalizedTeam;
+    if (PARSER_CONJUNCTION_CODES.has(correctedTeam)) return;
     const code = normalizeCardCode(`${correctedTeam}${number}${suffix}`);
     if (!code) return;
     occurrences.set(code, (occurrences.get(code) || 0) + Math.max(1, Number(quantity || 1)));
@@ -245,6 +247,25 @@ export function extractCodeOccurrences(value) {
     ) continue;
     for (const token of match[2].matchAll(groupedTokenPattern)) add(match[1], token[1], token[2], token[3] || token[4] || token[5]);
     groupedSpans.push([start, match.index + match[0].length]);
+  }
+  const inlineTeamToken = "[A-Z]{2,3}";
+  const quantitySuffix = `(?:\\s*(?:\\(\\s*(?:(\\d{1,2})\\s*[X×]|[X×]\\s*(\\d{1,2}))\\s*\\)|[X×]\\s*(\\d{1,2})))?`;
+  const inlineTeamAnchorPattern = new RegExp(
+    `(?<![A-Z0-9])(${inlineTeamToken})\\s*[-–—_./]?\\s*([1-9]\\d?)(S)?${quantitySuffix}(?![A-Z0-9])`,
+    "g",
+  );
+  const continuationPattern = new RegExp(
+    `^\\s*(?:[,;/&+]|\\b(?:AND|ET|UND|Y|E|SI)\\b)\\s*([1-9]\\d?)(S)?${quantitySuffix}(?![A-Z0-9])`,
+  );
+  for (const anchor of upper.matchAll(inlineTeamAnchorPattern)) {
+    if (groupedSpans.some(([spanStart, spanEnd]) => spanStart <= anchor.index && anchor.index < spanEnd)) continue;
+    let cursor = anchor.index + anchor[0].length;
+    while (cursor < upper.length) {
+      const continuation = upper.slice(cursor).match(continuationPattern);
+      if (!continuation) break;
+      add(anchor[1], continuation[1], continuation[2], continuation[3] || continuation[4] || continuation[5]);
+      cursor += continuation[0].length;
+    }
   }
   for (const [name, team] of COUNTRY_NAME_CODES) {
     if (team === "00") continue;
@@ -769,16 +790,17 @@ export function deriveCollectionModel({ catalog, legacyCollected, ledger, invent
 
 export function adjustedInventoryPayload(inventory, ledger, options = {}) {
   const aliases = normalizeCatalogAliases(options.catalog);
-  const sourceCards = canonicalInventoryCards(
+  const catalogueByCode = new Map(normalizeCatalogCards(options.catalog).map((card) => [card.code, card]));
+  const rawSourceCards = canonicalInventoryCards(
     inventory?.cards && typeof inventory.cards === "object" ? inventory.cards : {},
     aliases,
     options.catalog,
   );
+  const sourceCards = Object.fromEntries(Object.entries(rawSourceCards).filter(([code]) => catalogueByCode.has(code)));
   const inventoryAlbumCounts = canonicalInventoryAlbumCounts(sourceCards, aliases);
   const albumBaselineCodes = [...inventoryAlbumCounts.entries()]
     .filter(([, quantity]) => quantity > 0)
     .map(([code]) => code);
-  const catalogueByCode = new Map(normalizeCatalogCards(options.catalog).map((card) => [card.code, card]));
   const cards = projectInventoryCardsInLedgerOrder({
     sourceCards,
     ledger,
@@ -786,6 +808,7 @@ export function adjustedInventoryPayload(inventory, ledger, options = {}) {
     catalogueByCode,
     albumBaselineCodes: [...(options.legacyCollected || []), ...albumBaselineCodes],
     excludeTransactionId: options.excludeTransactionId,
+    enforceCatalogue: true,
   });
   const captures = Array.isArray(inventory?.captures) ? inventory.captures : [];
   return {
@@ -809,6 +832,7 @@ function projectInventoryCardsInLedgerOrder({
   catalogueByCode,
   albumBaselineCodes,
   excludeTransactionId,
+  enforceCatalogue,
 }) {
   const cards = Object.fromEntries(Object.entries(sourceCards).map(([code, card]) => [code, {
     ...card,
@@ -830,6 +854,7 @@ function projectInventoryCardsInLedgerOrder({
     if (transaction.status !== "completed") continue;
     for (const rawLine of transaction.received || []) {
       const line = canonicalizeInventoryLine(rawLine, aliases);
+      if (enforceCatalogue && !catalogueByCode.has(line.code)) continue;
       let looseQuantity = line.quantity;
       if (!albumFilled.has(line.code)) {
         albumFilled.add(line.code);

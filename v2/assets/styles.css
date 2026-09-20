@@ -1440,6 +1440,7 @@
 .pasteCardStatusList li.new-for-album { border-left-color: var(--accent); }
 .pasteCardStatusList li.new-trading-card { border-left-color: #4aa8ff; background: rgba(74, 168, 255, 0.10); }
 .pasteCardStatusList li.duplicate-trading-card { border-left-color: #ffc457; background: rgba(255, 196, 87, 0.08); }
+.pasteCardStatusList li.unrecognized-card { border-left-color: #f06a7a; background: rgba(240, 106, 122, 0.10); }
 .pasteCardStatusList li > span { color: var(--muted); font-size: 0.8rem; line-height: 1.25; }
 
 .textInventoryPreview {

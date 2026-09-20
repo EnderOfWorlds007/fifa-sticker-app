@@ -71,6 +71,7 @@ test("scan colours survive the collection ledger and inventory projection", () =
   assert.deepEqual(ledger.transactions[0].received, received);
   assert.deepEqual(transactionDetailLines(ledger.transactions[0]), ["Receive: COL11 Blue, COL11 x2 Green"]);
   const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger, {
+    catalog: catalogFor("COL11"),
     legacyCollected: ["COL11"],
   });
   assert.equal(inventory.cards.COL11.count, 3);
@@ -104,6 +105,7 @@ test("outgoing trades remove loose copies received by earlier transactions", () 
   });
 
   const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger, {
+    catalog: catalogFor("ARG7"),
     legacyCollected: ["ARG7"],
   });
 
@@ -135,6 +137,7 @@ test("snapshot replacement preserves the received colour when the old copy was u
   });
 
   const inventory = adjustedInventoryPayload(rawInventory, ledger, {
+    catalog: catalogFor("CIV10"),
     legacyCollected: ["CIV10"],
   });
 
@@ -167,6 +170,7 @@ test("plain outgoing stock consumes an implicit unknown copy before a known blue
   });
 
   const inventory = adjustedInventoryPayload(rawInventory, ledger, {
+    catalog: catalogFor("CIV10"),
     legacyCollected: ["CIV10"],
   });
 
@@ -216,7 +220,9 @@ test("first receipts fill the album before reserved outgoing stock is projected"
     given: [{ code: "ARG7", quantity: 1, variant: "standard_fifa_licensed" }],
   });
 
-  const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger);
+  const inventory = adjustedInventoryPayload({ cards: {}, captures: [], stats: {} }, ledger, {
+    catalog: { cards: [{ code: "ARG7", team: "Argentina", name: "Player" }] },
+  });
 
   assert.equal(inventory.cards.ARG7.count, 1);
   assert.deepEqual(inventory.cards.ARG7.back_insignia_counts, {
@@ -246,7 +252,10 @@ test("inventory projection does not mutate the raw inventory payload", () => {
     given: [],
   });
 
-  const inventory = adjustedInventoryPayload(rawInventory, ledger, { legacyCollected: ["ARG7"] });
+  const inventory = adjustedInventoryPayload(rawInventory, ledger, {
+    catalog: { cards: [{ code: "ARG7", team: "Argentina", name: "Player" }] },
+    legacyCollected: ["ARG7"],
+  });
 
   assert.deepEqual(rawInventory, before);
   assert.equal(inventory.cards.ARG7.count, 2);
@@ -255,3 +264,31 @@ test("inventory projection does not mutate the raw inventory payload", () => {
     united_edition: 1,
   });
 });
+
+test("catalogue-backed inventory projection excludes unknown raw and ledger codes", () => {
+  const inventory = adjustedInventoryPayload({
+    cards: {
+      ARG7: { code: "ARG7", count: 2 },
+      AND13: { code: "AND13", count: 4 },
+    },
+  }, {
+    schemaVersion: 1,
+    transactions: [{
+      id: "txn_unknown",
+      kind: "received",
+      status: "completed",
+      received: [{ code: "ET3", quantity: 2 }, { code: "ARG7", quantity: 1 }],
+      given: [],
+    }],
+  }, {
+    catalog: { cards: [{ code: "ARG7", team: "Argentina", name: "Player" }] },
+    legacyCollected: ["ARG7"],
+  });
+
+  assert.deepEqual(Object.keys(inventory.cards), ["ARG7"]);
+  assert.equal(inventory.cards.ARG7.count, 3);
+});
+
+function catalogFor(...codes) {
+  return { cards: codes.map((code) => ({ code, team: code.replace(/\d.*$/, ""), name: "Card" })) };
+}

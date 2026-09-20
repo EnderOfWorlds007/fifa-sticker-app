@@ -183,7 +183,7 @@ test("explicit review loading replays from revision zero and permits a review-on
   assert.match(source, /recoverCloudReviewHistory[\s\S]*startRevision: 0/);
   assert.match(source, /limit: 1,[\s\S]*retainTransactions: false/);
   assert.doesNotMatch(source, /const payloads = \[\]/);
-  assert.match(source, /if \(recoverReviews\) \{[\s\S]*applyAccountProjection\(storage, previousProjection\)/);
+  assert.match(source, /if \(recoverReviews\) \{[\s\S]*applyAccountProjection\(storage, previousProjection, catalog\)/);
   assert.match(source, /recovery\.hasReviewCommit[\s\S]*Cloud reviews loaded/);
   assert.match(source, /client\.setLastRevision\(recovery\.revision\)/);
   assert.match(source, /cachedProjection && !recoverReviews/);
