@@ -39,10 +39,14 @@ test("back insignia has an independent human decision with explicit meanings", (
 
 test("insignia decisions update collection state and retained OCR feedback independently", () => {
   const chooseBody = functionBody("chooseInsignia");
+  const persistBody = functionBody("persistInsigniaReviewLabel");
   assert.match(chooseBody, /slot\.back_insignia_type = option\.variant/);
   assert.match(chooseBody, /slot\.insignia_review_status = option\.decision/);
   assert.match(chooseBody, /persistInsigniaReviewLabel/);
-  assert.match(functionBody("persistInsigniaReviewLabel"), /predicted_type: slot\.original_back_insignia_type/);
+  assert.match(persistBody, /predicted_type: slot\.original_back_insignia_type/);
+  assert.match(persistBody, /photo:\$\{uploadId\}:\$\{slotId\}/);
+  assert.match(persistBody, /photo:retained:\$\{sourceBatchId\}:\$\{photoId\}:\$\{slotId\}/);
+  assert.doesNotMatch(persistBody, /revision/);
   assert.match(backendSource, /BACK_INSIGNIA_REVIEW_LABELS_PATH/);
   assert.match(backendSource, /export async function saveBackInsigniaReviewLabel/);
 });

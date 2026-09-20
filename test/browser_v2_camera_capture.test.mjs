@@ -95,7 +95,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(reviewsCdp, "Page.enable");
         await send(reviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
           source: `
-            sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1");
+            sessionStorage.setItem("fifa-v2-controller-reload-build-71707c8bae72", "1");
             window.__reviewErrors = [];
             window.__cloudFetchStarted = false;
             window.__cloudAutosaveStarted = false;
@@ -361,6 +361,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         photoLabel: "Photo 1 of 2 · sample.png",
         openReviewsHidden: false,
       });
+      await clearActiveReviewUploadIds(cdp);
 
       const batchReviewsPage = await createPage("about:blank");
       const batchReviewsCdp = await connectCdp(batchReviewsPage.webSocketDebuggerUrl);
@@ -370,7 +371,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(batchReviewsCdp, "Runtime.enable");
         await send(batchReviewsCdp, "Page.enable");
         await send(batchReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-71707c8bae72", "1")`,
         });
         await send(batchReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(batchReviewsCdp, `document.querySelector("#photoScannerResult")?.value === "TUR5\\nTUR5"`);
@@ -381,7 +382,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await send(syncedReviewsCdp, "Runtime.enable");
         await send(syncedReviewsCdp, "Page.enable");
         await send(syncedReviewsCdp, "Page.addScriptToEvaluateOnNewDocument", {
-          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1")`,
+          source: `sessionStorage.setItem("fifa-v2-controller-reload-build-71707c8bae72", "1")`,
         });
         await send(syncedReviewsCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/reviews/` });
         await waitForExpression(syncedReviewsCdp, `document.querySelector("#photoReviewQueueText")?.textContent.includes("Review 1 of 2")`);
@@ -403,8 +404,10 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
         await evaluate(syncedReviewsCdp, `document.querySelector('[data-insignia-decision="green"]').click()`);
         await delay(200);
         const syncedFeedbackUrls = await evaluate(syncedReviewsCdp, `window.__reviewFeedbackUrls`);
+        const syncedFeedbackPayloads = await evaluate(syncedReviewsCdp, `window.__reviewFeedbackPayloads`);
         assert.equal(syncedFeedbackUrls.length, 1);
         assert.match(syncedFeedbackUrls[0], /\/api\/back-insignia-review\/labels$/);
+        assert.match(syncedFeedbackPayloads[0].id, /^photo:retained:review_[^:]+:photo_1_[^:]+:slot-tur5$/);
         await evaluate(batchReviewsCdp, `window.__releaseHeldReviewFeedback()`);
         await delay(200);
         const firstSlotAfterLateFeedback = await activeReviewSlotState(batchReviewsCdp, 0, 0);
@@ -493,7 +496,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
 
 function cameraMockSource() {
   return `(() => {
-    sessionStorage.setItem("fifa-v2-controller-reload-build-087bdbb24527", "1");
+    sessionStorage.setItem("fifa-v2-controller-reload-build-71707c8bae72", "1");
     localStorage.setItem("panini.inventorySnapshot.v1", JSON.stringify({
       updated_at: "2026-09-03T00:00:00Z",
       cards: { TUR5: { code: "TUR5", album_count: 1, count: 1 } },
@@ -626,10 +629,12 @@ function installReviewFeedbackMockSource(holdFirst) {
     let requestCount = 0;
     let releaseHeld = null;
     window.__reviewFeedbackUrls = [];
+    window.__reviewFeedbackPayloads = [];
     window.__releaseHeldReviewFeedback = () => releaseHeld?.();
     window.fetch = (url, init) => {
       if (String(url).endsWith("/api/back-insignia-review/labels") && init?.method === "POST") {
         window.__reviewFeedbackUrls.push(String(url));
+        window.__reviewFeedbackPayloads.push(JSON.parse(String(init.body || "{}")));
         requestCount += 1;
         if (${holdFirst} && requestCount === 1) {
           return new Promise((resolve) => {
@@ -806,6 +811,48 @@ async function stripActiveReviewCodeCandidates(cdp) {
       const writeTransaction = database.transaction("review_photo_states", "readwrite");
       for (const state of states) {
         for (const slot of state.slots || []) delete slot.code_candidates;
+        writeTransaction.objectStore("review_photo_states").put(state);
+      }
+      await new Promise((resolve, reject) => {
+        writeTransaction.oncomplete = resolve;
+        writeTransaction.onerror = () => reject(writeTransaction.error);
+        writeTransaction.onabort = () => reject(writeTransaction.error);
+      });
+    } finally {
+      database.close();
+    }
+  })()`);
+}
+
+async function clearActiveReviewUploadIds(cdp) {
+  return evaluate(cdp, `(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("panini-photo-review-queue", 4);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const profileId = localStorage.getItem("panini.cloudSync.activeProfileId.v1") || localStorage.getItem("panini.v2.activeProfileId") || "";
+      const active = await new Promise((resolve, reject) => {
+        const request = database.transaction("active_review_batches", "readonly")
+          .objectStore("active_review_batches").get(profileId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const readTransaction = database.transaction("review_photo_states", "readonly");
+      const states = await new Promise((resolve, reject) => {
+        const request = readTransaction.objectStore("review_photo_states").index("batchId").getAll(active?.batchId || "");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        readTransaction.oncomplete = resolve;
+        readTransaction.onerror = () => reject(readTransaction.error);
+        readTransaction.onabort = () => reject(readTransaction.error);
+      });
+      const writeTransaction = database.transaction("review_photo_states", "readwrite");
+      for (const state of states) {
+        for (const slot of state.slots || []) slot.upload_id = "";
         writeTransaction.objectStore("review_photo_states").put(state);
       }
       await new Promise((resolve, reject) => {
