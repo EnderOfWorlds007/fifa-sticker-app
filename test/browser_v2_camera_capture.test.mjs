@@ -372,7 +372,7 @@ test("V2 photo picker stays reusable and camera sends captured files through OCR
           source: `sessionStorage.setItem("fifa-v2-controller-reload-build-7ab34d90e216", "1")`,
         });
         await send(cleanScannerCdp, "Page.navigate", { url: `http://127.0.0.1:${PORT}/fifa-sticker-app/v2/scanner/` });
-        await waitForExpression(cleanScannerCdp, `document.body.dataset.photoScannerReady === "true"`);
+        await waitForExpression(cleanScannerCdp, `document.body?.dataset.photoScannerReady === "true"`);
         const profileId = await evaluate(cleanScannerCdp, `localStorage.getItem("panini.cloudSync.activeProfileId.v1")
           || localStorage.getItem("panini.v2.activeProfileId")`);
         await evaluate(cleanScannerCdp, `window.dispatchEvent(new CustomEvent("panini:cloud-sync-applied", {
