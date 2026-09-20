@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("uncertain review enters a visible focused-card mode with zoom and overview controls", () => {
+test("uncertain review enters focused-card mode with zoom and a full-photo annotation control", () => {
   const html = readFileSync("v2/scanner/index.html", "utf8");
   const js = readFileSync("v2/assets/photo_scanner.js", "utf8");
   const css = readFileSync("v2/assets/styles.css", "utf8");
@@ -10,7 +10,8 @@ test("uncertain review enters a visible focused-card mode with zoom and overview
   assert.match(html, /id="photoReviewToolbar"[^>]*hidden/);
   assert.match(html, /id="photoReviewZoomOut"[^>]*aria-label="Zoom out"[^>]*>−</);
   assert.match(html, /id="photoReviewZoomIn"[^>]*aria-label="Zoom in"[^>]*>\+</);
-  assert.match(html, /id="photoReviewOverview"[^>]*>Overview</);
+  assert.match(html, /id="photoReviewOverview"[^>]*>Full photo · all annotations</);
+  assert.match(html, /Show the entire submitted photo with every recognition annotation/);
 
   assert.match(js, /photoReviewView = \{ focused: false, zoomFactor: 1 \}/);
   assert.match(js, /const hasPhotoLocation = reviewSlotPolygon\(located\.slot\)\.length >= 4/);
@@ -20,7 +21,8 @@ test("uncertain review enters a visible focused-card mode with zoom and overview
   assert.match(js, /`Review \$\{Math\.min\(total, completed \+ 1\)\} of \$\{total\} · \$\{focused\.code/);
   assert.match(js, /reviewToolbar\.hidden = !focused/);
   assert.match(js, /function adjustReviewZoom\(multiplier\)/);
-  assert.match(js, /function showReviewOverview\(\)/);
+  assert.match(js, /function showReviewOverview\(options = \{\}\)/);
+  assert.match(js, /photoReviewView\.focused \? \[selectedSlot\(\)\]\.filter\(Boolean\) : photoReviewState\.slots/);
 
   assert.match(css, /\.photoReviewStage\.isFocused/);
   assert.match(css, /\.photoReviewToolbar\s*\{/);
