@@ -7,22 +7,22 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-c41e7a92d63f";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-ec7b4a1d9032";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
   applyTextInventoryCodesToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-c41e7a92d63f";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-c41e7a92d63f";
-import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-c41e7a92d63f";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-c41e7a92d63f";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-ec7b4a1d9032";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-ec7b4a1d9032";
+import { normalizeCodeInput } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-ec7b4a1d9032";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-ec7b4a1d9032";
 import {
   classifyScannedCards,
   groupScannedCardStatuses,
   scannedCardStatusSummaryText,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-c41e7a92d63f";
-import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-c41e7a92d63f";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-ec7b4a1d9032";
+import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-ec7b4a1d9032";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");

@@ -11,13 +11,18 @@ import {
 } from "../v2/assets/pwa.js";
 
 test("V2 reload URL and worker checks require the current build", () => {
-  assert.equal(V2_BUILD_ID, "build-c41e7a92d63f");
+  assert.equal(V2_BUILD_ID, "build-ec7b4a1d9032");
   assert.equal(serviceWorkerUsesBuild({ scriptURL: `https://example.test/v2/sw.js?v=${V2_BUILD_ID}` }), true);
   assert.equal(serviceWorkerUsesBuild({ scriptURL: "https://example.test/v2/sw.js?v=old" }), false);
   const url = new URL(buildReloadUrl("https://example.test/fifa-sticker-app/v2/scanner/?foo=bar", V2_BUILD_ID, 123));
   assert.equal(url.searchParams.get("foo"), "bar");
   assert.equal(url.searchParams.get("v"), V2_BUILD_ID);
   assert.equal(url.searchParams.get("sw-refresh"), "123");
+});
+
+test("scanner diagnostic marker identifies the active V2 build", () => {
+  const scanner = readFileSync("v2/scanner/index.html", "utf8");
+  assert.match(scanner, new RegExp(`Camera build ${V2_BUILD_ID.replace(/^build-/, "")} ready`));
 });
 
 test("controller refresh reloads at most once per build", () => {
@@ -89,7 +94,7 @@ test("V2 updater bypasses the HTTP cache and reloads when the new worker control
 });
 
 test("emergency reset uses a unique path and preserves local collection data", () => {
-  const resetPage = readFileSync("v2/cache-reset-build-c41e7a92d63f/index.html", "utf8");
+  const resetPage = readFileSync("v2/cache-reset-build-ec7b4a1d9032/index.html", "utf8");
   const serviceWorker = readFileSync("v2/sw.js", "utf8");
   const rootServiceWorker = readFileSync("sw.js", "utf8");
   const appShellPaths = serviceWorker.match(/APP_SHELL_PATHS = \[([\s\S]*?)\];/)?.[1] || "";
@@ -102,7 +107,7 @@ test("emergency reset uses a unique path and preserves local collection data", (
   assert.match(resetPage, /collection.*settings are not affected/i);
   assert.doesNotMatch(resetPage, /localStorage\.clear|indexedDB\.deleteDatabase/);
   assert.match(resetPage, /cache-reset=\$\{Date\.now\(\)\}/);
-  assert.match(resetPage, /build-c41e7a92d63f/);
+  assert.match(resetPage, /build-ec7b4a1d9032/);
   assert.doesNotMatch(appShellPaths, /cache-reset-build/);
   assert.match(serviceWorker, /APP_SHELL_PATHS\.map/);
   assert.match(serviceWorker, /v=\$\{BUILD_ID\}/);
@@ -119,7 +124,7 @@ test("every V2 HTML entry loads the current updater except the inline reset page
   for (const path of htmlFiles("v2")) {
     if (path.includes("/cache-reset-build-")) continue;
     const html = readFileSync(path, "utf8");
-    assert.match(html, /\/v2\/assets\/pwa\.js\?v=build-c41e7a92d63f/, path);
+    assert.match(html, /\/v2\/assets\/pwa\.js\?v=build-ec7b4a1d9032/, path);
   }
 });
 
