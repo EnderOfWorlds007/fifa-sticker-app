@@ -177,6 +177,27 @@ test("revision checks reject a stale whole-photo overwrite", async () => {
   );
 });
 
+test("a quota failure preserves the reviewed photo and reports the request-level cause", async () => {
+  const control = {};
+  const indexedDB = fakeIndexedDB({ control });
+  const batch = reviewBatchFixture("batch-1", "profile-1", 10);
+  await savePhotoReviewBatch(batch, { indexedDB });
+  const changed = structuredClone(batch.photos[0]);
+  changed.slots = [{ id: "slot-1", code: "ARG11", insignia_review_status: "blue" }];
+  control.failNextWrite = {
+    store: "review_photos",
+    name: "QuotaExceededError",
+    message: "disk full",
+  };
+
+  await assert.rejects(
+    savePhotoReviewPhoto(batch.id, changed, { indexedDB }),
+    /Review storage is full on this phone/,
+  );
+  const restored = await loadLatestPhotoReviewBatch("profile-1", { indexedDB });
+  assert.equal(restored.photos[0].slots[0].code, undefined);
+});
+
 test("cloud review parts stay invisible until a complete commit activates the account-scoped batch", async () => {
   const indexedDB = fakeIndexedDB();
   const batch = {
@@ -223,8 +244,93 @@ test("cloud review parts stay invisible until a complete commit activates the ac
   assert.equal(restored.profileId, "cloud-profile");
   assert.equal(restored.photos.length, 1);
   assert.equal(await restored.photos[0].blob.text(), "photo");
+  assert.equal(restored.photos[0].blob.size, 5);
+  assert.equal(restored.photos[0].blob.type, "image/jpeg");
   assert.equal(restored.photos[0].slots[0].code, "CAN15");
+  assert.equal(indexedDB.records("review_import_parts").length, 0);
   assert.equal(await loadLatestPhotoReviewBatch("different-cloud-profile", { indexedDB }), null);
+});
+
+test("committed cloud imports do not rebuild duplicate staging blobs on replay", async () => {
+  const indexedDB = fakeIndexedDB();
+  const batch = {
+    id: "cloud-batch-1",
+    reviewItems: [{ key: "photo-1:slot-1:insignia", photoId: "photo-1", slotId: "slot-1", kind: "insignia" }],
+  };
+  const part = {
+    kind: CLOUD_REVIEW_PART_KIND,
+    importId: "import-1",
+    partId: "photo:photo-1",
+    digest: "",
+    batchId: batch.id,
+    imageDataUrl: "data:image/jpeg;base64,cGhvdG8=",
+    photo: { id: "photo-1", index: 0, slots: [{ id: "slot-1", code: "ARG11" }] },
+  };
+  part.digest = await partDigest(part);
+  await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
+  const commit = {
+    kind: CLOUD_REVIEW_COMMIT_KIND,
+    importId: part.importId,
+    digest: "",
+    batch,
+    photos: [{ partId: part.partId, photoId: part.photo.id, index: 0, digest: part.digest }],
+    expectedPhotoCount: 1,
+    expectedReviewItemCount: 1,
+  };
+  commit.digest = await commitDigest(commit);
+  await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
+
+  assert.equal(indexedDB.records("review_import_parts").length, 0);
+  assert.equal(await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), "staged");
+  assert.equal(await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), "unchanged");
+  assert.equal(indexedDB.records("review_import_parts").length, 0);
+  const restored = await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB });
+  assert.equal(await restored.photos[0].blob.text(), "photo");
+});
+
+test("loading a queue reaps staging blobs retained by an older app build", async () => {
+  const indexedDB = fakeIndexedDB();
+  const batch = {
+    id: "cloud-batch-1",
+    reviewItems: [{ key: "photo-1:slot-1:insignia", photoId: "photo-1", slotId: "slot-1", kind: "insignia" }],
+  };
+  const part = {
+    kind: CLOUD_REVIEW_PART_KIND,
+    importId: "import-legacy",
+    partId: "photo:photo-1",
+    digest: "",
+    batchId: batch.id,
+    imageDataUrl: "data:image/jpeg;base64,bGVnYWN5",
+    photo: { id: "photo-1", index: 0, slots: [{ id: "slot-1", code: "ARG11" }] },
+  };
+  part.digest = await partDigest(part);
+  await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
+  const commit = {
+    kind: CLOUD_REVIEW_COMMIT_KIND,
+    importId: part.importId,
+    digest: "",
+    batch,
+    photos: [{ partId: part.partId, photoId: part.photo.id, index: 0, digest: part.digest }],
+    expectedPhotoCount: 1,
+    expectedReviewItemCount: 1,
+  };
+  commit.digest = await commitDigest(commit);
+  await importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
+  indexedDB.seed("review_import_parts", {
+    key: `cloud-profile:${part.importId}:${part.partId}`,
+    importKey: `cloud-profile:${part.importId}`,
+    profileId: "cloud-profile",
+    importId: part.importId,
+    partId: part.partId,
+    digest: part.digest,
+    batchId: part.batchId,
+    photo: { ...part.photo, blob: new Blob(["duplicate staging photo"], { type: "image/jpeg" }) },
+  });
+  assert.equal(indexedDB.records("review_import_parts").length, 1);
+
+  const restored = await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB });
+  assert.equal(indexedDB.records("review_import_parts").length, 0);
+  assert.equal(await restored.photos[0].blob.text(), "legacy");
 });
 
 test("cloud review imports are immutable, idempotent, and reject conflicting replay", async () => {
@@ -321,6 +427,60 @@ test("an incomplete cloud review commit never activates a partial queue", async 
   commit.digest = await commitDigest(commit);
   await assert.rejects(importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }), /incomplete/);
   assert.equal(await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB }), null);
+  assert.equal(indexedDB.records("review_import_parts").length, 1);
+});
+
+test("a late cloud commit failure rolls back activation and preserves every staged photo", async () => {
+  const control = {};
+  const indexedDB = fakeIndexedDB({ control });
+  await savePhotoReviewBatch(reviewBatchFixture("previous-batch", "cloud-profile", 1), { indexedDB });
+  const batch = {
+    id: "failing-source-batch",
+    createdAt: 10,
+    updatedAt: 20,
+    activePhotoId: "new-photo",
+    reviewItems: [{ key: "new-photo:slot-1:insignia", photoId: "new-photo", slotId: "slot-1", kind: "insignia" }],
+  };
+  const part = {
+    kind: CLOUD_REVIEW_PART_KIND,
+    importId: "failing-import",
+    partId: "photo:new-photo",
+    digest: "",
+    batchId: batch.id,
+    imageDataUrl: "data:image/jpeg;base64,bmV3LXBob3Rv",
+    photo: { id: "new-photo", index: 0, slots: [{ id: "slot-1", code: "ARG11" }] },
+  };
+  part.digest = await partDigest(part);
+  await importCloudReviewPayload(part, "cloud-profile", { indexedDB, cryptoImpl: webcrypto });
+  const commit = {
+    kind: CLOUD_REVIEW_COMMIT_KIND,
+    importId: part.importId,
+    digest: "",
+    batch,
+    photos: [{ partId: part.partId, photoId: part.photo.id, index: 0, digest: part.digest }],
+    expectedPhotoCount: 1,
+    expectedReviewItemCount: 1,
+  };
+  commit.digest = await commitDigest(commit);
+  control.failNextWrite = {
+    store: "review_imports",
+    name: "QuotaExceededError",
+    message: "commit marker could not be stored",
+  };
+
+  await assert.rejects(
+    importCloudReviewPayload(commit, "cloud-profile", { indexedDB, cryptoImpl: webcrypto }),
+    /Review storage is full on this phone/,
+  );
+  assert.equal(indexedDB.records("review_import_parts").length, 1);
+  assert.equal(indexedDB.records("review_imports").length, 0);
+  assert.deepEqual(indexedDB.records("review_batches").map((record) => record.id), ["previous-batch"]);
+  assert.deepEqual(indexedDB.records("review_photos").map((record) => record.id), ["previous-batch-photo"]);
+  assert.deepEqual(indexedDB.records("active_review_batches"), [{
+    profileId: "cloud-profile",
+    batchId: "previous-batch",
+  }]);
+  assert.equal((await loadLatestPhotoReviewBatch("cloud-profile", { indexedDB })).id, "previous-batch");
 });
 
 test("the retained 35-photo and 117-item queue commits in source order", async () => {
@@ -435,6 +595,17 @@ test("review storage prefers the active cloud account and falls back to the loca
   assert.equal(activeCloudPhotoReviewProfileId(storage), "");
 });
 
+test("review storage reports the request-level browser failure instead of a generic transaction error", () => {
+  const store = readFileSync("v2/assets/photo_review_store_v2.js", "utf8");
+  const scanner = readFileSync("v2/assets/photo_scanner.js", "utf8");
+  assert.match(store, /request\.error, operation/);
+  assert.match(store, /QuotaExceededError/);
+  assert.match(store, /DataCloneError/);
+  assert.match(store, /if \(!TRANSACTION_FAILURES\.has\(transaction\)\)/);
+  assert.match(scanner, /Review storage write failed/);
+  assert.match(scanner, /navigator\?\.storage\?\.estimate/);
+});
+
 test("Reviews distinguishes encrypted queue loading from OCR authorization", () => {
   const reviewHtml = readFileSync("v2/reviews/index.html", "utf8");
   const scanner = readFileSync("v2/assets/photo_scanner.js", "utf8");
@@ -488,6 +659,19 @@ test("scanner persists photo identity and aggregates every successful photo", ()
   assert.match(cloudSync, /APPLIED_EVENT, \{ revision: result\.revision, profileId: client\.profileId \}/);
 });
 
+test("focused review offers the full submitted photo with every annotation", () => {
+  const reviewHtml = readFileSync("v2/reviews/index.html", "utf8");
+  const scannerHtml = readFileSync("v2/scanner/index.html", "utf8");
+  const scanner = readFileSync("v2/assets/photo_scanner.js", "utf8");
+  for (const html of [reviewHtml, scannerHtml]) {
+    assert.match(html, /id="photoReviewOverview"[^>]*>Full photo · all annotations<\/button>/);
+    assert.match(html, /Show the entire submitted photo with every recognition annotation/);
+  }
+  assert.match(scanner, /photoReviewView\.focused \? \[selectedSlot\(\)\]\.filter\(Boolean\) : photoReviewState\.slots/);
+  assert.match(scanner, /reviewImage\.style\.transform = ""/);
+  assert.match(scanner, /Showing the full submitted photo with/);
+});
+
 function primaryTabPages(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -535,15 +719,23 @@ function commitDigest(commit) {
   }, webcrypto);
 }
 
-function fakeIndexedDB() {
+function fakeIndexedDB(options = {}) {
   const stores = new Map();
   let database = null;
   return {
+    records(name) {
+      return [...(stores.get(name)?.values.values() || [])].map((value) => structuredClone(value));
+    },
+    seed(name, value) {
+      const definition = stores.get(name);
+      if (!definition) throw new Error(`Unknown fake IndexedDB store: ${name}`);
+      definition.values.set(value[definition.keyPath], structuredClone(value));
+    },
     open() {
       const request = {};
       queueMicrotask(() => {
         if (!database) {
-          database = createDatabase(stores);
+          database = createDatabase(stores, options);
           request.result = database;
           request.transaction = database.transaction([...stores.keys()], "versionchange");
           request.onupgradeneeded?.();
@@ -557,8 +749,8 @@ function fakeIndexedDB() {
   };
 }
 
-function createDatabase(stores) {
-  const storeFacade = (name) => {
+function createDatabase(stores, options = {}) {
+  const storeFacade = (name, transaction = null) => {
     const definition = stores.get(name);
     return {
       indexNames: { contains: (indexName) => definition.indexes.has(indexName) },
@@ -567,7 +759,16 @@ function createDatabase(stores) {
         return this;
       },
       put(value) {
+        const failure = options.control?.failNextWrite;
+        if (failure?.store === name) {
+          options.control.failNextWrite = null;
+          return failedRequest(transaction, failure);
+        }
         definition.values.set(value[definition.keyPath], structuredClone(value));
+        return asyncRequest(undefined);
+      },
+      delete(key) {
+        definition.values.delete(key);
         return asyncRequest(undefined);
       },
       get(key) {
@@ -584,6 +785,11 @@ function createDatabase(stores) {
               .filter((value) => value[index.keyPath] === key)
               .map((value) => structuredClone(value)));
           },
+          getAllKeys(key) {
+            return asyncRequest([...definition.values.entries()]
+              .filter(([, value]) => value[index.keyPath] === key)
+              .map(([recordKey]) => recordKey));
+          },
         };
       },
     };
@@ -595,12 +801,27 @@ function createDatabase(stores) {
       return storeFacade(name);
     },
     transaction(names) {
+      const transactionStores = Array.isArray(names) ? names : [names];
+      const snapshots = new Map(transactionStores.map((name) => [
+        name,
+        new Map([...(stores.get(name)?.values || new Map())]
+          .map(([key, value]) => [key, structuredClone(value)])),
+      ]));
       const transaction = {
+        failed: false,
+        rollback() {
+          for (const [name, values] of snapshots) {
+            const definition = stores.get(name);
+            if (definition) definition.values = new Map(values);
+          }
+        },
         objectStore(name) {
-          return storeFacade(name);
+          return storeFacade(name, transaction);
         },
       };
-      setTimeout(() => transaction.oncomplete?.(), 0);
+      setTimeout(() => {
+        if (!transaction.failed) transaction.oncomplete?.();
+      }, 0);
       return transaction;
     },
     close() {},
@@ -612,6 +833,24 @@ function asyncRequest(result) {
   queueMicrotask(() => {
     request.result = result;
     request.onsuccess?.();
+  });
+  return request;
+}
+
+function failedRequest(transaction, failure) {
+  const request = {};
+  queueMicrotask(() => {
+    const error = new Error(failure.message || failure.name || "write failed");
+    error.name = failure.name || "UnknownError";
+    request.error = error;
+    request.onerror?.();
+    if (transaction) {
+      transaction.failed = true;
+      transaction.error = error;
+      transaction.rollback?.();
+      transaction.onerror?.();
+      transaction.onabort?.();
+    }
   });
   return request;
 }

@@ -7,6 +7,7 @@ const IMPORT_STORE = "review_imports";
 const IMPORT_PART_STORE = "review_import_parts";
 const ACTIVE_CLOUD_PROFILE_ID_KEY = "panini.cloudSync.activeProfileId.v1";
 const ACTIVE_LOCAL_PROFILE_ID_KEY = "panini.v2.activeProfileId";
+const TRANSACTION_FAILURES = new WeakMap();
 
 export class ReviewStateConflictError extends Error {
   constructor(message = "This review changed in another tab. Reloading the latest version.") {
@@ -22,12 +23,14 @@ export async function savePhotoReviewBatch(batch, options = {}) {
     for (const photo of batch.photos || []) photo.revision = 1;
     const transaction = database.transaction([BATCH_STORE, PHOTO_STORE, ACTIVE_STORE], "readwrite");
     const complete = transactionComplete(transaction);
-    transaction.objectStore(BATCH_STORE).put(batchRecord(batch));
-    for (const photo of batch.photos || []) transaction.objectStore(PHOTO_STORE).put(photoRecord(batch.id, photo));
-    transaction.objectStore(ACTIVE_STORE).put({
+    trackedWrite(transaction, transaction.objectStore(BATCH_STORE).put(batchRecord(batch)), "saving the review batch");
+    for (const photo of batch.photos || []) {
+      trackedWrite(transaction, transaction.objectStore(PHOTO_STORE).put(photoRecord(batch.id, photo)), "saving a review photo");
+    }
+    trackedWrite(transaction, transaction.objectStore(ACTIVE_STORE).put({
       profileId: String(batch.profileId || ""),
       batchId: String(batch.id || ""),
-    });
+    }), "activating the review batch");
     await complete;
     return batch;
   } finally {
@@ -44,7 +47,7 @@ export async function savePhotoReviewBatchMeta(batch, options = {}) {
     const current = await requestResult(store.get(String(batch.id || "")));
     assertRevision(current, batch, "batch");
     const saved = { ...batchRecord(batch), revision: Number(current.revision || 0) + 1 };
-    store.put(saved);
+    trackedWrite(transaction, store.put(saved), "saving review progress");
     await complete;
     batch.revision = saved.revision;
     return saved;
@@ -66,8 +69,8 @@ export async function savePhotoReviewState(batch, photo, options = {}) {
     assertRevision(currentPhoto, photo, "photo");
     const savedBatch = { ...batchRecord(batch), revision: Number(currentBatch.revision || 0) + 1 };
     const savedPhoto = { ...photoRecord(batch.id, photo), revision: Number(currentPhoto.revision || 0) + 1 };
-    batchStore.put(savedBatch);
-    photoStore.put(savedPhoto);
+    trackedWrite(transaction, batchStore.put(savedBatch), "saving review progress");
+    trackedWrite(transaction, photoStore.put(savedPhoto), "saving the reviewed photo");
     await complete;
     batch.revision = savedBatch.revision;
     photo.revision = savedPhoto.revision;
@@ -86,7 +89,7 @@ export async function savePhotoReviewPhoto(batchId, photo, options = {}) {
     const current = await requestResult(store.get(`${batchId}:${photo.id}`));
     assertRevision(current, photo, "photo");
     const saved = { ...photoRecord(batchId, photo), revision: Number(current.revision || 0) + 1 };
-    store.put(saved);
+    trackedWrite(transaction, store.put(saved), "saving the reviewed photo");
     await complete;
     photo.revision = saved.revision;
     return saved;
@@ -105,13 +108,22 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
     const digest = String(part?.digest || "");
     if (!importId || !partId || !digest) throw new Error("Cloud review part identity is incomplete.");
     const key = `${scopedProfileId}:${importId}:${partId}`;
-    const transaction = database.transaction(IMPORT_PART_STORE, "readwrite");
+    const transaction = database.transaction([IMPORT_STORE, IMPORT_PART_STORE], "readwrite");
     const complete = transactionComplete(transaction);
+    const importStore = transaction.objectStore(IMPORT_STORE);
     const store = transaction.objectStore(IMPORT_PART_STORE);
-    const current = await requestResult(store.get(key));
+    const [retainedCommit, current] = await Promise.all([
+      requestResult(importStore.get(`${scopedProfileId}:${importId}`)),
+      requestResult(store.get(key)),
+    ]);
+    if (retainedCommit) {
+      if (current) trackedWrite(transaction, store.delete(key), "discarding a committed staging photo");
+      await complete;
+      return false;
+    }
     if (current && current.digest !== digest) throw new Error("Cloud review part conflicts with retained evidence.");
     if (!current) {
-      store.put({
+      trackedWrite(transaction, store.put({
         key,
         importKey: `${scopedProfileId}:${importId}`,
         profileId: scopedProfileId,
@@ -120,7 +132,7 @@ export async function stageCloudPhotoReviewPart(part, profileId, options = {}) {
         digest,
         batchId: String(part.batchId || ""),
         photo: part.photo,
-      });
+      }), "staging a cloud review photo");
     }
     await complete;
     return !current;
@@ -144,14 +156,19 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
     );
     const complete = transactionComplete(transaction);
     const importStore = transaction.objectStore(IMPORT_STORE);
+    const importPartStore = transaction.objectStore(IMPORT_PART_STORE);
     const retainedCommit = await requestResult(importStore.get(importKey));
     if (retainedCommit) {
       if (retainedCommit.digest !== commitDigest) throw new Error("Cloud review commit conflicts with retained evidence.");
+      const retainedPartKeys = await requestResult(importPartStore.index("importKey").getAllKeys(importKey));
+      for (const key of retainedPartKeys) {
+        trackedWrite(transaction, importPartStore.delete(key), "discarding a committed staging photo");
+      }
       await complete;
       return { activated: false, created: false, batchId: retainedCommit.batchId };
     }
     const parts = await requestResult(
-      transaction.objectStore(IMPORT_PART_STORE).index("importKey").getAll(importKey),
+      importPartStore.index("importKey").getAll(importKey),
     );
     const expectedPhotos = Array.isArray(commit.photos) ? commit.photos : [];
     if (Number(commit.expectedPhotoCount) !== expectedPhotos.length || parts.length !== expectedPhotos.length) {
@@ -180,19 +197,30 @@ export async function commitCloudPhotoReviewImport(commit, profileId, options = 
     const localBatchId = cloudPhotoReviewBatchId(scopedProfileId, importId, commit.batch?.id);
     const batchStore = transaction.objectStore(BATCH_STORE);
     const photoStore = transaction.objectStore(PHOTO_STORE);
-    batchStore.put(batchRecord({
+    trackedWrite(transaction, batchStore.put(batchRecord({
       ...commit.batch,
       id: localBatchId,
       sourceBatchId: String(commit.batch?.id || ""),
       importId,
       profileId: scopedProfileId,
       revision: 1,
-    }));
-    for (const part of orderedParts) photoStore.put(photoRecord(localBatchId, { ...part.photo, revision: 1 }));
-    if (options.activate !== false) {
-      transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: localBatchId });
+    })), "committing a cloud review batch");
+    for (const part of orderedParts) {
+      trackedWrite(transaction, photoStore.put(photoRecord(localBatchId, { ...part.photo, revision: 1 })), "committing a cloud review photo");
+      trackedWrite(transaction, importPartStore.delete(part.key), "discarding a committed staging photo");
     }
-    importStore.put({ key: importKey, profileId: scopedProfileId, importId, digest: commitDigest, batchId: localBatchId });
+    if (options.activate !== false) {
+      trackedWrite(
+        transaction,
+        transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: localBatchId }),
+        "activating a cloud review batch",
+      );
+    }
+    trackedWrite(
+      transaction,
+      importStore.put({ key: importKey, profileId: scopedProfileId, importId, digest: commitDigest, batchId: localBatchId }),
+      "retaining the cloud review commit",
+    );
     await complete;
     return { activated: options.activate !== false, created: true, batchId: localBatchId };
   } finally {
@@ -216,7 +244,11 @@ export async function activateCloudPhotoReviewBatch(profileId, batchId, options 
     if (!batch || String(batch.profileId || "") !== scopedProfileId) {
       throw new Error("Recovered cloud review queue is unavailable.");
     }
-    transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: scopedBatchId });
+    trackedWrite(
+      transaction,
+      transaction.objectStore(ACTIVE_STORE).put({ profileId: scopedProfileId, batchId: scopedBatchId }),
+      "activating the recovered review batch",
+    );
     await complete;
     return true;
   } finally {
@@ -283,6 +315,11 @@ export async function loadLatestPhotoReviewBatch(profileId, options = {}) {
   const database = await openReviewDatabase(options.indexedDB);
   try {
     const profileKey = String(profileId || "");
+    try {
+      await discardCommittedImportParts(database, profileKey);
+    } catch (error) {
+      console.warn("Committed review staging cleanup will be retried.", error);
+    }
     const metadataTransaction = database.transaction([ACTIVE_STORE, BATCH_STORE], "readonly");
     const metadataComplete = transactionComplete(metadataTransaction);
     const active = await requestResult(metadataTransaction.objectStore(ACTIVE_STORE).get(profileKey));
@@ -394,8 +431,75 @@ function requestResult(request) {
 
 function transactionComplete(transaction) {
   return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error || new Error("Review storage transaction failed."));
-    transaction.onabort = () => reject(transaction.error || new Error("Review storage transaction was aborted."));
+    transaction.oncomplete = () => {
+      TRANSACTION_FAILURES.delete(transaction);
+      resolve();
+    };
+    transaction.onerror = () => reject(transactionFailure(transaction, "Review storage transaction failed."));
+    transaction.onabort = () => reject(transactionFailure(transaction, "Review storage transaction was aborted."));
   });
+}
+
+function trackedWrite(transaction, request, operation) {
+  request.onerror = () => {
+    if (!TRANSACTION_FAILURES.has(transaction)) {
+      TRANSACTION_FAILURES.set(transaction, reviewStorageError(request.error, operation));
+    }
+  };
+  return request;
+}
+
+function transactionFailure(transaction, fallback) {
+  const failure = TRANSACTION_FAILURES.get(transaction) || reviewStorageError(transaction.error, fallback);
+  TRANSACTION_FAILURES.delete(transaction);
+  return failure;
+}
+
+function reviewStorageError(error, operation) {
+  const name = String(error?.name || "");
+  const detail = String(error?.message || "").trim();
+  if (name === "QuotaExceededError") {
+    return new Error("Review storage is full on this phone. Reload Reviews to compact imported photos, then try again.", { cause: error });
+  }
+  if (name === "DataCloneError") {
+    return new Error("Safari could not store part of this review (DataCloneError). Your choice was not saved.", { cause: error });
+  }
+  const suffix = [name, detail].filter(Boolean).join(": ");
+  const label = String(operation || "Review storage failed").replace(/[.\s]+$/, "");
+  return new Error(`${label}${suffix ? ` (${suffix})` : ""}.`, { cause: error });
+}
+
+function discardCommittedImportParts(database, profileId) {
+  const scopedProfileId = String(profileId || "");
+  if (!scopedProfileId) return Promise.resolve(0);
+  const transaction = database.transaction([IMPORT_STORE, IMPORT_PART_STORE], "readwrite");
+  const complete = transactionComplete(transaction);
+  const importStore = transaction.objectStore(IMPORT_STORE);
+  const partStore = transaction.objectStore(IMPORT_PART_STORE);
+  let removed = 0;
+  const importsRequest = importStore.getAll();
+  importsRequest.onerror = () => {
+    if (!TRANSACTION_FAILURES.has(transaction)) {
+      TRANSACTION_FAILURES.set(transaction, reviewStorageError(importsRequest.error, "reading committed review imports"));
+    }
+  };
+  importsRequest.onsuccess = () => {
+    const committed = (importsRequest.result || [])
+      .filter((item) => String(item.profileId || "") === scopedProfileId);
+    for (const item of committed) {
+      const keysRequest = partStore.index("importKey").getAllKeys(String(item.key || ""));
+      keysRequest.onerror = () => {
+        if (!TRANSACTION_FAILURES.has(transaction)) {
+          TRANSACTION_FAILURES.set(transaction, reviewStorageError(keysRequest.error, "reading staged review photo keys"));
+        }
+      };
+      keysRequest.onsuccess = () => {
+        for (const key of keysRequest.result || []) {
+          removed += 1;
+          trackedWrite(transaction, partStore.delete(key), "discarding a committed staging photo");
+        }
+      };
+    }
+  };
+  return complete.then(() => removed);
 }
