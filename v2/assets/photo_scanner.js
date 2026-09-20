@@ -10,23 +10,23 @@ import {
   savePhotoCodeReviewLabel,
   scannerMode,
   waitForPhotoCodeJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-7ab34d90e216";
 import {
   cancelTransaction,
   createTransaction,
   loadLedger,
   saveLedger,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-ec7b4a1d9032";
-import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-ec7b4a1d9032";
-import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-7ab34d90e216";
+import { loadCollectionState } from "/fifa-sticker-app/v2/assets/collection_state.js?v=build-7ab34d90e216";
+import { loadCachedInventoryPayload } from "/fifa-sticker-app/v2/assets/inventory_source.js?v=build-7ab34d90e216";
 import {
   normalizeCollectionCodeList,
   splitCodesByAlbumStatus,
   splitCodesByResolvedCollectionModel,
-} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-ec7b4a1d9032";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-ec7b4a1d9032";
-import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-ec7b4a1d9032";
-import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/collection_model.js?v=build-7ab34d90e216";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-7ab34d90e216";
+import { activeProfileId, ensureActiveProfileId } from "/fifa-sticker-app/v2/assets/v2_profile.js?v=build-7ab34d90e216";
+import { openCameraCapture } from "/fifa-sticker-app/v2/assets/camera_capture.js?v=build-7ab34d90e216";
 import {
   loadLatestPhotoReviewBatch,
   activeCloudPhotoReviewProfileId,
@@ -35,26 +35,26 @@ import {
   savePhotoReviewBatch,
   savePhotoReviewBatchMeta,
   savePhotoReviewState,
-} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/photo_review_store_v2.js?v=build-7ab34d90e216";
 import {
   buildPhotoReviewItems,
   hydratePhotoReviewSlots,
   nextPendingReviewItem,
   reviewCodeCandidates,
   reviewItemKey,
-} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/photo_review_queue.js?v=build-7ab34d90e216";
 import {
   classifyScannedCards,
   compactScannedCardGroupDetail,
   groupScannedCardStatuses,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-7ab34d90e216";
 import {
   receivedLinesForScan,
   SCAN_INSIGNIA_VARIANTS,
   scanReceiptSignature,
   summarizeScanInsignias,
-} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-ec7b4a1d9032";
+} from "/fifa-sticker-app/v2/assets/scan_inventory.js?v=build-7ab34d90e216";
 
 const input = document.querySelector("#photoScannerInput");
 const batchInput = document.querySelector("#photoScannerBatchInput");
@@ -143,23 +143,23 @@ undoCollectionButton?.addEventListener("click", undoLastScanAdd);
 window.addEventListener("resize", () => drawPhotoReview());
 window.addEventListener("pagehide", releasePhotoReviewUrls);
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) hydrateLatestReviewBatch();
+  if (event.persisted) hydrateSavedReviewsPage();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !scanInFlight && photoReviewState.id) hydrateLatestReviewBatch();
+  if (document.visibilityState === "visible") hydrateSavedReviewsPage();
 });
 reviewUpdates?.addEventListener("message", (event) => {
-  if (event.data?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
+  if (!reviewsPage || event.data?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
   const incomingBatchId = String(event.data?.batchId || "");
   const incomingRevision = Number(event.data?.revision || 0);
-  const activeBatchChanged = reviewsPage && incomingBatchId && incomingBatchId !== photoReviewState.id;
+  const activeBatchChanged = incomingBatchId && incomingBatchId !== photoReviewState.id;
   const activeBatchAdvanced = incomingBatchId === photoReviewState.id && incomingRevision > Number(photoReviewState.revision || 0);
-  if (activeBatchChanged || activeBatchAdvanced) hydrateLatestReviewBatch();
+  if (activeBatchChanged || activeBatchAdvanced) hydrateSavedReviewsPage();
 });
 window.addEventListener("panini:cloud-sync-applied", (event) => {
-  if (event.detail?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
+  if (!reviewsPage || event.detail?.profileId !== activePhotoReviewProfileId() || scanInFlight) return;
   cloudReviewSyncCompleted = true;
-  hydrateLatestReviewBatch();
+  hydrateSavedReviewsPage();
 });
 window.addEventListener("panini:cloud-sync-status", (event) => {
   if (!reviewsPage || scanInFlight || photoReviewState.id) return;
@@ -169,13 +169,13 @@ window.addEventListener("panini:cloud-sync-status", (event) => {
   else if (severity === "muted" && message.startsWith("Loading encrypted")) showEmptyReviewQueue(message);
   else if (severity === "ok") {
     cloudReviewSyncCompleted = true;
-    hydrateLatestReviewBatch();
+    hydrateSavedReviewsPage();
   }
 });
 globalThis.PANINI_CLOUD_SYNC_READY?.finally?.(() => {
   if (!reviewsPage || scanInFlight) return;
   cloudReviewSyncCompleted = true;
-  hydrateLatestReviewBatch();
+  hydrateSavedReviewsPage();
 });
 copyButton?.addEventListener("click", async () => {
   const text = copyTextForCodes(latestScanCodes);
@@ -215,6 +215,12 @@ async function initializeReviewExperience() {
   renderCollectionActions();
   renderRecognizedCodeRows();
   if (reviewsPage) await hydrateLatestReviewBatch();
+  document.body.dataset.photoScannerReady = "true";
+}
+
+function hydrateSavedReviewsPage() {
+  if (!reviewsPage || scanInFlight) return;
+  hydrateLatestReviewBatch();
 }
 
 async function hydrateLatestReviewBatch() {

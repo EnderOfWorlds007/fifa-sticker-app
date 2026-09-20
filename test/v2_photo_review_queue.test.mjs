@@ -827,6 +827,28 @@ test("scanner persists photo identity and aggregates every successful photo", ()
   assert.match(cloudSync, /APPLIED_EVENT, \{ revision: result\.revision, profileId: client\.profileId \}/);
 });
 
+test("background review hydration cannot populate the Scan page", () => {
+  const source = readFileSync("v2/assets/photo_scanner.js", "utf8");
+  const helper = source.match(/function hydrateSavedReviewsPage\(\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  assert.match(helper, /if \(!reviewsPage \|\| scanInFlight\) return;/);
+  assert.match(source, /window\.addEventListener\("pageshow", \(event\) => \{\n  if \(event\.persisted\) hydrateSavedReviewsPage\(\);\n\}\);/);
+  assert.match(source, /document\.addEventListener\("visibilitychange", \(\) => \{\n  if \(document\.visibilityState === "visible"\) hydrateSavedReviewsPage\(\);\n\}\);/);
+  assert.match(source, /reviewUpdates\?\.addEventListener\("message", \(event\) => \{\n  if \(!reviewsPage \|\| event\.data\?\.profileId/);
+  assert.match(source, /window\.addEventListener\("panini:cloud-sync-applied", \(event\) => \{\n  if \(!reviewsPage \|\| event\.detail\?\.profileId/);
+  assert.match(source, /else if \(severity === "ok"\) \{\n    cloudReviewSyncCompleted = true;\n    hydrateSavedReviewsPage\(\);/);
+  assert.match(source, /PANINI_CLOUD_SYNC_READY\?\.finally[\s\S]*?hydrateSavedReviewsPage\(\);\n\}\);/);
+
+  const directHydrationCalls = source.split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.includes("hydrateLatestReviewBatch();"));
+  assert.deepEqual(directHydrationCalls, [
+    "if (reviewsPage) await hydrateLatestReviewBatch();",
+    "hydrateLatestReviewBatch();",
+    "await hydrateLatestReviewBatch();",
+    "if (error instanceof ReviewStateConflictError) hydrateLatestReviewBatch();",
+  ]);
+});
+
 test("focused review offers the full submitted photo with every annotation", () => {
   const reviewHtml = readFileSync("v2/reviews/index.html", "utf8");
   const scannerHtml = readFileSync("v2/scanner/index.html", "utf8");
