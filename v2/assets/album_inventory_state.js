@@ -2,9 +2,9 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   loadCachedInventoryPayload,
-} from "./inventory_source.js?v=build-3da9e0dd8cdb";
-import { ensureActiveProfileId } from "./v2_profile.js?v=build-3da9e0dd8cdb";
-import { partitionCatalogCodes, partitionCatalogLines } from "./catalog_membership.js?v=build-3da9e0dd8cdb";
+} from "./inventory_source.js?v=build-b77d42c8e9a1";
+import { ensureActiveProfileId } from "./v2_profile.js?v=build-b77d42c8e9a1";
+import { partitionCatalogCodes, partitionCatalogLines } from "./catalog_membership.js?v=build-b77d42c8e9a1";
 
 const ALBUM_SCAN_SOURCE_LABEL = "album page scan";
 const TEXT_INVENTORY_SOURCE_LABEL = "pasted text inventory";
