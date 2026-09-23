@@ -1,4 +1,4 @@
-const BUILD_ID = "build-b77d42c8e9a1";
+const BUILD_ID = "build-30585237ff21";
 const CACHE_NAME = `fifa-card-apps-fifa-sticker-app-v2-${BUILD_ID}`;
 const CACHE_PREFIX = CACHE_NAME.replace(/build-[0-9a-f]{12}$/, "");
 const APP_SHELL_PATHS = [
