@@ -16,14 +16,14 @@ import {
   transitionTransactionStatus,
   updateTradeLines,
   variantLabel,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-3da9e0dd8cdb";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b77d42c8e9a1";
 import {
   buildInventoryProjection,
   loadInventoryProjection,
-} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-3da9e0dd8cdb";
-import { catalogHasCards, partitionCatalogLines, partitionCatalogOccurrences } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-3da9e0dd8cdb";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-3da9e0dd8cdb";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-3da9e0dd8cdb";
+} from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-b77d42c8e9a1";
+import { catalogHasCards, partitionCatalogLines, partitionCatalogOccurrences } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-b77d42c8e9a1";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-b77d42c8e9a1";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-b77d42c8e9a1";
 
 const STARTING_MISSING = {
   RSA: [10],

@@ -3,9 +3,10 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-3da9e0dd8cdb";
+} from "./backup_restore.js?v=build-b77d42c8e9a1";
 import {
   generatePublicShareToken,
+  fetchPublicProjection,
   loadPublicShareSettings,
   publicShareControlState,
   publicShareNeedsRepublish,
@@ -15,25 +16,24 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-3da9e0dd8cdb";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-3da9e0dd8cdb";
-import { recordRejectedCardEvidence, sanitizeBusinessProjection } from "./catalog_membership.js?v=build-3da9e0dd8cdb";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-3da9e0dd8cdb";
-import { publicShareRefreshNeededOnPage } from "./public_share_refresh.js?v=build-3da9e0dd8cdb";
-import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-3da9e0dd8cdb";
+} from "./public_share.js?v=build-b77d42c8e9a1";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-b77d42c8e9a1";
+import { recordRejectedCardEvidence, sanitizeBusinessProjection } from "./catalog_membership.js?v=build-b77d42c8e9a1";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-b77d42c8e9a1";
+import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-b77d42c8e9a1";
 import {
   createCloudSyncGate,
   fetchAllDeltaPages,
   monotonicRevision,
   requestJsonWithTimeout,
   validateSparseCloudHistory,
-} from "./cloud_delta.js?v=build-3da9e0dd8cdb";
+} from "./cloud_delta.js?v=build-b77d42c8e9a1";
 import {
   activateCloudPhotoReviewBatch,
   cloudPhotoReviewBatchId,
   migrateLegacyPhotoReviewProfile,
-} from "./photo_review_store_v2.js?v=build-3da9e0dd8cdb";
-import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-3da9e0dd8cdb";
+} from "./photo_review_store_v2.js?v=build-b77d42c8e9a1";
+import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-b77d42c8e9a1";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -87,6 +87,14 @@ export function mountCollectionCloudSync({
     return verifiedCatalogPromise;
   };
   const refreshShareControls = () => controls.setShareSettings(loadPublicShareSettings(storage));
+  const verifyPublishedShare = async (settings, expectedRevision = 0) => {
+    const projection = await fetchPublicProjection({ baseUrl, token: settings?.token, fetchImpl });
+    const sourceRevision = Number(projection?.sourceRevision || 0);
+    if (expectedRevision && sourceRevision !== Number(expectedRevision)) {
+      throw new Error("The public trade link did not reach the latest cloud revision.");
+    }
+    return projection;
+  };
   const applyTransactions = async (transactions, context) => {
     const catalog = await verifiedCatalog();
     let reviewsChanged = false;
@@ -444,12 +452,16 @@ export function mountCollectionCloudSync({
         refreshShareControls();
       }
       controls.setStatus(`Cloud backup saved. Revision ${result.revision}.`, "ok");
-      controls.setShareStatus(
-        publicShare.enabled
-          ? `Trade link updated with cloud backup revision ${result.revision}.`
-          : "Public trade sharing is off.",
-        "ok",
-      );
+      if (publicShare.enabled) {
+        try {
+          await verifyPublishedShare(publishedSettings, result.revision);
+          controls.setShareStatus(`Trade link verified at cloud backup revision ${result.revision}.`, "ok");
+        } catch {
+          controls.setShareStatus("Cloud backup saved, but the trade link could not be verified. Copy it again to retry publishing.", "warning");
+        }
+      } else {
+        controls.setShareStatus("Public trade sharing is off.", "ok");
+      }
       return true;
     } catch (error) {
       if (signal?.aborted) return false;
@@ -580,7 +592,26 @@ export function mountCollectionCloudSync({
     return settings;
   };
   controls.onCopyShare = async () => {
-    const url = publicShareUrl(loadPublicShareSettings(storage).token, location);
+    let settings = loadPublicShareSettings(storage);
+    if (!settings.enabled) {
+      controls.setShareStatus("No active trade link.", "warning");
+      return;
+    }
+    controls.setShareStatus("Checking the trade link before copying…", "muted");
+    try {
+      await verifyPublishedShare(settings);
+    } catch {
+      controls.setShareStatus("Repairing the trade link before copying…", "muted");
+      if (!await autosave("share-copy-repair")) return;
+      settings = loadPublicShareSettings(storage);
+      try {
+        await verifyPublishedShare(settings);
+      } catch {
+        controls.setShareStatus("The trade link is still unavailable. Your private cloud backup is safe; try again shortly.", "warning");
+        return;
+      }
+    }
+    const url = publicShareUrl(settings.token, location);
     try {
       await navigator.clipboard?.writeText(url);
       controls.setShareStatus("Trade link copied. Anyone with it can see the shared lists.", "ok");
@@ -618,15 +649,10 @@ export function mountCollectionCloudSync({
     refreshShareControls();
     const shareSettings = loadPublicShareSettings(storage);
     const upgradeNeeded = publicShareNeedsRepublish(shareSettings);
-    const pageRefreshNeeded = publicShareRefreshNeededOnPage(shareSettings, location);
     const pendingKind = pendingInitializationSave;
     pendingInitializationSave = "";
-    if (upgradeNeeded || pageRefreshNeeded || pendingKind) {
-      queueAutosave(upgradeNeeded
-        ? "public-projection-upgrade"
-        : pageRefreshNeeded
-          ? "public-projection-page-refresh"
-          : pendingKind);
+    if (upgradeNeeded || pendingKind) {
+      queueAutosave(upgradeNeeded ? "public-projection-upgrade" : pendingKind);
     }
   });
   return { client, syncDeltas, autosave, ready };
