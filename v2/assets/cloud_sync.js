@@ -3,7 +3,7 @@ import {
   INVENTORY_CACHE_META_KEY,
   INVENTORY_SNAPSHOT_KEY,
   LEDGER_KEY,
-} from "./backup_restore.js?v=build-b77d42c8e9a1";
+} from "./backup_restore.js?v=build-30585237ff21";
 import {
   generatePublicShareToken,
   fetchPublicProjection,
@@ -16,24 +16,24 @@ import {
   savePublicShareSettings,
   serializePublicTradeProjection,
   withCurrentPublicProjectionModel,
-} from "./public_share.js?v=build-b77d42c8e9a1";
-import { loadCollectionCatalog } from "./catalog_source.js?v=build-b77d42c8e9a1";
-import { recordRejectedCardEvidence, sanitizeBusinessProjection } from "./catalog_membership.js?v=build-b77d42c8e9a1";
-import { buildInventoryProjection } from "./inventory_projection.js?v=build-b77d42c8e9a1";
-import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-b77d42c8e9a1";
+} from "./public_share.js?v=build-30585237ff21";
+import { loadCollectionCatalog } from "./catalog_source.js?v=build-30585237ff21";
+import { recordRejectedCardEvidence, sanitizeBusinessProjection } from "./catalog_membership.js?v=build-30585237ff21";
+import { buildInventoryProjection } from "./inventory_projection.js?v=build-30585237ff21";
+import { importCloudReviewPayload } from "./cloud_review_import.js?v=build-30585237ff21";
 import {
   createCloudSyncGate,
   fetchAllDeltaPages,
   monotonicRevision,
   requestJsonWithTimeout,
   validateSparseCloudHistory,
-} from "./cloud_delta.js?v=build-b77d42c8e9a1";
+} from "./cloud_delta.js?v=build-30585237ff21";
 import {
   activateCloudPhotoReviewBatch,
   cloudPhotoReviewBatchId,
   migrateLegacyPhotoReviewProfile,
-} from "./photo_review_store_v2.js?v=build-b77d42c8e9a1";
-import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-b77d42c8e9a1";
+} from "./photo_review_store_v2.js?v=build-30585237ff21";
+import { accountContextMatches, accountRevisionMatches, canActivateCloudAccount, resolveAccountBound } from "./cloud_account_context.js?v=build-30585237ff21";
 
 export const USER_SECRET_ID_KEY = "panini.cloudSync.userSecretId.v1";
 export const USER_ACCOUNTS_KEY = "panini.cloudSync.accounts.v1";
@@ -165,9 +165,11 @@ export function mountCollectionCloudSync({
           }
         }
       }
-      if (apply) dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision, profileId: client.profileId });
+      const changeCount = Number(result.transactionCount ?? result.transactions.length);
+      if (apply && changeCount > 0) {
+        dispatchWindowEvent(windowRef, APPLIED_EVENT, { revision: result.revision, profileId: client.profileId });
+      }
       if (!quiet) {
-        const changeCount = Number(result.transactionCount ?? result.transactions.length);
         controls.setStatus(
           changeCount
             ? `Cloud backup updated from ${changeCount} change${changeCount === 1 ? "" : "s"}.`

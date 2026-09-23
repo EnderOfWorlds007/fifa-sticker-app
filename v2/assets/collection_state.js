@@ -1,4 +1,4 @@
-import { sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-b77d42c8e9a1";
+import { sortCode } from "./trade_state.js?v=build-30585237ff21";
 
 export const COLLECTION_KEY = "panini.collectionTracker.v1";
 export const COLLECTION_SNAPSHOT_IMPORT_VERSION = 6;
@@ -17,7 +17,10 @@ export function loadCollectionState(storage = globalThis.localStorage) {
 
 export function saveCollectionState(state, storage = globalThis.localStorage) {
   const normalized = normalizeCollectionState(state, true);
-  storage.setItem(COLLECTION_KEY, JSON.stringify(normalized));
+  const serialized = JSON.stringify(normalized);
+  const changed = storage.getItem(COLLECTION_KEY) !== serialized;
+  storage.setItem(COLLECTION_KEY, serialized);
+  if (!changed) return false;
   try {
     globalThis.dispatchEvent?.(new CustomEvent("panini:local-state-saved", {
       detail: { kind: "collection", collectionState: normalized },
@@ -25,6 +28,7 @@ export function saveCollectionState(state, storage = globalThis.localStorage) {
   } catch {
     // Local collection writes should not depend on optional cloud sync.
   }
+  return true;
 }
 
 export async function importCollectionSnapshotState({
