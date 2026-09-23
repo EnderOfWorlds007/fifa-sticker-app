@@ -1219,6 +1219,15 @@
   line-height: 1.15;
 }
 
+.compareDirectionActions .compareDirectionPrimary:not([aria-pressed="false"]),
+.compareDirectionActions .compareDirectionPrimary[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #06110f;
+  box-shadow: none;
+  font-weight: 800;
+}
+
 .compareUtilityActions {
   margin-top: 8px;
 }
