@@ -1,15 +1,19 @@
-import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-015bab324c53";
-import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-015bab324c53";
-import { insigniaQuantity, sortCode } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-015bab324c53";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-015bab324c53";
+import { loadCollectionCatalog } from "/fifa-sticker-app/v2/assets/catalog_source.js?v=build-6dcc142be40f";
+import { fetchPublicProjection, publicShareTokenFromLocation } from "/fifa-sticker-app/v2/assets/public_share.js?v=build-6dcc142be40f";
+import {
+  insigniaQuantity,
+  normalizePastedCardText,
+  sortCode,
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6dcc142be40f";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-6dcc142be40f";
 import {
   buildPublicTradeMatch,
   publicOffersHaveInsigniaData,
   publicTradeMatchMessage,
-} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-015bab324c53";
+} from "/fifa-sticker-app/v2/assets/share_matcher.js?v=build-6dcc142be40f";
 import {
   disclosureControlState,
-} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-015bab324c53";
+} from "/fifa-sticker-app/v2/assets/share_filter.js?v=build-6dcc142be40f";
 
 const status = document.querySelector("#shareStatus");
 const updatedAt = document.querySelector("#shareUpdatedAt");
@@ -183,6 +187,15 @@ function resetMatch() {
   setSelectedMatchMode("");
 }
 
+function normalizeEncodedSearchValue() {
+  if (!/%[0-9A-Fa-f]{2}/.test(search.value)) return;
+  const normalized = normalizePastedCardText(search.value);
+  if (normalized === search.value) return;
+  search.value = normalized;
+  search.selectionStart = normalized.length;
+  search.selectionEnd = normalized.length;
+}
+
 function setSelectedMatchMode(mode) {
   selectedMatchMode = mode;
   for (const [button, buttonMode] of [
@@ -202,7 +215,10 @@ matchClearButton.addEventListener("click", () => {
   resetMatch();
   search.focus();
 });
-search.addEventListener("input", resetMatch);
+search.addEventListener("input", () => {
+  normalizeEncodedSearchValue();
+  resetMatch();
+});
 copyMatchButton.addEventListener("click", async () => {
   if (!matchText.value || copyMatchButton.disabled) return;
   try {

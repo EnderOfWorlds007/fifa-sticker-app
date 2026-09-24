@@ -7,24 +7,24 @@ import {
   recognitionUrl,
   saveOcrBackendSettings,
   waitForAlbumPageJob,
-} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-015bab324c53";
+} from "/fifa-sticker-app/v2/assets/ocr_backend.js?v=build-6dcc142be40f";
 import {
   albumPageInventoryChanges,
   applyAlbumPageResultToInventory,
   applyTextInventoryCodesToInventory,
-} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-015bab324c53";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-015bab324c53";
-import { extractCodeOccurrences } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-015bab324c53";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-015bab324c53";
-import { catalogHasCards, partitionCatalogCodes } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-015bab324c53";
+} from "/fifa-sticker-app/v2/assets/album_inventory_state.js?v=build-6dcc142be40f";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-6dcc142be40f";
+import { extractCodeOccurrences } from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6dcc142be40f";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6dcc142be40f";
+import { catalogHasCards, partitionCatalogCodes } from "/fifa-sticker-app/v2/assets/catalog_membership.js?v=build-6dcc142be40f";
 import {
   classifyScannedCards,
   expandCodeOccurrences,
   groupScannedCardStatuses,
   scannedCardStatusSummaryText,
   summarizeScannedCardStatuses,
-} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-015bab324c53";
-import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-015bab324c53";
+} from "/fifa-sticker-app/v2/assets/scan_card_status.js?v=build-6dcc142be40f";
+import { renderPastedCardStatusList } from "/fifa-sticker-app/v2/assets/paste_card_status.js?v=build-6dcc142be40f";
 
 const status = document.querySelector("#gettingStartedStatus");
 const scanActions = document.querySelector(".gettingStartedScanActions");

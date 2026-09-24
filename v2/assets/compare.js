@@ -9,10 +9,10 @@ import {
   resolveCompareDirection,
   sortCode,
   transactionSummary,
-} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-015bab324c53";
-import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-015bab324c53";
-import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-015bab324c53";
-import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-015bab324c53";
+} from "/fifa-sticker-app/v2/assets/trade_state.js?v=build-6dcc142be40f";
+import { loadInventoryProjection } from "/fifa-sticker-app/v2/assets/inventory_projection.js?v=build-6dcc142be40f";
+import { mountTradePasteBox } from "/fifa-sticker-app/v2/assets/trade_paste_box.js?v=build-6dcc142be40f";
+import { mountInsigniaFilter } from "/fifa-sticker-app/v2/assets/insignia_filter.js?v=build-6dcc142be40f";
 
 const STARTING_MISSING = {
   RSA: [10],
@@ -385,7 +385,7 @@ function buildTradeDraft() {
     received,
     inventorySnapshot: lastInventoryPayload || {},
   }));
-  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-015bab324c53");
+  window.location.assign("/fifa-sticker-app/v2/trade/?v=build-6dcc142be40f");
 }
 
 function reservedQuantity(code) {
