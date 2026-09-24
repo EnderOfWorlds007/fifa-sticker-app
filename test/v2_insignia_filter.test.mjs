@@ -129,6 +129,46 @@ test("read-only matching filters only the shared collector's offers", () => {
   assert.deepEqual(offer.matchedCodes, ["FRA7"]);
 });
 
+test("read-only search uses the main parser for every supported paste shape", () => {
+  const cases = [
+    {
+      value: "GER 🇩🇪: 9\nECU 🇪🇨: 8\nCOD 🇨🇩: 8\nGHA 🇬🇭: 12",
+      codes: ["COD8", "ECU8", "GER9", "GHA12"],
+    },
+    {
+      value: "JPN — 1, 5, 7 (x3), 15, 18 (x2), 20 (x2)",
+      codes: ["JPN1", "JPN5", "JPN7", "JPN15", "JPN18", "JPN20"],
+    },
+    {
+      value: "France%3A+1%2C+17%0AENG13",
+      codes: ["ENG13", "FRA1", "FRA17"],
+    },
+    {
+      value: "COCA-COLA:\nVirgil van Dijk\nJoško Gvardiol\nWilliam Saliba\nLautaro Martínez",
+      codes: ["CC4", "CC6", "CC9", "CC10"],
+    },
+    {
+      value: "ENG-7, POR-11 and FRA19",
+      codes: ["ENG7", "FRA19", "POR11"],
+    },
+  ];
+  for (const sample of cases) {
+    const offers = sample.codes.map((code) => ({ code, quantity: 5 }));
+    const result = buildPublicTradeMatch({ value: sample.value, mode: "need", offers });
+    assert.deepEqual(result.parsedCodes, sample.codes, sample.value);
+    assert.deepEqual(result.matchedCodes, sample.codes, sample.value);
+  }
+});
+
+test("shared search visibly normalizes encoded pastes and imports no second parser", () => {
+  const shareSource = readFileSync(new URL("../v2/assets/share.js", import.meta.url), "utf8");
+  const matcherSource = readFileSync(new URL("../v2/assets/share_matcher.js", import.meta.url), "utf8");
+  assert.match(shareSource, /normalizePastedCardText/);
+  assert.match(shareSource, /normalizeEncodedSearchValue\(\);\s*resetMatch\(\);/);
+  assert.match(matcherSource, /extractCodeOccurrences/);
+  assert.doesNotMatch(matcherSource, /function extractCodeOccurrences/);
+});
+
 test("read-only preference matching keeps coverage and produces colour-labelled copy text", () => {
   const offers = [
     { code: "ARG10", quantity: 5, variants: { green: 2, blue: 3 } },
